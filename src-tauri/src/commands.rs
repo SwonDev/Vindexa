@@ -95,6 +95,16 @@ where
     .await
 }
 
+async fn database_unlocked<T, F>(database: Database, task: F) -> AppResult<T>
+where
+    T: Send + 'static,
+    F: FnOnce(Database) -> AppResult<T> + Send + 'static,
+{
+    // Precondición: el llamador conserva durante toda la operación el guard de
+    // mantenimiento apropiado. Este helper evita únicamente readquirirlo.
+    blocking(move || task(database)).await
+}
+
 fn steam_configuration(database: &Database) -> AppResult<SteamConfiguration> {
     let local = steam::detect_local_steam();
     let api_key_marker = database.steam_api_key_configured()?;
@@ -815,7 +825,7 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
     let mut last_failure = None;
 
     loop {
-        let candidates = database_read(&state, move |database| {
+        let candidates = database_unlocked(state.database.clone(), move |database| {
             database.claim_news_refresh_candidates(NEWS_REFRESH_BATCH)
         })
         .await?;
@@ -853,7 +863,7 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
                             feed_name: publication.feed_name,
                         })
                         .collect::<Vec<_>>();
-                    database_read(&state, move |database| {
+                    database_unlocked(state.database.clone(), move |database| {
                         database.save_news_success(candidate.app_id, &inputs)
                     })
                     .await?;
@@ -866,7 +876,7 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
                         failure.retry_after_seconds,
                     );
                     let error_code = failure.error.code.clone();
-                    database_read(&state, move |database| {
+                    database_unlocked(state.database.clone(), move |database| {
                         database.save_news_failure(
                             candidate.app_id,
                             candidate.attempts,
@@ -885,7 +895,10 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
         }
     }
 
-    let snapshot = database_read(&state, move |database| database.discovery_snapshot()).await?;
+    let snapshot = database_unlocked(state.database.clone(), move |database| {
+        database.discovery_snapshot()
+    })
+    .await?;
     if attempted_games > 0 && failed_games == attempted_games {
         return Err(last_failure.unwrap_or_else(|| {
             AppError::new(
@@ -1111,11 +1124,12 @@ pub fn check_for_updates(app: AppHandle) -> UpdateCheckResult {
 
 #[cfg(test)]
 mod tests {
-    use super::{steam_configuration, try_begin_steam_login};
+    use super::{database_unlocked, steam_configuration, try_begin_steam_login};
     use crate::db::Database;
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::sync::Mutex;
+    use tokio::sync::{Mutex, RwLock, oneshot};
+    use tokio::time::{Duration, timeout};
 
     #[test]
     fn bootstrap_configuration_uses_the_non_secret_database_marker() {
@@ -1150,5 +1164,46 @@ mod tests {
         assert_eq!(error.code, "openid_in_progress");
         drop(first);
         try_begin_steam_login(lock).expect("permitir login posterior");
+    }
+
+    #[test]
+    fn unlocked_database_work_finishes_while_a_maintenance_writer_is_queued() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("crear runtime");
+        runtime.block_on(async {
+            let directory = TempDir::new().expect("crear temporal");
+            let database = Database::new(directory.path().join("discovery-lock.sqlite3"));
+            database.initialize().expect("inicializar base");
+
+            let maintenance = Arc::new(RwLock::new(()));
+            let outer_read = maintenance.read().await;
+            let writer_lock = maintenance.clone();
+            let (writer_started_tx, writer_started_rx) = oneshot::channel();
+            let writer = tokio::spawn(async move {
+                let _ = writer_started_tx.send(());
+                let _guard = writer_lock.write().await;
+            });
+            writer_started_rx.await.expect("encolar escritor");
+            tokio::task::yield_now().await;
+
+            let count = timeout(
+                Duration::from_secs(1),
+                database_unlocked(database, |database| {
+                    Ok(database.discovery_snapshot()?.official_publications.len())
+                }),
+            )
+            .await
+            .expect("el trabajo no debe readquirir maintenance")
+            .expect("consultar discovery");
+            assert_eq!(count, 0);
+
+            drop(outer_read);
+            timeout(Duration::from_secs(1), writer)
+                .await
+                .expect("el escritor debe continuar al liberar el guard")
+                .expect("finalizar escritor");
+        });
     }
 }
