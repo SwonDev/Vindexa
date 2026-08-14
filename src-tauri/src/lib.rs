@@ -34,6 +34,7 @@ pub fn run() {
                 cache_dir,
                 maintenance: Arc::new(RwLock::new(())),
                 steam_login_lock: Arc::new(Mutex::new(())),
+                steam_sync_lock: Arc::new(Mutex::new(())),
                 metadata_enrichment,
                 achievements_lock: Arc::new(Mutex::new(())),
             });

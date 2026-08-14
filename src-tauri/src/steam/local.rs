@@ -23,10 +23,10 @@ pub fn detect() -> Option<(String, usize)> {
 }
 
 pub fn scan() -> AppResult<LocalLibraryScan> {
-    let steam = steamlocate::locate().map_err(|error| {
+    let steam = steamlocate::locate().map_err(|_error| {
         AppError::new(
             "steam_not_found",
-            format!("No se encontró una instalación local de Steam: {error}"),
+            "No se encontró una instalación local de Steam.",
         )
     })?;
     let steam_path = steam.path().display().to_string();
@@ -107,16 +107,18 @@ fn system_time_to_rfc3339(value: SystemTime) -> String {
     DateTime::<Utc>::from(value).to_rfc3339()
 }
 
-fn steamlocate_error(error: steamlocate::Error) -> AppError {
+fn steamlocate_error(_error: steamlocate::Error) -> AppError {
     AppError::new(
         "steam_local_read",
-        format!("No se pudo leer la biblioteca local de Steam: {error}"),
+        "No se pudo leer la biblioteca local de Steam.",
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{cover_url, header_url};
+    use super::{cover_url, header_url, steamlocate_error};
+    use std::io;
+    use std::path::PathBuf;
 
     #[test]
     fn generated_art_urls_are_https_and_app_scoped() {
@@ -128,5 +130,21 @@ mod tests {
             header_url(570),
             "https://shared.steamstatic.com/store_item_assets/steam/apps/570/header.jpg"
         );
+    }
+
+    #[test]
+    fn local_scan_errors_do_not_expose_filesystem_paths() {
+        let error = steamlocate_error(steamlocate::Error::Io {
+            inner: io::Error::new(io::ErrorKind::PermissionDenied, "token=fixture-secret"),
+            path: PathBuf::from("/Users/example/Library/Application Support/Steam/private.vdf"),
+        });
+
+        assert_eq!(error.code, "steam_local_read");
+        assert_eq!(
+            error.message,
+            "No se pudo leer la biblioteca local de Steam."
+        );
+        assert!(!error.message.contains("/Users/example"));
+        assert!(!error.message.contains("fixture-secret"));
     }
 }

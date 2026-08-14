@@ -1,7 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, getErrorMessage } from "@/lib/tauri";
-import type { AppPreferences, GameListRequest, UpdateGameInput } from "@/lib/types";
+import type {
+  AppPreferences,
+  FamilyCatalogRequest,
+  GameListRequest,
+  UpdateGameInput,
+} from "@/lib/types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -38,6 +43,20 @@ describe("contrato frontend de comandos Tauri", () => {
     await api.libraryFilterOptions();
 
     expect(invokeMock).toHaveBeenCalledWith("get_library_filter_options");
+  });
+
+  it("envía filtro, orden y página del catálogo familiar dentro de request", async () => {
+    const request: FamilyCatalogRequest = {
+      query: "cooperativo",
+      availability: "confirmed",
+      sort: "updatedDesc",
+      limit: 240,
+      offset: 480,
+    };
+
+    await api.listFamilyCatalog(request);
+
+    expect(invokeMock).toHaveBeenCalledWith("list_family_catalog", { request });
   });
 
   it("prioriza solo la página visible y deja el resto en la cola incremental", async () => {

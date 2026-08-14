@@ -4,7 +4,7 @@ use crate::db::{
     CachedNewsInput, Database, DiscoverySnapshot, FamilyCatalogGame, FamilyCatalogRequest,
     GameReminder, LibraryDropInput, LibraryDropReceipt, LibraryDropResult, NewsRefreshReport,
     PagedFamilyCatalogGames, SavePersonalDatesInput, SaveReminderInput, SaveSessionInput,
-    SaveTagInput, TagDefinition,
+    SaveTagInput, SteamProfileWrite, TagDefinition,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -18,6 +18,7 @@ use crate::models::{
 use crate::steam::{self, GameAction};
 use crate::store_window;
 use chrono::Utc;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -37,6 +38,7 @@ pub struct AppState {
     pub cache_dir: PathBuf,
     pub maintenance: Arc<RwLock<()>>,
     pub steam_login_lock: Arc<Mutex<()>>,
+    pub steam_sync_lock: Arc<Mutex<()>>,
     pub metadata_enrichment: Arc<steam::metadata_enrichment::MetadataEnrichmentCoordinator>,
     pub achievements_lock: Arc<Mutex<()>>,
 }
@@ -59,10 +61,10 @@ where
 {
     tauri::async_runtime::spawn_blocking(task)
         .await
-        .map_err(|error| {
+        .map_err(|_error| {
             AppError::new(
                 "background_task",
-                format!("La tarea interna no pudo finalizar: {error}"),
+                "La tarea interna no pudo finalizar. Vuelve a intentarlo.",
             )
         })?
 }
@@ -95,14 +97,35 @@ where
     .await
 }
 
-async fn database_unlocked<T, F>(database: Database, task: F) -> AppResult<T>
+async fn discovery_database_at_generation<T, F>(
+    database: Database,
+    maintenance: Arc<RwLock<()>>,
+    expected_generation: Option<u64>,
+    task: F,
+) -> AppResult<(u64, T)>
 where
     T: Send + 'static,
     F: FnOnce(Database) -> AppResult<T> + Send + 'static,
 {
-    // Precondición: el llamador conserva durante toda la operación el guard de
-    // mantenimiento apropiado. Este helper evita únicamente readquirirlo.
-    blocking(move || task(database)).await
+    blocking(move || {
+        // El guard se limita al acceso SQLite. Las esperas HTTP quedan fuera,
+        // pero una restauración no puede cruzarse entre esta comprobación y
+        // la operación reclamada sobre la generación activa.
+        let _guard = maintenance.blocking_read();
+        let generation = database.generation();
+        if expected_generation.is_some_and(|expected| expected != generation) {
+            return Err(stale_discovery_refresh_error());
+        }
+        Ok((generation, task(database)?))
+    })
+    .await
+}
+
+fn stale_discovery_refresh_error() -> AppError {
+    AppError::new(
+        "discovery_refresh_stale",
+        "Los datos locales cambiaron durante la actualización. Vuelve a intentarlo para cargar publicaciones actuales.",
+    )
 }
 
 fn steam_configuration(database: &Database) -> AppResult<SteamConfiguration> {
@@ -124,6 +147,50 @@ fn try_begin_steam_login(lock: Arc<Mutex<()>>) -> AppResult<OwnedMutexGuard<()>>
             "Ya hay un inicio de sesión con Steam en curso.",
         )
     })
+}
+
+fn try_begin_steam_sync(lock: Arc<Mutex<()>>) -> AppResult<OwnedMutexGuard<()>> {
+    lock.try_lock_owned().map_err(|_| {
+        AppError::new(
+            "steam_sync_in_progress",
+            "Ya hay una sincronización de Steam en curso.",
+        )
+    })
+}
+
+async fn await_steam_network<T, F>(request: F) -> AppResult<T>
+where
+    F: Future<Output = AppResult<T>>,
+{
+    // No recibe ni adquiere maintenance: toda espera de red debe terminar
+    // antes de entrar en la sección exclusiva de persistencia.
+    request.await
+}
+
+async fn persist_steam_sync_failure_if_current(
+    state: &State<'_, AppState>,
+    expected_generation: u64,
+    steam_id: String,
+    error: AppError,
+) {
+    let _ = database_write(state, move |database| {
+        if database.generation() != expected_generation
+            || database
+                .get_steam_account()?
+                .as_ref()
+                .map(|account| &account.steam_id)
+                != Some(&steam_id)
+        {
+            return Ok(());
+        }
+        if error.code == "steam_api_key_missing" {
+            database.set_steam_api_key_configured(false)?;
+        } else if error.code != "secure_storage" {
+            database.set_steam_api_key_configured(true)?;
+        }
+        steam::mark_sync_failed(&database, &steam_id, &error)
+    })
+    .await;
 }
 
 #[tauri::command]
@@ -684,6 +751,7 @@ pub async fn start_steam_login(app: AppHandle, state: State<'_, AppState>) -> Ap
 
 #[tauri::command]
 pub async fn save_steam_api_key(state: State<'_, AppState>, api_key: String) -> AppResult<()> {
+    let _credential_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
     database_read(&state, move |database| {
         steam::save_api_key(&api_key)?;
         database.set_steam_api_key_configured(true)
@@ -693,6 +761,7 @@ pub async fn save_steam_api_key(state: State<'_, AppState>, api_key: String) -> 
 
 #[tauri::command]
 pub async fn delete_steam_api_key(state: State<'_, AppState>) -> AppResult<()> {
+    let _credential_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
     database_read(&state, move |database| {
         steam::delete_api_key()?;
         database.set_steam_api_key_configured(false)
@@ -702,6 +771,7 @@ pub async fn delete_steam_api_key(state: State<'_, AppState>) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn verify_saved_steam_api_key(state: State<'_, AppState>) -> AppResult<bool> {
+    let _credential_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
     database_read(&state, move |database| {
         let configured = steam::has_api_key()?;
         database.set_steam_api_key_configured(configured)?;
@@ -712,42 +782,51 @@ pub async fn verify_saved_steam_api_key(state: State<'_, AppState>) -> AppResult
 
 #[tauri::command]
 pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSyncResult> {
-    let _maintenance = state.maintenance.write().await;
-    let account = state.database.get_steam_account()?.ok_or_else(|| {
-        AppError::new(
-            "steam_not_linked",
-            "Vincula tu cuenta de Steam antes de sincronizar la biblioteca.",
-        )
-    })?;
-    let database = state.database.clone();
-    let snapshot = match steam::fetch_saved_account(&account.steam_id).await {
+    let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    let (account, generation) = database_read(&state, move |database| {
+        let generation = database.generation();
+        let account = database.get_steam_account()?.ok_or_else(|| {
+            AppError::new(
+                "steam_not_linked",
+                "Vincula tu cuenta de Steam antes de sincronizar la biblioteca.",
+            )
+        })?;
+        Ok((account, generation))
+    })
+    .await?;
+
+    // La red queda deliberadamente fuera del guard de mantenimiento. Las
+    // lecturas, autosaves y diagnósticos locales siguen disponibles aunque
+    // Steam o un miembro de Family tarde en responder.
+    let snapshot = match await_steam_network(steam::fetch_saved_account(&account.steam_id)).await {
         Ok(snapshot) => snapshot,
         Err(error) => {
-            let failed_database = database.clone();
-            let failed_steam_id = account.steam_id.clone();
-            let persisted_error = error.clone();
-            let _ = blocking(move || {
-                if persisted_error.code == "steam_api_key_missing" {
-                    let _ = failed_database.set_steam_api_key_configured(false);
-                } else if persisted_error.code != "secure_storage" {
-                    let _ = failed_database.set_steam_api_key_configured(true);
-                }
-                steam::mark_sync_failed(&failed_database, &failed_steam_id, &persisted_error)
-            })
+            persist_steam_sync_failure_if_current(
+                &state,
+                generation,
+                account.steam_id,
+                error.clone(),
+            )
             .await;
             return Err(error);
         }
     };
     let steam_id = snapshot.steam_id.clone();
-    let result = blocking(move || {
-        database.set_steam_api_key_configured(true)?;
-        // La instantánea familiar se guarda primero para que cualquier
-        // confirmación caducada quede retirada antes de volver a promocionar
-        // los AppID que sí tienen evidencia local en esta sincronización.
-        database.save_family_catalog(&snapshot.family_catalog, snapshot.family_catalog_complete)?;
-        let (imported_games, updated_games) =
-            database.upsert_imported_games(&snapshot.games, false)?;
-        steam::persist_profile(&database, &snapshot.steam_id, snapshot.profile.as_ref())?;
+    let profile = snapshot.profile.as_ref().map(|profile| SteamProfileWrite {
+        persona_name: profile.persona_name.clone(),
+        avatar_url: profile.avatar_url.clone(),
+        profile_url: profile.profile_url.clone(),
+        visibility: profile.visibility,
+    });
+    let result = database_write(&state, move |database| {
+        let (imported_games, updated_games) = database.persist_steam_sync(
+            generation,
+            &snapshot.steam_id,
+            profile.as_ref(),
+            &snapshot.games,
+            &snapshot.family_catalog,
+            snapshot.family_catalog_complete,
+        )?;
         Ok(SteamSyncResult {
             steam_id: snapshot.steam_id,
             imported_games,
@@ -762,7 +841,7 @@ pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSy
     })
     .await;
     if let Err(error) = &result {
-        let _ = steam::mark_sync_failed(&state.database, &steam_id, error);
+        persist_steam_sync_failure_if_current(&state, generation, steam_id, error.clone()).await;
     }
     result
 }
@@ -815,9 +894,7 @@ pub async fn get_discovery_snapshot(state: State<'_, AppState>) -> AppResult<Dis
 #[tauri::command]
 pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<NewsRefreshReport> {
     let _refresh_guard = NEWS_REFRESH_LOCK.lock().await;
-    // Una restauración debe esperar a que termine el lote: así una respuesta
-    // reclamada sobre la base anterior nunca se escribe en la base restaurada.
-    let _maintenance_guard = state.maintenance.read().await;
+    let mut refresh_generation = None;
     let mut attempted_games = 0_u32;
     let mut refreshed_games = 0_u32;
     let mut publications_saved = 0_u32;
@@ -825,10 +902,14 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
     let mut last_failure = None;
 
     loop {
-        let candidates = database_unlocked(state.database.clone(), move |database| {
-            database.claim_news_refresh_candidates(NEWS_REFRESH_BATCH)
-        })
+        let (generation, candidates) = discovery_database_at_generation(
+            state.database.clone(),
+            state.maintenance.clone(),
+            refresh_generation,
+            move |database| database.claim_news_refresh_candidates(NEWS_REFRESH_BATCH),
+        )
         .await?;
+        refresh_generation = Some(generation);
         if candidates.is_empty() {
             break;
         }
@@ -850,8 +931,6 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
             })?;
             match result {
                 Ok(publications) => {
-                    publications_saved =
-                        publications_saved.saturating_add(publications.len() as u32);
                     let inputs = publications
                         .into_iter()
                         .map(|publication| CachedNewsInput {
@@ -863,10 +942,15 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
                             feed_name: publication.feed_name,
                         })
                         .collect::<Vec<_>>();
-                    database_unlocked(state.database.clone(), move |database| {
-                        database.save_news_success(candidate.app_id, &inputs)
-                    })
+                    let saved_count = inputs.len() as u32;
+                    discovery_database_at_generation(
+                        state.database.clone(),
+                        state.maintenance.clone(),
+                        Some(generation),
+                        move |database| database.save_news_success(candidate.app_id, &inputs),
+                    )
                     .await?;
+                    publications_saved = publications_saved.saturating_add(saved_count);
                     refreshed_games = refreshed_games.saturating_add(1);
                 }
                 Err(failure) => {
@@ -876,14 +960,19 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
                         failure.retry_after_seconds,
                     );
                     let error_code = failure.error.code.clone();
-                    database_unlocked(state.database.clone(), move |database| {
-                        database.save_news_failure(
-                            candidate.app_id,
-                            candidate.attempts,
-                            &error_code,
-                            delay,
-                        )
-                    })
+                    discovery_database_at_generation(
+                        state.database.clone(),
+                        state.maintenance.clone(),
+                        Some(generation),
+                        move |database| {
+                            database.save_news_failure(
+                                candidate.app_id,
+                                candidate.attempts,
+                                &error_code,
+                                delay,
+                            )
+                        },
+                    )
                     .await?;
                     failed_games = failed_games.saturating_add(1);
                     last_failure = Some(failure.error);
@@ -895,9 +984,12 @@ pub async fn refresh_discovery_news(state: State<'_, AppState>) -> AppResult<New
         }
     }
 
-    let snapshot = database_unlocked(state.database.clone(), move |database| {
-        database.discovery_snapshot()
-    })
+    let (_, snapshot) = discovery_database_at_generation(
+        state.database.clone(),
+        state.maintenance.clone(),
+        refresh_generation,
+        move |database| database.discovery_snapshot(),
+    )
     .await?;
     if attempted_games > 0 && failed_games == attempted_games {
         return Err(last_failure.unwrap_or_else(|| {
@@ -1085,10 +1177,18 @@ pub async fn cache_game_art(
     state: State<'_, AppState>,
     app_id: u32,
     variant: String,
+    source_url: Option<String>,
 ) -> AppResult<CachedArt> {
     let _maintenance = state.maintenance.read().await;
     let variant = ArtVariant::parse(&variant)?;
-    art_cache::cache(&state.database, &state.cache_dir, app_id, variant).await
+    art_cache::cache(
+        &state.database,
+        &state.cache_dir,
+        app_id,
+        variant,
+        source_url.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -1124,8 +1224,12 @@ pub fn check_for_updates(app: AppHandle) -> UpdateCheckResult {
 
 #[cfg(test)]
 mod tests {
-    use super::{database_unlocked, steam_configuration, try_begin_steam_login};
-    use crate::db::Database;
+    use super::{
+        await_steam_network, blocking, discovery_database_at_generation, steam_configuration,
+        try_begin_steam_login, try_begin_steam_sync,
+    };
+    use crate::db::{CachedNewsInput, Database, ImportedGame};
+    use crate::error::{AppError, AppResult};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::sync::{Mutex, RwLock, oneshot};
@@ -1167,43 +1271,197 @@ mod tests {
     }
 
     #[test]
-    fn unlocked_database_work_finishes_while_a_maintenance_writer_is_queued() {
+    fn background_task_failures_do_not_expose_panic_details() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("crear runtime");
+        let error = runtime.block_on(async {
+            blocking(|| -> AppResult<()> {
+                panic!("token=fixture-secret at /Users/example/private.sqlite3")
+            })
+            .await
+            .expect_err("convertir panic del worker en error público")
+        });
+
+        assert_eq!(error.code, "background_task");
+        assert_eq!(
+            error.message,
+            "La tarea interna no pudo finalizar. Vuelve a intentarlo."
+        );
+        assert!(!error.message.contains("fixture-secret"));
+        assert!(!error.message.contains("/Users/example"));
+    }
+
+    #[test]
+    fn steam_sync_is_singleflight_and_recovers_after_completion() {
+        let lock = Arc::new(Mutex::new(()));
+        let first = try_begin_steam_sync(lock.clone()).expect("iniciar primera sincronización");
+        let error =
+            try_begin_steam_sync(lock.clone()).expect_err("rechazar sincronización paralela");
+        assert_eq!(error.code, "steam_sync_in_progress");
+        drop(first);
+        try_begin_steam_sync(lock).expect("permitir sincronización posterior");
+    }
+
+    #[test]
+    fn steam_credential_changes_share_the_sync_exclusion() {
+        let lock = Arc::new(Mutex::new(()));
+        let sync = try_begin_steam_sync(lock.clone()).expect("iniciar sincronización");
+        let error = try_begin_steam_sync(lock.clone())
+            .expect_err("rechazar acceso al secreto durante la sincronización");
+        assert_eq!(error.code, "steam_sync_in_progress");
+        drop(sync);
+        try_begin_steam_sync(lock).expect("permitir acceso al secreto al terminar");
+    }
+
+    #[test]
+    fn pending_steam_network_does_not_block_database_readers() {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("crear runtime");
         runtime.block_on(async {
             let directory = TempDir::new().expect("crear temporal");
-            let database = Database::new(directory.path().join("discovery-lock.sqlite3"));
+            let database = Database::new(directory.path().join("steam-network-lock.sqlite3"));
             database.initialize().expect("inicializar base");
-
             let maintenance = Arc::new(RwLock::new(()));
-            let outer_read = maintenance.read().await;
-            let writer_lock = maintenance.clone();
-            let (writer_started_tx, writer_started_rx) = oneshot::channel();
-            let writer = tokio::spawn(async move {
-                let _ = writer_started_tx.send(());
-                let _guard = writer_lock.write().await;
-            });
-            writer_started_rx.await.expect("encolar escritor");
-            tokio::task::yield_now().await;
+            let (started_tx, started_rx) = oneshot::channel();
+            let (release_tx, release_rx) = oneshot::channel();
+            let network = tokio::spawn(await_steam_network(async move {
+                let _ = started_tx.send(());
+                let _ = release_rx.await;
+                Err::<(), _>(AppError::new("test_network", "fin de la red simulada"))
+            }));
+            started_rx.await.expect("iniciar red simulada");
 
-            let count = timeout(
+            let reader_database = database.clone();
+            let reader_maintenance = maintenance.clone();
+            let account = timeout(
                 Duration::from_secs(1),
-                database_unlocked(database, |database| {
-                    Ok(database.discovery_snapshot()?.official_publications.len())
+                blocking(move || {
+                    let _reader = reader_maintenance.blocking_read();
+                    reader_database.get_steam_account()
                 }),
             )
             .await
-            .expect("el trabajo no debe readquirir maintenance")
-            .expect("consultar discovery");
-            assert_eq!(count, 0);
-
-            drop(outer_read);
-            timeout(Duration::from_secs(1), writer)
+            .expect("una lectura local debe seguir disponible durante la red");
+            assert!(account.expect("leer base local").is_none());
+            release_tx.send(()).expect("liberar red simulada");
+            let error = network
                 .await
-                .expect("el escritor debe continuar al liberar el guard")
-                .expect("finalizar escritor");
+                .expect("finalizar tarea")
+                .expect_err("conservar error simulado");
+            assert_eq!(error.code, "test_network");
+        });
+    }
+
+    #[test]
+    fn discovery_network_wait_does_not_block_restore_and_rejects_its_stale_result() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("crear runtime");
+        runtime.block_on(async {
+            let directory = TempDir::new().expect("crear temporal");
+            let database = Database::new(directory.path().join("discovery-generation.sqlite3"));
+            database.initialize().expect("inicializar base");
+            database
+                .upsert_imported_games(
+                    &[ImportedGame {
+                        app_id: 10,
+                        title: "Viajero".into(),
+                        icon_url: None,
+                        cover_url: None,
+                        header_url: None,
+                        playtime_minutes: 0,
+                        playtime_recent_minutes: 0,
+                        last_played_at: None,
+                        ownership_source: "owned".into(),
+                        family_availability: "not_applicable".into(),
+                        installation: None,
+                    }],
+                    true,
+                )
+                .expect("importar juego seguido");
+            database
+                .open()
+                .expect("abrir base")
+                .execute(
+                    "UPDATE game_personal SET tracking = 1 WHERE app_id = 10",
+                    [],
+                )
+                .expect("activar seguimiento");
+
+            let maintenance = Arc::new(RwLock::new(()));
+            let refresh_database = database.clone();
+            let refresh_maintenance = maintenance.clone();
+            let (network_started_tx, network_started_rx) = oneshot::channel();
+            let (network_release_tx, network_release_rx) = oneshot::channel();
+            let refresh = tokio::spawn(async move {
+                let (generation, candidates) = discovery_database_at_generation(
+                    refresh_database.clone(),
+                    refresh_maintenance.clone(),
+                    None,
+                    |database| database.claim_news_refresh_candidates(4),
+                )
+                .await?;
+                assert_eq!(candidates.len(), 1);
+                let _ = network_started_tx.send(());
+                network_release_rx.await.expect("liberar respuesta HTTP");
+
+                discovery_database_at_generation(
+                    refresh_database,
+                    refresh_maintenance,
+                    Some(generation),
+                    |database| {
+                        database.save_news_success(
+                            10,
+                            &[CachedNewsInput {
+                                gid: "1840944183772671".into(),
+                                title: "Resultado anterior".into(),
+                                content_preview: "No debe cruzar la restauración".into(),
+                                published_at: "2026-08-14T12:00:00+00:00".into(),
+                                feed_label: "Community Announcements".into(),
+                                feed_name: "steam_community_announcements".into(),
+                            }],
+                        )
+                    },
+                )
+                .await
+            });
+            network_started_rx.await.expect("iniciar espera HTTP");
+
+            let restore_database = database.clone();
+            let restore_maintenance = maintenance.clone();
+            let restore = tokio::spawn(async move {
+                let _guard = restore_maintenance.write().await;
+                // El restore real incrementa esta misma generación al activar
+                // la base sustituida.
+                restore_database.advance_generation();
+            });
+            timeout(Duration::from_secs(1), restore)
+                .await
+                .expect("el escritor no debe esperar a toda la red")
+                .expect("completar restauración simulada");
+
+            network_release_tx
+                .send(())
+                .expect("resolver respuesta HTTP");
+            let error = timeout(Duration::from_secs(1), refresh)
+                .await
+                .expect("el refresco debe terminar")
+                .expect("unir tarea")
+                .expect_err("rechazar el resultado de la generación anterior");
+            assert_eq!(error.code, "discovery_refresh_stale");
+
+            let (_, snapshot) =
+                discovery_database_at_generation(database, maintenance, None, |database| {
+                    database.discovery_snapshot()
+                })
+                .await
+                .expect("consultar generación activa");
+            assert!(snapshot.official_publications.is_empty());
         });
     }
 }

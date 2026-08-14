@@ -17,6 +17,7 @@ const INITIAL_SCHEMA: &str = include_str!("../migrations/001_initial.sql");
 const INDEXES_AND_SEARCH: &str = include_str!("../migrations/002_indexes.sql");
 const SORT_INDEXES: &str = include_str!("../migrations/004_library_sorting.sql");
 const COMPLETE_METADATA: &str = include_str!("../migrations/007_steam_metadata_complete.sql");
+const MANUAL_POSITION_INDEX: &str = include_str!("../migrations/016_manual_position_index.sql");
 
 fn database() -> Connection {
     let mut connection = Connection::open_in_memory().expect("abrir SQLite temporal");
@@ -35,6 +36,9 @@ fn database() -> Connection {
     connection
         .execute_batch(COMPLETE_METADATA)
         .expect("aplicar origen y metadata completa");
+    connection
+        .execute_batch(MANUAL_POSITION_INDEX)
+        .expect("alinear índice con el orden manual");
     connection
         .execute(
             "INSERT INTO statuses(id, name, color, position, built_in)
@@ -178,7 +182,21 @@ fn steam_like_sorts_are_deterministic_and_keep_nulls_last() {
     );
     assert_eq!(sorted_ids(&connection, "sizeDesc"), [1, 3, 5, 2, 4, 6]);
     assert_eq!(sorted_ids(&connection, "sizeAsc"), [3, 1, 5, 2, 4, 6]);
-    assert_eq!(sorted_ids(&connection, "manual"), [5, 3, 2, 1, 6, 4]);
+    assert_eq!(sorted_ids(&connection, "manual"), [6, 3, 2, 4, 1, 5]);
+}
+
+#[test]
+fn manual_sort_index_starts_with_the_persisted_drag_position() {
+    let connection = database();
+    let columns = connection
+        .prepare("PRAGMA index_info('idx_personal_manual_sort')")
+        .expect("consultar índice")
+        .query_map([], |row| row.get::<_, String>(2))
+        .expect("leer columnas")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("materializar columnas");
+
+    assert_eq!(columns, ["manual_position", "pinned", "priority", "app_id"]);
 }
 
 #[test]

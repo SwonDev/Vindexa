@@ -44,21 +44,37 @@ pub fn validate_api_key(value: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn keyring_error(error: keyring::Error) -> AppError {
+fn keyring_error(_error: keyring::Error) -> AppError {
     AppError::new(
         "secure_storage",
-        format!("No se pudo acceder al almacén seguro del sistema: {error}"),
+        "No se pudo acceder al almacén seguro del sistema.",
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::validate_api_key;
+    use super::{keyring_error, validate_api_key};
 
     #[test]
     fn validates_exact_hex_key_without_persisting_it() {
         assert!(validate_api_key("0123456789abcdef0123456789ABCDEF").is_ok());
         assert!(validate_api_key("short").is_err());
         assert!(validate_api_key("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz").is_err());
+    }
+
+    #[test]
+    fn secure_storage_errors_do_not_expose_platform_details() {
+        let error = keyring_error(keyring::Error::Invalid(
+            "account".to_string(),
+            "secret=/Users/example/private.key".to_string(),
+        ));
+
+        assert_eq!(error.code, "secure_storage");
+        assert_eq!(
+            error.message,
+            "No se pudo acceder al almacén seguro del sistema."
+        );
+        assert!(!error.message.contains("private.key"));
+        assert!(!error.message.contains("secret"));
     }
 }

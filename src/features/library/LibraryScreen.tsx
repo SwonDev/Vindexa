@@ -51,6 +51,8 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   AppBootstrap,
+  FamilyCatalogAvailability,
+  FamilyCatalogSort,
   GameListRequest,
   GameSort,
   GameSummary,
@@ -90,6 +92,10 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   );
   const [randomSeed, setRandomSeed] = useState(session.randomSeed);
   const [view, setView] = useState<LibraryView>(session.view);
+  const [familyAvailability, setFamilyAvailability] = useState<FamilyCatalogAvailability>(
+    session.familyAvailability,
+  );
+  const [familySort, setFamilySort] = useState<FamilyCatalogSort>(session.familySort);
   const [filters, setFilters] = useState<ExtraFilters>(session.filters);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detailId, setDetailId] = useState<number>();
@@ -109,8 +115,17 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   );
 
   useEffect(() => {
-    writeLibrarySession({ scope, query, sort, randomSeed, view, filters });
-  }, [filters, query, randomSeed, scope, sort, view]);
+    writeLibrarySession({
+      scope,
+      query,
+      sort,
+      randomSeed,
+      view,
+      familyAvailability,
+      familySort,
+      filters,
+    });
+  }, [familyAvailability, familySort, filters, query, randomSeed, scope, sort, view]);
   useEffect(() => {
     if (bootstrap && awaitingInitialPreferences.current) {
       awaitingInitialPreferences.current = false;
@@ -175,10 +190,12 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     enabled: scope.kind !== "family",
   });
   const familyQuery = useInfiniteQuery({
-    queryKey: ["family-catalog", debouncedQuery],
+    queryKey: ["family-catalog", debouncedQuery, familyAvailability, familySort],
     queryFn: ({ pageParam }) =>
       api.listFamilyCatalog({
         ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
+        ...(familyAvailability === "all" ? {} : { availability: familyAvailability }),
+        sort: familySort,
         limit: 240,
         offset: pageParam,
       }),
@@ -210,11 +227,10 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   );
   const familyTotal = familyQuery.data?.pages[0]?.total ?? 0;
   const visibleTotal = scope.kind === "family" ? familyTotal : total;
-  const activeFilters = Boolean(
-    debouncedQuery ||
-      activeLibraryFilterCount(filters) ||
-      (scope.kind !== "all" && scope.kind !== "family"),
-  );
+  const activeFilters =
+    scope.kind === "family"
+      ? Boolean(debouncedQuery || familyAvailability !== "all")
+      : Boolean(debouncedQuery || activeLibraryFilterCount(filters) || scope.kind !== "all");
 
   useEffect(() => {
     const focusSearch = () => {
@@ -573,8 +589,12 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 <Button
                   onClick={() => {
                     setQuery("");
-                    setFilters({});
-                    setScope({ kind: "all", label: "Todos los juegos" });
+                    if (scope.kind === "family") {
+                      setFamilyAvailability("all");
+                    } else {
+                      setFilters({});
+                      setScope({ kind: "all", label: "Todos los juegos" });
+                    }
                   }}
                 >
                   <IconX /> Limpiar búsqueda y filtros
@@ -608,10 +628,23 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             <FamilyCatalogBrowser
               games={familyGames}
               total={familyTotal}
+              view={view}
+              availability={familyAvailability}
+              sort={familySort}
+              queryKey={debouncedQuery.trim()}
               hasMore={Boolean(familyQuery.hasNextPage)}
               loadingMore={familyQuery.isFetchingNextPage}
               initialScrollOffset={readLibraryScroll(scope)}
               onScrollOffsetChange={(offset) => writeLibraryScroll(scope, offset)}
+              onAvailabilityChange={(availability) => {
+                writeLibraryScroll(scope, 0);
+                setFamilyAvailability(availability);
+              }}
+              onSortChange={(nextSort) => {
+                writeLibraryScroll(scope, 0);
+                setFamilySort(nextSort);
+              }}
+              onViewChange={setView}
               onLoadMore={() => familyQuery.fetchNextPage()}
               onOpenConfirmed={setDetailId}
             />
@@ -642,7 +675,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               }
             />
           )}
-          {selected.size > 0 && (
+          {scope.kind !== "family" && selected.size > 0 && (
             <div className="selection-bar" aria-live="polite">
               <strong>
                 {selected.size} seleccionado{selected.size === 1 ? "" : "s"}

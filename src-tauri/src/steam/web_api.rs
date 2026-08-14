@@ -254,39 +254,6 @@ async fn merge_family_games(
     }
 }
 
-pub fn persist_profile(
-    database: &Database,
-    steam_id: &str,
-    profile: Option<&SteamProfile>,
-) -> AppResult<()> {
-    validate_steam_id(steam_id)?;
-    database.save_steam_identity(steam_id)?;
-    let (persona_name, avatar_url, profile_url, visibility) =
-        profile.map_or((None, None, None, None), |profile| {
-            (
-                Some(profile.persona_name.as_str()),
-                profile.avatar_url.as_deref(),
-                profile.profile_url.as_deref(),
-                profile.visibility,
-            )
-        });
-    database.open()?.execute(
-        "UPDATE steam_accounts SET
-            persona_name = COALESCE(?2, persona_name),
-            avatar_url = COALESCE(?3, avatar_url),
-            profile_url = COALESCE(?4, profile_url),
-            visibility = COALESCE(?5, visibility),
-            last_sync_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-            last_sync_status = 'success',
-            last_sync_error_code = NULL,
-            last_sync_error_message = NULL,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE steam_id = ?1",
-        rusqlite::params![steam_id, persona_name, avatar_url, profile_url, visibility],
-    )?;
-    Ok(())
-}
-
 pub fn mark_sync_failed(database: &Database, steam_id: &str, error: &AppError) -> AppResult<()> {
     validate_steam_id(steam_id)?;
     let persisted_message = safe_persisted_error_message(error);
@@ -435,7 +402,7 @@ fn sanitize_profile_url(value: Option<String>) -> Option<String> {
     let allowed_host = parsed.host_str().is_some_and(|host| {
         host == "steamcommunity.com"
             || host == "avatars.steamstatic.com"
-            || (host.starts_with("avatars.") && host.ends_with(".steamstatic.com"))
+            || host == "avatars.fastly.steamstatic.com"
             || host == "cdn.akamai.steamstatic.com"
     });
     (parsed.scheme() == "https" && allowed_host).then_some(value)
@@ -597,6 +564,16 @@ mod tests {
             ))
             .is_some()
         );
+        assert!(
+            include_str!("../../tauri.conf.json")
+                .contains("https://avatars.fastly.steamstatic.com")
+        );
+        assert!(
+            sanitize_profile_url(Some(
+                "https://avatars.unlisted.steamstatic.com/example_full.jpg".into()
+            ))
+            .is_none()
+        );
         assert!(sanitize_profile_url(Some("https://example.com/steal".into())).is_none());
     }
 
@@ -686,7 +663,9 @@ mod tests {
             Some("Steam rechazó la clave Web API. Revísala en Ajustes.")
         );
 
-        super::persist_profile(&database, steam_id, None).expect("persistir éxito sin perfil");
+        database
+            .persist_steam_sync(database.generation(), steam_id, None, &[], &[], false)
+            .expect("persistir éxito sin perfil");
         let succeeded = database
             .get_steam_account()
             .expect("leer cuenta")

@@ -11,6 +11,92 @@ export function installTauriIpcHarness(seed: TestBackendState) {
   // addInitScript también se evalúa sobre about:blank, donde Chromium bloquea localStorage.
   if (window.location.protocol !== "http:" && window.location.protocol !== "https:") return;
   const storageKey = "vindexa:e2e:backend:v1";
+  const familyCatalog = [
+    {
+      appId: 410,
+      title: "Aurora Assembly",
+      availability: "confirmed",
+      discoveredAt: "2026-08-11T10:00:00Z",
+      updatedAt: "2026-08-14T10:00:00Z",
+    },
+    {
+      appId: 420,
+      title: "Bastion of Moss",
+      availability: "unknown",
+      discoveredAt: "2026-08-14T09:00:00Z",
+      updatedAt: "2026-08-14T09:00:00Z",
+    },
+    {
+      appId: 430,
+      title: "Clockwork Family",
+      availability: "confirmed",
+      discoveredAt: "2026-08-10T10:00:00Z",
+      updatedAt: "2026-08-13T10:00:00Z",
+    },
+    {
+      appId: 440,
+      title: "Distant Gardens",
+      availability: "unknown",
+      discoveredAt: "2026-08-13T10:00:00Z",
+      updatedAt: "2026-08-13T10:00:00Z",
+    },
+    {
+      appId: 450,
+      title: "Ember Family",
+      availability: "confirmed",
+      discoveredAt: "2026-08-09T10:00:00Z",
+      updatedAt: "2026-08-12T10:00:00Z",
+    },
+    {
+      appId: 460,
+      title: "Frostline Workshop",
+      availability: "unknown",
+      discoveredAt: "2026-08-12T10:00:00Z",
+      updatedAt: "2026-08-12T10:00:00Z",
+    },
+    {
+      appId: 470,
+      title: "Glass Harbor",
+      availability: "confirmed",
+      discoveredAt: "2026-08-08T10:00:00Z",
+      updatedAt: "2026-08-11T10:00:00Z",
+    },
+    {
+      appId: 480,
+      title: "Hollow Meridian",
+      availability: "unknown",
+      discoveredAt: "2026-08-11T10:00:00Z",
+      updatedAt: "2026-08-11T10:00:00Z",
+    },
+    {
+      appId: 490,
+      title: "Ivory Circuit",
+      availability: "confirmed",
+      discoveredAt: "2026-08-07T10:00:00Z",
+      updatedAt: "2026-08-10T10:00:00Z",
+    },
+    {
+      appId: 500,
+      title: "Juniper Keep",
+      availability: "unknown",
+      discoveredAt: "2026-08-10T10:00:00Z",
+      updatedAt: "2026-08-10T10:00:00Z",
+    },
+    {
+      appId: 510,
+      title: "Kestrel Foundry",
+      availability: "confirmed",
+      discoveredAt: "2026-08-06T10:00:00Z",
+      updatedAt: "2026-08-09T10:00:00Z",
+    },
+    {
+      appId: 520,
+      title: "Lumen Orchard",
+      availability: "unknown",
+      discoveredAt: "2026-08-09T10:00:00Z",
+      updatedAt: "2026-08-09T10:00:00Z",
+    },
+  ];
   const read = (): TestBackendState => {
     const stored = window.localStorage.getItem(storageKey);
     return stored ? JSON.parse(stored) : structuredClone(seed);
@@ -352,7 +438,42 @@ export function installTauriIpcHarness(seed: TestBackendState) {
     }
     if (command === "get_planner_overview") return structuredClone(state.planner);
     if (command === "list_family_catalog") {
-      return { items: [], total: 0, limit: 240, offset: 0 };
+      const request = (args.request ?? {}) as {
+        query?: string;
+        availability?: string;
+        sort?: string;
+        limit?: number;
+        offset?: number;
+      };
+      const query = request.query?.trim().toLocaleLowerCase("es-ES") ?? "";
+      const items = familyCatalog
+        .filter(
+          (game) =>
+            (!query || game.title.toLocaleLowerCase("es-ES").includes(query)) &&
+            (!request.availability || game.availability === request.availability),
+        )
+        .sort((left, right) => {
+          if (request.sort === "alphabeticalDesc") return right.title.localeCompare(left.title);
+          if (request.sort === "updatedDesc") return right.updatedAt.localeCompare(left.updatedAt);
+          if (request.sort === "discoveredDesc") {
+            return right.discoveredAt.localeCompare(left.discoveredAt);
+          }
+          if (request.sort === "availability" || !request.sort) {
+            const availability =
+              Number(right.availability === "confirmed") -
+              Number(left.availability === "confirmed");
+            if (availability) return availability;
+          }
+          return left.title.localeCompare(right.title);
+        });
+      const offset = request.offset ?? 0;
+      const limit = request.limit ?? 240;
+      return {
+        items: items.slice(offset, offset + limit),
+        total: items.length,
+        limit,
+        offset,
+      };
     }
     if (command === "list_tags") return [];
     if (command === "list_game_sessions") {

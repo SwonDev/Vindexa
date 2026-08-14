@@ -13,9 +13,10 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - Vinculación real mediante Steam OpenID, Web API Key en el almacén seguro y sincronización
   manual o periódica mientras la aplicación está abierta.
 - Importación de manifiestos locales, procedencia diferenciada (`owned`, `family_shared` y
-  `local`) y catálogo separado de Steam Family con disponibilidad prudente.
+  `local`) y catálogo separado de Steam Family con disponibilidad prudente, filtros, órdenes
+  y vistas virtualizadas propias.
 - Biblioteca paginada y virtualizada, búsqueda FTS5, filtros combinables, 17 ordenaciones,
-  vista de cuadrícula/lista, multiselección y acciones masivas.
+  vistas de cuadrícula/lista/ultracompacta, multiselección y acciones masivas.
 - Arrastre de uno o varios juegos a estados y colecciones manuales, alternativa de teclado,
   transacción atómica y deshacer condicionado a que el destino no haya cambiado.
 - Ficha inmersiva con arte oficial, parallax respetuoso con reducción de movimiento,

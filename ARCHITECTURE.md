@@ -180,7 +180,9 @@ sequenceDiagram
     UI->>T: sync_steam_library si hay cuenta vinculada
     T->>K: Leer Web API Key al sincronizar
     T->>S: GetOwnedGames + GetPlayerSummaries
-    T->>DB: Upsert de perfil y metadatos remotos
+    Note over T,DB: La red no retiene el lock de mantenimiento
+    T->>DB: Commit atómico de marcador, Family, biblioteca y perfil
+    DB-->>T: Rechazar si cambió generación o cuenta vinculada
 ```
 
 La sincronización remota no reinicia el indicador de instalación local y no escribe en
@@ -190,6 +192,13 @@ ventana está abierta, evita sincronizaciones solapadas y vuelve a invalidar las
 terminar. El temporizador solo se activa si el marcador confirma la clave y no está pendiente
 la comprobación voluntaria.
 
+Las peticiones a Steam ocurren fuera del lock global para que biblioteca, ficha y autosave
+sigan respondiendo incluso con una red lenta. Un lock específico impide dos sincronizaciones
+remotas simultáneas. Al terminar la red, Rust toma exclusión solo durante un commit SQLite
+único de marcador de clave, catálogo familiar, biblioteca, perfil y estado de sincronización.
+Una generación compartida y la identidad vinculada invalidan respuestas obtenidas antes de
+una importación, restauración o cambio de cuenta; el snapshot obsoleto nunca se persiste.
+
 Guardar una clave con una cuenta ya vinculada encadena exactamente una sincronización. El
 campo del formulario se vacía después del guardado. Un fallo remoto conserva la biblioteca,
 marca `last_sync_status = failed` y persiste un código y un mensaje acotado; una
@@ -197,8 +206,10 @@ sincronización correcta limpia ese diagnóstico.
 
 ### Edición personal
 
-La ficha construye un `UpdateGameInput` completo. Rust valida rangos y existencia del
-estado, normaliza strings opcionales y actualiza `game_personal` dentro de una transacción.
+La ficha construye un `UpdateGameInput` completo. Rust valida rangos, existencia del estado,
+fecha ISO real y canónica, duración positiva y límites Unicode de 500 caracteres para próxima
+acción, 2.000 para checkpoint y 20.000 para notas. Después normaliza strings opcionales y
+actualiza `game_personal` dentro de una transacción.
 Etiquetas, fechas y sesiones tienen comandos y validaciones propias; las relaciones y el
 historial se actualizan atómicamente. Cada cambio relevante añade una entrada a `activity`.
 Tras guardar, TanStack Query invalida bootstrap, biblioteca, filtros y ficha para volver a
@@ -373,9 +384,10 @@ Consulta [STEAM_SETUP.md](./STEAM_SETUP.md) para los límites.
    generales.
 6. **Paginación más virtualización.** SQLite limita cada página y React monta solo la ventana
    visible.
-7. **Mantenimiento exclusivo.** Un `RwLock` de proceso permite lecturas ordinarias en
-   paralelo, pero excluye importaciones, sincronizaciones y copias para impedir carreras con
-   una restauración.
+7. **Mantenimiento exclusivo y breve.** Un `RwLock` de proceso permite lecturas ordinarias
+   en paralelo y excluye importaciones, commits de sincronización y copias para impedir
+   carreras con una restauración. Las peticiones remotas de Steam y Discovery no retienen el
+   lock: cada persistencia comprueba la generación de la base antes de escribir.
 8. **Tienda remota aislada.** La continuidad visual no justifica cargar HTML remoto en la
    ventana con IPC; se usa otro WebView limitado.
 

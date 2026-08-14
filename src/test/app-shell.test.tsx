@@ -94,13 +94,14 @@ function renderAppShell() {
       mutations: { retry: false },
     },
   });
-  return render(
+  const renderResult = render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppShell />
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return { ...renderResult, queryClient };
 }
 
 describe("ciclo de carga de la aplicación", () => {
@@ -283,7 +284,8 @@ describe("ciclo de carga de la aplicación", () => {
       familyCatalogGamesDetected: 0,
       completedAt: "2026-08-14T19:00:00Z",
     });
-    renderAppShell();
+    const { queryClient } = renderAppShell();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     await screen.findByRole("button", {
       name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam",
     });
@@ -291,6 +293,8 @@ describe("ciclo de carga de la aplicación", () => {
     fireEvent.keyDown(window, { key: "s", metaKey: true, shiftKey: true });
     await waitFor(() => expect(mockedApi.syncSteamLibrary).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Sincronización manual completada.")).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
   });
 
   it("evita sincronizaciones concurrentes al repetir el atajo", async () => {
@@ -348,7 +352,8 @@ describe("ciclo de carga de la aplicación", () => {
         new Error("Steam temporalmente no disponible."),
       );
 
-      renderAppShell();
+      const { queryClient } = renderAppShell();
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
       await act(async () => vi.advanceTimersByTimeAsync(0));
       await act(async () => vi.advanceTimersByTimeAsync(60_000));
 
@@ -358,6 +363,8 @@ describe("ciclo de carga de la aplicación", () => {
       ).toHaveAttribute("role", "status");
       expect(mockedApi.bootstrap.mock.calls.length).toBeGreaterThanOrEqual(2);
       expect(mockedApi.listGames.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
     } finally {
       consoleError.mockRestore();
       vi.useRealTimers();

@@ -1,6 +1,11 @@
 import type { LibraryScope } from "@/features/library/LibrarySidebar";
 import type { ExtraFilters } from "@/features/library/LibraryToolbar";
-import type { GameSort, LibraryView } from "@/lib/types";
+import type {
+  FamilyCatalogAvailability,
+  FamilyCatalogSort,
+  GameSort,
+  LibraryView,
+} from "@/lib/types";
 
 export interface LibrarySessionState {
   scope: LibraryScope;
@@ -8,6 +13,8 @@ export interface LibrarySessionState {
   sort: GameSort;
   randomSeed: number;
   view: LibraryView;
+  familyAvailability: FamilyCatalogAvailability;
+  familySort: FamilyCatalogSort;
   filters: ExtraFilters;
 }
 
@@ -17,6 +24,8 @@ const initialState: LibrarySessionState = {
   sort: "manual",
   randomSeed: 0,
   view: "grid",
+  familyAvailability: "all",
+  familySort: "availability",
   filters: {},
 };
 

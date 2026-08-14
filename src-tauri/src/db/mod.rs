@@ -23,7 +23,7 @@ use rusqlite::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -40,10 +40,19 @@ pub(crate) use metadata_queue::MetadataJob;
 pub use personal::{SavePersonalDatesInput, SaveSessionInput, SaveTagInput, TagDefinition};
 
 #[derive(Debug, Clone)]
+pub(crate) struct SteamProfileWrite {
+    pub(crate) persona_name: String,
+    pub(crate) avatar_url: Option<String>,
+    pub(crate) profile_url: Option<String>,
+    pub(crate) visibility: Option<u8>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Database {
     path: PathBuf,
     maintenance_lock: Arc<Mutex<()>>,
     available: Arc<AtomicBool>,
+    generation: Arc<AtomicU64>,
 }
 
 impl Database {
@@ -52,6 +61,7 @@ impl Database {
             path,
             maintenance_lock: Arc::new(Mutex::new(())),
             available: Arc::new(AtomicBool::new(true)),
+            generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -65,6 +75,14 @@ impl Database {
 
     pub(crate) fn set_available(&self, available: bool) {
         self.available.store(available, Ordering::Release);
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn advance_generation(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::AcqRel) + 1
     }
 
     fn configure(connection: &Connection) -> AppResult<()> {
@@ -162,6 +180,7 @@ impl Database {
             Self::configure(restored)?;
             validate_current_database(restored, "backup")
         })?;
+        self.advance_generation();
         Ok(safety_path)
     }
 
@@ -532,12 +551,80 @@ impl Database {
         library::upsert_imported_games(&mut self.open()?, games, reset_installed)
     }
 
-    pub fn save_family_catalog(
+    /// Persiste una sincronización completa de Steam como una sola unidad.
+    ///
+    /// El llamador debe conservar el guard exclusivo de mantenimiento durante
+    /// toda la operación. La generación impide aplicar una respuesta de red
+    /// obtenida contra una base que ya fue sustituida mediante restauración.
+    pub(crate) fn persist_steam_sync(
         &self,
-        games: &[ImportedFamilyCatalogGame],
-        complete_snapshot: bool,
-    ) -> AppResult<()> {
-        family_catalog::save(&mut self.open()?, games, complete_snapshot)
+        expected_generation: u64,
+        steam_id: &str,
+        profile: Option<&SteamProfileWrite>,
+        games: &[ImportedGame],
+        family_catalog_games: &[ImportedFamilyCatalogGame],
+        family_catalog_complete: bool,
+    ) -> AppResult<(usize, usize)> {
+        let _maintenance = self.maintenance_guard()?;
+        if self.generation() != expected_generation {
+            return Err(stale_steam_sync_error());
+        }
+
+        let mut connection = self.open()?;
+        let transaction = connection.transaction()?;
+        let current_steam_id = transaction
+            .query_row(
+                "SELECT steam_id FROM steam_accounts ORDER BY updated_at DESC LIMIT 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if current_steam_id.as_deref() != Some(steam_id) {
+            return Err(AppError::new(
+                "steam_account_changed",
+                "La cuenta vinculada cambió durante la sincronización. Vuelve a intentarlo.",
+            ));
+        }
+
+        transaction.execute(
+            "INSERT INTO app_settings(key, value) VALUES ('steam_api_key_configured', 'true')
+             ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            [],
+        )?;
+        family_catalog::save_in_transaction(
+            &transaction,
+            family_catalog_games,
+            family_catalog_complete,
+        )?;
+        let counts = library::upsert_imported_games_in_transaction(&transaction, games, false)?;
+
+        let (persona_name, avatar_url, profile_url, visibility) =
+            profile.map_or((None, None, None, None), |profile| {
+                (
+                    Some(profile.persona_name.as_str()),
+                    profile.avatar_url.as_deref(),
+                    profile.profile_url.as_deref(),
+                    profile.visibility,
+                )
+            });
+        transaction.execute(
+            "UPDATE steam_accounts SET
+                persona_name = COALESCE(?2, persona_name),
+                avatar_url = COALESCE(?3, avatar_url),
+                profile_url = COALESCE(?4, profile_url),
+                visibility = COALESCE(?5, visibility),
+                last_sync_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                last_sync_status = 'success',
+                last_sync_error_code = NULL,
+                last_sync_error_message = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE steam_id = ?1",
+            params![steam_id, persona_name, avatar_url, profile_url, visibility],
+        )?;
+        transaction.commit()?;
+        Ok(counts)
     }
 
     pub fn list_family_catalog(
@@ -703,6 +790,13 @@ impl Database {
     pub fn reorder_planner_columns(&self, ids: &[String]) -> AppResult<()> {
         organization::reorder_planner_columns(&mut self.open()?, ids)
     }
+}
+
+fn stale_steam_sync_error() -> AppError {
+    AppError::new(
+        "steam_sync_stale",
+        "Los datos locales cambiaron durante la sincronización. Vuelve a intentarlo para aplicar una instantánea actual.",
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -1202,6 +1296,142 @@ mod durability_tests {
             .expect("consultar estado")
     }
 
+    fn valid_game_update(app_id: u32) -> UpdateGameInput {
+        UpdateGameInput {
+            app_id,
+            status_id: "playing".to_string(),
+            progress: 55,
+            priority: 4,
+            pinned: true,
+            tracking: true,
+            rating: Some(9),
+            estimated_minutes: Some(180),
+            target_date: Some("2026-09-01".to_string()),
+            next_action: Some("Terminar el segundo acto".to_string()),
+            checkpoint: Some("Campamento".to_string()),
+            notes: Some("Decisiones pendientes".to_string()),
+        }
+    }
+
+    #[test]
+    fn game_update_accepts_frontend_boundaries_and_unicode_character_counts() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "game-input-boundaries.sqlite3");
+        insert_game(&database, 620, "Portal 2");
+        let mut input = valid_game_update(620);
+        input.next_action = Some("á".repeat(500));
+        input.checkpoint = Some("ñ".repeat(2_000));
+        input.notes = Some("🎮".repeat(20_000));
+
+        let detail = database
+            .update_game(&input)
+            .expect("aceptar límites exactos en caracteres");
+        assert_eq!(detail.summary.next_action, input.next_action);
+        assert_eq!(detail.summary.checkpoint, input.checkpoint);
+        assert_eq!(detail.summary.notes, input.notes);
+    }
+
+    #[test]
+    fn game_update_rejects_text_over_frontend_limits() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "game-input-text.sqlite3");
+        insert_game(&database, 620, "Portal 2");
+
+        for (field, expected_message) in [
+            (
+                "next_action",
+                "La siguiente acción no puede superar 500 caracteres.",
+            ),
+            (
+                "checkpoint",
+                "El checkpoint no puede superar 2000 caracteres.",
+            ),
+            ("notes", "Las notas no pueden superar 20000 caracteres."),
+        ] {
+            let mut input = valid_game_update(620);
+            match field {
+                "next_action" => input.next_action = Some("a".repeat(501)),
+                "checkpoint" => input.checkpoint = Some("a".repeat(2_001)),
+                "notes" => input.notes = Some("a".repeat(20_001)),
+                _ => unreachable!(),
+            }
+            let error = database.update_game(&input).expect_err("rechazar exceso");
+            assert_eq!(error.code, "validation");
+            assert_eq!(error.message, expected_message);
+        }
+    }
+
+    #[test]
+    fn game_update_rejects_zero_duration_and_non_iso_or_impossible_dates() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "game-input-date.sqlite3");
+        insert_game(&database, 620, "Portal 2");
+        let mut zero_duration = valid_game_update(620);
+        zero_duration.estimated_minutes = Some(0);
+        assert_eq!(
+            database
+                .update_game(&zero_duration)
+                .expect_err("rechazar duración cero")
+                .message,
+            "La duración estimada debe ser mayor que cero."
+        );
+
+        for invalid_date in ["01/09/2026", "2026-02-30", "2026-9-1"] {
+            let mut input = valid_game_update(620);
+            input.target_date = Some(invalid_date.to_string());
+            let error = database
+                .update_game(&input)
+                .expect_err("rechazar fecha no válida");
+            assert_eq!(error.code, "validation");
+            assert_eq!(
+                error.message,
+                "La fecha objetivo debe usar el formato AAAA-MM-DD y ser válida."
+            );
+        }
+    }
+
+    #[test]
+    fn blank_optional_game_date_is_persisted_as_no_date() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "game-input-blank-date.sqlite3");
+        insert_game(&database, 620, "Portal 2");
+        let mut input = valid_game_update(620);
+        input.target_date = Some("   ".to_string());
+
+        let detail = database
+            .update_game(&input)
+            .expect("aceptar fecha opcional vacía");
+        assert_eq!(detail.summary.target_date, None);
+    }
+
+    #[test]
+    fn game_update_rejects_invalid_payload_without_mutating_the_game() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "game-input-atomic.sqlite3");
+        insert_game(&database, 620, "Portal 2");
+        let mut original = valid_game_update(620);
+        original.notes = Some("Original".to_string());
+        database
+            .update_game(&original)
+            .expect("guardar estado inicial");
+
+        let mut invalid = original.clone();
+        invalid.notes = Some("x".repeat(20_001));
+        let error = database
+            .update_game(&invalid)
+            .expect_err("rechazar payload directo no confiable");
+        assert_eq!(error.code, "validation");
+        assert_eq!(
+            database
+                .game_detail(620)
+                .expect("leer juego sin mutar")
+                .summary
+                .notes
+                .as_deref(),
+            Some("Original")
+        );
+    }
+
     #[test]
     fn bulk_status_updates_every_game_in_one_successful_operation() {
         let directory = TempDir::new().expect("crear temporal");
@@ -1252,6 +1482,137 @@ mod durability_tests {
             .query_row("SELECT COUNT(*) FROM activity", [], |row| row.get(0))
             .expect("contar actividad");
         assert_eq!(activity_count, 0);
+    }
+
+    #[test]
+    fn steam_sync_rolls_back_catalog_library_profile_and_key_marker_together() {
+        let directory = TempDir::new().expect("crear temporal");
+        let database = database_at(&directory, "steam-sync-atomic.sqlite3");
+        let steam_id = "76561198000000001";
+        database
+            .save_steam_identity(steam_id)
+            .expect("vincular cuenta de prueba");
+        database
+            .set_steam_api_key_configured(false)
+            .expect("guardar marcador inicial");
+        family_catalog::save(
+            &mut database.open().expect("abrir base"),
+            &[ImportedFamilyCatalogGame {
+                app_id: 10,
+                title: "Catálogo anterior".into(),
+                icon_url: None,
+                cover_url: None,
+                header_url: None,
+                availability: "unknown".into(),
+            }],
+            true,
+        )
+        .expect("guardar catálogo inicial");
+        database
+            .open()
+            .expect("abrir base")
+            .execute_batch(
+                "CREATE TRIGGER fail_profile_sync_for_test
+                 BEFORE UPDATE OF last_sync_status ON steam_accounts
+                 WHEN NEW.last_sync_status = 'success'
+                 BEGIN
+                    SELECT RAISE(ABORT, 'fallo de perfil simulado');
+                 END;",
+            )
+            .expect("instalar failpoint transaccional");
+
+        let imported_game = ImportedGame {
+            app_id: 20,
+            title: "No debe persistir".into(),
+            icon_url: None,
+            cover_url: None,
+            header_url: None,
+            playtime_minutes: 0,
+            playtime_recent_minutes: 0,
+            last_played_at: None,
+            ownership_source: "owned".into(),
+            family_availability: "not_applicable".into(),
+            installation: None,
+        };
+        let error = database
+            .persist_steam_sync(
+                database.generation(),
+                steam_id,
+                Some(&SteamProfileWrite {
+                    persona_name: "Perfil nuevo".into(),
+                    avatar_url: None,
+                    profile_url: None,
+                    visibility: Some(3),
+                }),
+                &[imported_game],
+                &[ImportedFamilyCatalogGame {
+                    app_id: 30,
+                    title: "Catálogo nuevo".into(),
+                    icon_url: None,
+                    cover_url: None,
+                    header_url: None,
+                    availability: "confirmed".into(),
+                }],
+                true,
+            )
+            .expect_err("forzar fallo de perfil tras escribir catálogo y biblioteca");
+
+        assert_eq!(error.code, "database");
+        let catalog = database
+            .list_family_catalog(&FamilyCatalogRequest::default())
+            .expect("leer catálogo tras rollback");
+        assert_eq!(catalog.items.len(), 1);
+        assert_eq!(catalog.items[0].app_id, 10);
+        assert!(!has_game(&database, 20));
+        let account = database
+            .get_steam_account()
+            .expect("leer cuenta")
+            .expect("cuenta vinculada");
+        assert_eq!(account.persona_name, None);
+        assert_eq!(account.last_sync_at, None);
+        assert_eq!(
+            database.steam_api_key_configured().expect("leer marcador"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn successful_restore_advances_generation_and_rejects_an_old_steam_snapshot() {
+        let directory = TempDir::new().expect("crear temporal");
+        let active = database_at(&directory, "generation-active.sqlite3");
+        active
+            .save_steam_identity("76561198000000001")
+            .expect("vincular cuenta activa");
+        let captured_generation = active.generation();
+
+        let restored = database_at(&directory, "generation-restored.sqlite3");
+        restored
+            .save_steam_identity("76561198000000002")
+            .expect("vincular cuenta restaurada");
+        active
+            .import_backup(restored.path())
+            .expect("restaurar copia válida");
+        assert!(active.generation() > captured_generation);
+
+        let error = active
+            .persist_steam_sync(
+                captured_generation,
+                "76561198000000001",
+                None,
+                &[],
+                &[],
+                true,
+            )
+            .expect_err("rechazar instantánea obtenida antes de restaurar");
+        assert_eq!(error.code, "steam_sync_stale");
+        assert_eq!(
+            active
+                .get_steam_account()
+                .expect("leer cuenta restaurada")
+                .expect("cuenta disponible")
+                .steam_id,
+            "76561198000000002"
+        );
     }
 
     #[test]

@@ -125,6 +125,12 @@ no conserva identidad, nombre, rol ni tiempo jugado de otros miembros. Un títul
 confirmado puede incorporarse como `family_shared`; el resto permanece solo en el catálogo
 y ofrece acceso a la tienda.
 
+La barra superior del catálogo permite mostrar todos, solo confirmados o solo pendientes, y
+ordenar por disponibilidad, nombre, descubrimiento o actualización. Las vistas de cuadrícula,
+lista y ultracompacta están virtualizadas y conservan durante la sesión el filtro, el orden y
+la posición de scroll. Cambiar un criterio vuelve al inicio para no mezclar páginas de dos
+consultas distintas.
+
 ## Ficha de un juego
 
 Abre una portada o fila para mostrar una ficha amplia. El hero se desplaza con un parallax

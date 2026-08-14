@@ -19,6 +19,7 @@ import {
   isEditableShortcutTarget,
   matchesShortcut,
 } from "@/features/shell/shortcuts";
+import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppSection } from "@/lib/types";
 import vindexaIcon from "../../../assets/brand/vindexa-mark-256.webp";
@@ -131,8 +132,7 @@ export function AppShell() {
           )
           .finally(() => {
             syncRunning.current = false;
-            void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
-            void queryClient.invalidateQueries({ queryKey: ["games"] });
+            void invalidateSteamDerivedQueries(queryClient);
           });
       }
     };
@@ -184,8 +184,7 @@ export function AppShell() {
         })
         .finally(() => {
           syncRunning.current = false;
-          void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
-          void queryClient.invalidateQueries({ queryKey: ["games"] });
+          void invalidateSteamDerivedQueries(queryClient);
         });
     }, minutes * 60_000);
     return () => window.clearInterval(interval);
@@ -235,6 +234,7 @@ export function AppShell() {
                 className="primary-nav__item"
                 data-active={section === id}
                 aria-current={section === id ? "page" : undefined}
+                aria-label={label}
                 onClick={() => setSection(id)}
               >
                 <SectionIcon aria-hidden="true" size={16} stroke={1.8} />
@@ -315,7 +315,7 @@ export function AppShell() {
         <footer className="statusbar">
           <span>
             {bootstrap
-              ? `${bootstrap.stats.totalGames.toLocaleString("es-ES")} juegos · ${bootstrap.stats.installedGames.toLocaleString("es-ES")} instalados`
+              ? `Biblioteca · ${bootstrap.stats.totalGames.toLocaleString("es-ES")} juegos · ${bootstrap.stats.installedGames.toLocaleString("es-ES")} instalados`
               : "Preparando biblioteca local…"}
           </span>
           <span className="statusbar__center">

@@ -191,6 +191,7 @@ function SidebarItem({
           data-drop-over={isOver && !dropDisabled}
           data-drop-rejected={isOver && dropDisabled}
           data-drop-disabled={Boolean(dropId && dropDisabled && draggingGames)}
+          aria-label={label}
           aria-describedby={draggingGames ? restrictionId : undefined}
           onClick={onClick}
         >
@@ -262,6 +263,7 @@ function CollectionSidebarItem({
             type="button"
             className="sidebar-item"
             data-active={active}
+            aria-label={collection.name}
             aria-describedby={draggingGames && dropDisabled ? restrictionId : undefined}
             onClick={onClick}
           >

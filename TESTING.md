@@ -316,8 +316,10 @@ Checklist de accesibilidad:
 `pnpm test:e2e` ejecuta el arnés Playwright determinista con IPC Tauri simulado y conserva
 baselines en `tests/e2e/__screenshots__/` para 960 × 700, 1440 × 900 y 1920 × 900. Cubre
 arranque, carga/error/recuperación, persistencia de interfaz, DnD con deshacer, reinicio,
-colecciones, `prefers-reduced-motion` y Axe sin incidencias `serious`/`critical`. Este arnés
-protege la interfaz y su contrato IPC. `pnpm test:e2e:native` añade en macOS un smoke aislado
+colecciones, catálogo Steam Family filtrado y ultracompacto a 960 × 700,
+`prefers-reduced-motion` y Axe sin incidencias `serious`/`critical`. La suite actual contiene
+15 escenarios deterministas sin reintentos. Este arnés protege la interfaz y su contrato IPC.
+`pnpm test:e2e:native` añade en macOS un smoke aislado
 del binario Tauri: usa el identificador de pruebas `io.vindexa.desktop.e2e`, verifica proceso,
 ventana 960 × 700 y creación de SQLite bajo un `HOME` temporal, cierra el proceso y elimina
 el perfil. No automatiza el DOM de WKWebView ni incorpora plugins WebDriver test-only; OpenID,

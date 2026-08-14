@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -31,6 +31,7 @@ pub struct FamilyCatalogGame {
 pub struct FamilyCatalogRequest {
     pub query: Option<String>,
     pub availability: Option<String>,
+    pub sort: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
@@ -44,8 +45,20 @@ pub struct PagedFamilyCatalogGames {
     pub offset: u32,
 }
 
+#[cfg(test)]
 pub fn save(
     connection: &mut Connection,
+    games: &[ImportedFamilyCatalogGame],
+    complete_snapshot: bool,
+) -> AppResult<()> {
+    let transaction = connection.transaction()?;
+    save_in_transaction(&transaction, games, complete_snapshot)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+pub(crate) fn save_in_transaction(
+    transaction: &Transaction<'_>,
     games: &[ImportedFamilyCatalogGame],
     complete_snapshot: bool,
 ) -> AppResult<()> {
@@ -54,7 +67,6 @@ pub fn save(
             "El catálogo familiar supera el límite seguro de importación.",
         ));
     }
-    let transaction = connection.transaction()?;
     let mut seen = HashSet::new();
     {
         let mut upsert = transaction.prepare_cached(
@@ -123,7 +135,6 @@ pub fn save(
             [],
         )?;
     }
-    transaction.commit()?;
     Ok(())
 }
 
@@ -135,11 +146,24 @@ pub fn list(
     let offset = request.offset.unwrap_or(0);
     let query = request.query.as_deref().map(str::trim).unwrap_or_default();
     let availability = request.availability.as_deref().unwrap_or_default();
+    let sort = request.sort.as_deref().unwrap_or("availability");
     if !availability.is_empty() && !matches!(availability, "unknown" | "confirmed") {
         return Err(AppError::validation(
             "El filtro de disponibilidad familiar no es válido.",
         ));
     }
+    let order_by = match sort {
+        "availability" => "availability = 'confirmed' DESC, title COLLATE NOCASE ASC, app_id ASC",
+        "alphabetical" => "title COLLATE NOCASE ASC, app_id ASC",
+        "alphabeticalDesc" => "title COLLATE NOCASE DESC, app_id ASC",
+        "updatedDesc" => "datetime(updated_at) DESC, title COLLATE NOCASE ASC, app_id ASC",
+        "discoveredDesc" => "datetime(discovered_at) DESC, title COLLATE NOCASE ASC, app_id ASC",
+        _ => {
+            return Err(AppError::validation(
+                "La ordenación del catálogo familiar no es válida.",
+            ));
+        }
+    };
     let pattern = format!("%{query}%");
     let total = connection.query_row(
         "SELECT COUNT(*) FROM family_catalog_games
@@ -148,15 +172,15 @@ pub fn list(
         params![query, pattern, availability],
         |row| row.get(0),
     )?;
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare(&format!(
         "SELECT app_id, title, icon_url, cover_url, header_url, availability,
                 discovered_at, updated_at
            FROM family_catalog_games
           WHERE (?1 = '' OR title LIKE ?2 COLLATE NOCASE)
             AND (?3 = '' OR availability = ?3)
-          ORDER BY availability = 'confirmed' DESC, title COLLATE NOCASE, app_id
-          LIMIT ?4 OFFSET ?5",
-    )?;
+          ORDER BY {order_by}
+          LIMIT ?4 OFFSET ?5"
+    ))?;
     let items = statement
         .query_map(
             params![query, pattern, availability, limit, offset],
@@ -269,5 +293,126 @@ mod tests {
             )
             .expect("leer disponibilidad");
         assert_eq!(availability, "unknown");
+    }
+
+    #[test]
+    fn filters_and_sorts_the_family_catalog_with_stable_sql_pagination() {
+        let mut connection = Connection::open_in_memory().expect("abrir SQLite");
+        migrations::migrate(&mut connection).expect("migrar");
+        save(
+            &mut connection,
+            &[
+                game(40, "unknown"),
+                game(10, "confirmed"),
+                game(30, "confirmed"),
+                game(20, "unknown"),
+            ],
+            true,
+        )
+        .expect("guardar catálogo ordenable");
+        connection
+            .execute_batch(
+                "UPDATE family_catalog_games SET
+                    title = CASE app_id
+                        WHEN 10 THEN 'Delta'
+                        WHEN 20 THEN 'Alpha'
+                        WHEN 30 THEN 'Charlie'
+                        ELSE 'Bravo'
+                    END,
+                    discovered_at = CASE app_id
+                        WHEN 10 THEN '2026-08-10T10:00:00.000Z'
+                        WHEN 20 THEN '2026-08-11T10:00:00.000Z'
+                        WHEN 30 THEN '2026-08-12T10:00:00.000Z'
+                        ELSE '2026-08-13T10:00:00.000Z'
+                    END,
+                    updated_at = CASE app_id
+                        WHEN 10 THEN '2026-08-14T13:00:00.000Z'
+                        WHEN 20 THEN '2026-08-14T12:00:00.000Z'
+                        WHEN 30 THEN '2026-08-14T11:00:00.000Z'
+                        ELSE '2026-08-14T10:00:00.000Z'
+                    END;",
+            )
+            .expect("fijar fechas conocidas");
+
+        let page = |availability: Option<&str>, sort: &str, offset| {
+            list(
+                &connection,
+                &FamilyCatalogRequest {
+                    query: None,
+                    availability: availability.map(str::to_owned),
+                    sort: Some(sort.to_owned()),
+                    limit: Some(2),
+                    offset: Some(offset),
+                },
+            )
+            .expect("listar catálogo")
+        };
+
+        assert_eq!(
+            page(None, "alphabetical", 0)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![20, 40]
+        );
+        assert_eq!(
+            page(None, "alphabetical", 2)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![30, 10]
+        );
+        assert_eq!(
+            page(None, "alphabeticalDesc", 0)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![10, 30]
+        );
+        assert_eq!(
+            page(None, "availability", 0)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![30, 10]
+        );
+        assert_eq!(
+            page(None, "updatedDesc", 0)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![10, 20]
+        );
+        assert_eq!(
+            page(None, "discoveredDesc", 0)
+                .items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![40, 30]
+        );
+        let confirmed = page(Some("confirmed"), "alphabetical", 0);
+        assert_eq!(confirmed.total, 2);
+        assert!(
+            confirmed
+                .items
+                .iter()
+                .all(|game| game.availability == "confirmed")
+        );
+
+        let error = list(
+            &connection,
+            &FamilyCatalogRequest {
+                sort: Some("invented".into()),
+                ..FamilyCatalogRequest::default()
+            },
+        )
+        .expect_err("rechazar una ordenación no documentada");
+        assert_eq!(error.code, "validation");
     }
 }

@@ -21,7 +21,7 @@ const TRANSIENT_NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const DEFINITIVE_NEGATIVE_TTL: Duration = Duration::from_secs(15 * 60);
 const MAX_CONCURRENT_DOWNLOADS: usize = 6;
 
-type ArtKey = (u32, ArtVariant);
+type ArtKey = (u32, ArtVariant, u64);
 
 #[derive(Clone)]
 struct NegativeEntry {
@@ -61,15 +61,6 @@ impl ArtVariant {
             Self::Hero => "hero",
         }
     }
-
-    fn database_column(self) -> &'static str {
-        match self {
-            Self::Cover => "cover_url",
-            Self::Header => "header_url",
-            Self::Icon => "icon_url",
-            Self::Hero => "hero_url",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,19 +76,20 @@ pub async fn cache(
     cache_root: &Path,
     app_id: u32,
     variant: ArtVariant,
+    selected_source: Option<&str>,
 ) -> AppResult<CachedArt> {
     if app_id == 0 {
         return Err(AppError::validation(
             "El identificador del juego no es válido.",
         ));
     }
-    if let Some(existing) = existing_cache(database, app_id, variant)?
-        && let Some(existing) = trusted_cached_path(cache_root, app_id, &existing)
-    {
+    let source = source_url(database, app_id, variant, selected_source)?;
+    validate_source_url(&source, app_id, variant)?;
+    if let Some(existing) = existing_cache(cache_root, app_id, variant, &source) {
         return Ok(cached_art(app_id, variant, existing));
     }
 
-    let key = (app_id, variant);
+    let key = (app_id, variant, source_fingerprint(&source));
     if let Some(error) = negative_cache_hit(key) {
         return Err(error);
     }
@@ -106,16 +98,14 @@ pub async fn cache(
     let _request_guard = request_lock.lock().await;
 
     // Otra tarjeta pudo completar la descarga mientras esperábamos este lock.
-    if let Some(existing) = existing_cache(database, app_id, variant)?
-        && let Some(existing) = trusted_cached_path(cache_root, app_id, &existing)
-    {
+    if let Some(existing) = existing_cache(cache_root, app_id, variant, &source) {
         return Ok(cached_art(app_id, variant, existing));
     }
     if let Some(error) = negative_cache_hit(key) {
         return Err(error);
     }
 
-    let result = download_and_store(database, cache_root, app_id, variant).await;
+    let result = download_and_store(database, cache_root, app_id, variant, &source).await;
     match &result {
         Ok(_) => clear_negative(key),
         Err(error) => remember_negative(key, error.clone()),
@@ -128,16 +118,15 @@ async fn download_and_store(
     cache_root: &Path,
     app_id: u32,
     variant: ArtVariant,
+    source: &str,
 ) -> AppResult<CachedArt> {
-    let source = source_url(database, app_id, variant)?;
-    validate_source_url(&source, app_id, variant)?;
     let _download_slot = download_slots().acquire().await.map_err(|_| {
         AppError::new(
             "art_download_queue",
             "No se pudo reservar una descarga de imagen.",
         )
     })?;
-    let mut response = send_with_retry(http_client()?, &source).await?;
+    let mut response = send_with_retry(http_client()?, source).await?;
     if !response.status().is_success() {
         if retryable_status(response.status()) {
             return Err(download_error());
@@ -193,10 +182,10 @@ async fn download_and_store(
     }
 
     let directory = cache_root.join("steam-art").join(app_id.to_string());
-    let destination = directory.join(format!("{}.{}", variant.key(), extension));
+    let destination = directory.join(cache_file_name(variant, source, extension));
     let temporary = directory.join(format!(".{}.{}.part", variant.key(), Uuid::new_v4()));
     let destination_for_write = destination.clone();
-    tauri::async_runtime::spawn_blocking(move || -> std::io::Result<()> {
+    let write_task = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<()> {
         let write_result = (|| {
             fs::create_dir_all(&directory)?;
             fs::write(&temporary, bytes)?;
@@ -209,29 +198,46 @@ async fn download_and_store(
             let _ = fs::remove_file(&temporary);
         }
         write_result
-    })
-    .await
-    .map_err(|error| {
-        AppError::new(
-            "art_cache_task",
-            format!("Falló la tarea de caché: {error}"),
-        )
-    })??;
+    });
+    join_art_cache_task(write_task).await?;
 
     let local_path = destination.display().to_string();
-    database.open()?.execute(
-        "INSERT INTO image_cache(app_id, variant, local_path)
-         VALUES (?1, ?2, ?3)
-         ON CONFLICT(app_id, variant) DO UPDATE SET
-            local_path = excluded.local_path,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-        rusqlite::params![app_id, variant.key(), local_path],
-    )?;
+    record_cached_path(database, app_id, variant, &local_path)?;
     Ok(CachedArt {
         app_id,
         variant: variant.key().to_owned(),
         local_path,
     })
+}
+
+async fn join_art_cache_task(
+    task: tauri::async_runtime::JoinHandle<std::io::Result<()>>,
+) -> AppResult<()> {
+    task.await.map_err(|_error| {
+        AppError::new(
+            "art_cache_task",
+            "No se pudo guardar la imagen en la caché local.",
+        )
+    })??;
+    Ok(())
+}
+
+fn record_cached_path(
+    database: &Database,
+    app_id: u32,
+    variant: ArtVariant,
+    local_path: &str,
+) -> AppResult<()> {
+    database.open()?.execute(
+        "INSERT INTO image_cache(app_id, variant, local_path)
+         SELECT ?1, ?2, ?3
+          WHERE EXISTS (SELECT 1 FROM games WHERE app_id = ?1)
+         ON CONFLICT(app_id, variant) DO UPDATE SET
+            local_path = excluded.local_path,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+        rusqlite::params![app_id, variant.key(), local_path],
+    )?;
+    Ok(())
 }
 
 pub fn clear(database: &Database, cache_root: &Path) -> AppResult<()> {
@@ -362,36 +368,99 @@ fn clear_negative(key: ArtKey) {
 }
 
 fn existing_cache(
+    cache_root: &Path,
+    app_id: u32,
+    variant: ArtVariant,
+    source: &str,
+) -> Option<PathBuf> {
+    let directory = cache_root.join("steam-art").join(app_id.to_string());
+    ["jpg", "png", "webp"]
+        .into_iter()
+        .map(|extension| directory.join(cache_file_name(variant, source, extension)))
+        .find_map(|candidate| {
+            trusted_cached_path(cache_root, app_id, &candidate.display().to_string())
+        })
+}
+
+fn source_url(
     database: &Database,
     app_id: u32,
     variant: ArtVariant,
-) -> AppResult<Option<String>> {
-    use rusqlite::OptionalExtension;
-    database
-        .open()?
-        .query_row(
-            "SELECT local_path FROM image_cache WHERE app_id = ?1 AND variant = ?2",
-            rusqlite::params![app_id, variant.key()],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(Into::into)
-}
-
-fn source_url(database: &Database, app_id: u32, variant: ArtVariant) -> AppResult<String> {
-    use rusqlite::OptionalExtension;
-    let query = format!(
-        "SELECT {} FROM games WHERE app_id = ?1",
-        variant.database_column()
-    );
+    selected_source: Option<&str>,
+) -> AppResult<String> {
+    if let Some(source) = selected_source
+        .map(str::trim)
+        .filter(|source| !source.is_empty())
+    {
+        return Ok(source.to_owned());
+    }
+    let query = match variant {
+        ArtVariant::Cover => {
+            "SELECT COALESCE(
+                (SELECT cover_url FROM games WHERE app_id = ?1),
+                (SELECT cover_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT header_url FROM games WHERE app_id = ?1),
+                (SELECT header_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT icon_url FROM games WHERE app_id = ?1),
+                (SELECT icon_url FROM family_catalog_games WHERE app_id = ?1)
+            )"
+        }
+        ArtVariant::Header => {
+            "SELECT COALESCE(
+                (SELECT header_url FROM games WHERE app_id = ?1),
+                (SELECT header_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT cover_url FROM games WHERE app_id = ?1),
+                (SELECT cover_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT icon_url FROM games WHERE app_id = ?1),
+                (SELECT icon_url FROM family_catalog_games WHERE app_id = ?1)
+            )"
+        }
+        ArtVariant::Icon => {
+            "SELECT COALESCE(
+                (SELECT icon_url FROM games WHERE app_id = ?1),
+                (SELECT icon_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT cover_url FROM games WHERE app_id = ?1),
+                (SELECT cover_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT header_url FROM games WHERE app_id = ?1),
+                (SELECT header_url FROM family_catalog_games WHERE app_id = ?1)
+            )"
+        }
+        ArtVariant::Hero => {
+            "SELECT COALESCE(
+                (SELECT hero_url FROM games WHERE app_id = ?1),
+                (SELECT header_url FROM games WHERE app_id = ?1),
+                (SELECT header_url FROM family_catalog_games WHERE app_id = ?1),
+                (SELECT cover_url FROM games WHERE app_id = ?1),
+                (SELECT cover_url FROM family_catalog_games WHERE app_id = ?1)
+            )"
+        }
+    };
     let source: Option<String> = database
         .open()?
-        .query_row(&query, [app_id], |row| row.get(0))
-        .optional()?
-        .flatten();
+        .query_row(query, [app_id], |row| row.get(0))?;
     source.ok_or_else(|| {
         AppError::not_found("Este juego no tiene una imagen oficial disponible para esta variante.")
     })
+}
+
+fn source_fingerprint(source: &str) -> u64 {
+    // FNV-1a estable: la identidad del archivo debe sobrevivir reinicios y
+    // actualizaciones del runtime, a diferencia de un hasher aleatorizado.
+    source
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+}
+
+fn cache_file_name(variant: ArtVariant, source: &str, extension: &str) -> String {
+    format!(
+        "{}-{:016x}.{}",
+        variant.key(),
+        source_fingerprint(source),
+        extension
+    )
 }
 
 fn trusted_cached_path(cache_root: &Path, app_id: u32, value: &str) -> Option<PathBuf> {
@@ -422,7 +491,7 @@ fn trusted_cached_path(cache_root: &Path, app_id: u32, value: &str) -> Option<Pa
     matches_magic_bytes(mime, &prefix[..read]).then_some(canonical_file)
 }
 
-fn validate_source_url(value: &str, app_id: u32, variant: ArtVariant) -> AppResult<()> {
+fn validate_source_url(value: &str, app_id: u32, _variant: ArtVariant) -> AppResult<()> {
     let url = Url::parse(value)
         .map_err(|_| AppError::validation("La URL de imagen de Steam no es válida."))?;
     if url.scheme() != "https"
@@ -434,27 +503,26 @@ fn validate_source_url(value: &str, app_id: u32, variant: ArtVariant) -> AppResu
             "La imagen no procede de una conexión HTTPS oficial de Steam.",
         ));
     }
-    let valid_source = if variant == ArtVariant::Hero {
-        let pairs = url.query_pairs().collect::<Vec<_>>();
-        url.host_str() == Some("store.akamai.steamstatic.com")
-            && url.path() == format!("/images/storepagebackground/app/{app_id}")
-            && (pairs.is_empty()
-                || (pairs.len() == 1
-                    && pairs[0].0 == "t"
-                    && !pairs[0].1.is_empty()
-                    && pairs[0].1.bytes().all(|byte| byte.is_ascii_digit())))
-    } else {
-        let host = url.host_str().unwrap_or_default();
-        let allowed_host = matches!(
-            host,
-            "shared.steamstatic.com"
-                | "shared.cloudflare.steamstatic.com"
-                | "cdn.cloudflare.steamstatic.com"
-                | "shared.akamai.steamstatic.com"
-                | "media.steampowered.com"
-        );
-        allowed_host && url.path().contains(&format!("/apps/{app_id}/")) && url.query().is_none()
-    };
+    let pairs = url.query_pairs().collect::<Vec<_>>();
+    let valid_hero_source = url.host_str() == Some("store.akamai.steamstatic.com")
+        && url.path() == format!("/images/storepagebackground/app/{app_id}")
+        && (pairs.is_empty()
+            || (pairs.len() == 1
+                && pairs[0].0 == "t"
+                && !pairs[0].1.is_empty()
+                && pairs[0].1.bytes().all(|byte| byte.is_ascii_digit())));
+    let host = url.host_str().unwrap_or_default();
+    let allowed_host = matches!(
+        host,
+        "shared.steamstatic.com"
+            | "shared.cloudflare.steamstatic.com"
+            | "cdn.cloudflare.steamstatic.com"
+            | "shared.akamai.steamstatic.com"
+            | "media.steampowered.com"
+    );
+    let valid_library_source =
+        allowed_host && url.path().contains(&format!("/apps/{app_id}/")) && url.query().is_none();
+    let valid_source = valid_hero_source || valid_library_source;
     if !valid_source || url.fragment().is_some() {
         return Err(AppError::validation(
             "La imagen no pertenece a un dominio y ruta oficiales permitidos de Steam.",
@@ -492,8 +560,9 @@ fn download_error() -> AppError {
 mod tests {
     use super::{
         ArtVariant, MAX_CONCURRENT_DOWNLOADS, NegativeEntry, allowed_extension, cache,
-        clear_negative, download_slots, matches_magic_bytes, negative_cache, negative_cache_hit,
-        request_lock, retryable_status, source_url, trusted_cached_path, validate_source_url,
+        cache_file_name, clear_negative, download_slots, join_art_cache_task, matches_magic_bytes,
+        negative_cache, negative_cache_hit, record_cached_path, request_lock, retryable_status,
+        source_url, trusted_cached_path, validate_source_url,
     };
     use crate::db::Database;
     use crate::error::AppError;
@@ -512,6 +581,30 @@ mod tests {
         assert_eq!(allowed_extension("text/html"), None);
         assert!(matches_magic_bytes("image/jpeg", &[0xff, 0xd8, 0xff, 0xdb]));
         assert!(!matches_magic_bytes("image/jpeg", b"<html>"));
+    }
+
+    #[test]
+    fn cache_worker_failures_do_not_expose_panic_details() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("crear runtime");
+        let error = runtime.block_on(async {
+            let task = tauri::async_runtime::spawn_blocking(|| -> std::io::Result<()> {
+                panic!("url=https://example.test/?key=fixture-secret /Users/example/cache")
+            });
+            join_art_cache_task(task)
+                .await
+                .expect_err("convertir panic del worker en error público")
+        });
+
+        assert_eq!(error.code, "art_cache_task");
+        assert_eq!(
+            error.message,
+            "No se pudo guardar la imagen en la caché local."
+        );
+        assert!(!error.message.contains("fixture-secret"));
+        assert!(!error.message.contains("/Users/example"));
     }
 
     #[test]
@@ -571,7 +664,7 @@ mod tests {
             )
             .is_err()
         );
-        assert!(validate_source_url(valid, 620, ArtVariant::Header).is_err());
+        assert!(validate_source_url(valid, 620, ArtVariant::Header).is_ok());
     }
 
     #[test]
@@ -591,12 +684,66 @@ mod tests {
             .expect("insertar juego con hero");
 
         assert_eq!(
-            source_url(&database, 620, ArtVariant::Hero).expect("leer hero dedicado"),
+            source_url(&database, 620, ArtVariant::Hero, None).expect("leer hero dedicado"),
             hero
         );
-        let header = source_url(&database, 620, ArtVariant::Header).expect("leer header");
-        let hero = source_url(&database, 620, ArtVariant::Hero).expect("leer hero");
+        let header = source_url(&database, 620, ArtVariant::Header, None).expect("leer header");
+        let hero = source_url(&database, 620, ArtVariant::Hero, None).expect("leer hero");
         assert_ne!(header, hero);
+    }
+
+    #[test]
+    fn selected_fallback_is_authoritative_without_a_personal_game_row() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = Database::new(directory.path().join("vindexa.sqlite3"));
+        database.initialize().expect("inicializar base de prueba");
+        let selected = "https://shared.steamstatic.com/store_item_assets/steam/apps/880006/library_600x900.jpg";
+
+        assert_eq!(
+            source_url(&database, 880_006, ArtVariant::Icon, Some(selected))
+                .expect("respetar fallback elegido por la UI"),
+            selected
+        );
+        assert!(validate_source_url(selected, 880_006, ArtVariant::Icon).is_ok());
+    }
+
+    #[test]
+    fn family_catalog_art_is_resolved_when_games_has_no_row() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = Database::new(directory.path().join("vindexa.sqlite3"));
+        database.initialize().expect("inicializar base de prueba");
+        let cover = "https://shared.steamstatic.com/store_item_assets/steam/apps/880007/library_600x900.jpg";
+        database
+            .open()
+            .expect("abrir base")
+            .execute(
+                "INSERT INTO family_catalog_games(app_id, title, cover_url, availability)
+                 VALUES (880007, 'Catálogo familiar', ?1, 'unknown')",
+                [cover],
+            )
+            .expect("insertar solo en catálogo familiar");
+
+        assert_eq!(
+            source_url(&database, 880_007, ArtVariant::Cover, None)
+                .expect("leer arte familiar sin juego personal"),
+            cover
+        );
+    }
+
+    #[test]
+    fn disk_identity_changes_when_the_selected_fallback_changes() {
+        let cover = "https://shared.steamstatic.com/store_item_assets/steam/apps/880008/library_600x900.jpg";
+        let header =
+            "https://shared.steamstatic.com/store_item_assets/steam/apps/880008/header.jpg";
+
+        assert_ne!(
+            cache_file_name(ArtVariant::Icon, cover, "jpg"),
+            cache_file_name(ArtVariant::Icon, header, "jpg")
+        );
+        assert_eq!(
+            cache_file_name(ArtVariant::Icon, cover, "jpg"),
+            cache_file_name(ArtVariant::Icon, cover, "jpg")
+        );
     }
 
     #[test]
@@ -617,17 +764,19 @@ mod tests {
 
     #[test]
     fn concurrent_cards_share_one_request_lock_per_artwork() {
-        let first = request_lock((880_001, ArtVariant::Cover));
-        let duplicate = request_lock((880_001, ArtVariant::Cover));
-        let different_variant = request_lock((880_001, ArtVariant::Header));
+        let first = request_lock((880_001, ArtVariant::Cover, 1));
+        let duplicate = request_lock((880_001, ArtVariant::Cover, 1));
+        let different_variant = request_lock((880_001, ArtVariant::Header, 1));
+        let different_source = request_lock((880_001, ArtVariant::Cover, 2));
 
         assert!(Arc::ptr_eq(&first, &duplicate));
         assert!(!Arc::ptr_eq(&first, &different_variant));
+        assert!(!Arc::ptr_eq(&first, &different_source));
     }
 
     #[test]
     fn negative_cache_expires_without_losing_the_original_error_contract() {
-        let key = (880_002, ArtVariant::Cover);
+        let key = (880_002, ArtVariant::Cover, 1);
         let expected = AppError::new("art_unavailable", "Imagen no disponible.");
         negative_cache()
             .lock()
@@ -695,19 +844,21 @@ mod tests {
         let database = Database::new(directory.path().join("vindexa.sqlite3"));
         database.initialize().expect("inicializar base de prueba");
         let app_id = 880_005;
+        let source = "https://shared.steamstatic.com/store_item_assets/steam/apps/880005/library_600x900.jpg";
         let art_directory = directory
             .path()
             .join("cache")
             .join("steam-art")
             .join(app_id.to_string());
         fs::create_dir_all(&art_directory).expect("crear caché local");
-        let local_path = art_directory.join("cover.jpg");
+        let local_path = art_directory.join(cache_file_name(ArtVariant::Cover, source, "jpg"));
         fs::write(&local_path, [0xff, 0xd8, 0xff, 0xdb]).expect("escribir JPEG mínimo");
         let connection = database.open().expect("abrir base de prueba");
         connection
             .execute(
-                "INSERT INTO games(app_id, title) VALUES (?1, 'Gate de artwork')",
-                [app_id],
+                "INSERT INTO games(app_id, title, cover_url)
+                 VALUES (?1, 'Gate de artwork', ?2)",
+                params![app_id, source],
             )
             .expect("insertar juego");
         connection
@@ -735,6 +886,7 @@ mod tests {
                     &directory.path().join("cache"),
                     app_id,
                     ArtVariant::Cover,
+                    Some(source),
                 )
                 .await
                 .expect("resolver desde caché local");
@@ -747,5 +899,98 @@ mod tests {
             elapsed < Duration::from_secs(5),
             "1000 lecturas de artwork local tardaron {elapsed:?}, por encima del presupuesto de 5 s"
         );
+    }
+
+    #[test]
+    fn family_only_hot_cache_is_served_without_an_image_cache_foreign_key() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = Database::new(directory.path().join("vindexa.sqlite3"));
+        database.initialize().expect("inicializar base de prueba");
+        let app_id = 880_009;
+        let source = "https://shared.steamstatic.com/store_item_assets/steam/apps/880009/library_600x900.jpg";
+        let art_directory = directory
+            .path()
+            .join("cache")
+            .join("steam-art")
+            .join(app_id.to_string());
+        fs::create_dir_all(&art_directory).expect("crear caché familiar");
+        let local_path = art_directory.join(cache_file_name(ArtVariant::Cover, source, "jpg"));
+        fs::write(&local_path, [0xff, 0xd8, 0xff, 0xdb]).expect("escribir JPEG mínimo");
+        database
+            .open()
+            .expect("abrir base")
+            .execute(
+                "INSERT INTO family_catalog_games(app_id, title, cover_url, availability)
+                 VALUES (?1, 'Solo familiar', ?2, 'unknown')",
+                params![app_id, source],
+            )
+            .expect("insertar catálogo familiar");
+
+        let result = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("crear runtime")
+            .block_on(cache(
+                &database,
+                &directory.path().join("cache"),
+                app_id,
+                ArtVariant::Cover,
+                Some(source),
+            ))
+            .expect("servir arte familiar local");
+
+        assert_eq!(
+            result.local_path,
+            local_path
+                .canonicalize()
+                .expect("canonicalizar arte familiar")
+                .display()
+                .to_string()
+        );
+        let cached_rows: i64 = database
+            .open()
+            .expect("abrir base")
+            .query_row(
+                "SELECT COUNT(*) FROM image_cache WHERE app_id = ?1",
+                [app_id],
+                |row| row.get(0),
+            )
+            .expect("contar caché relacional");
+        assert_eq!(cached_rows, 0);
+    }
+
+    #[test]
+    fn downloaded_family_art_does_not_require_a_games_foreign_key() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = Database::new(directory.path().join("vindexa.sqlite3"));
+        database.initialize().expect("inicializar base de prueba");
+        database
+            .open()
+            .expect("abrir base")
+            .execute(
+                "INSERT INTO family_catalog_games(app_id, title, availability)
+                 VALUES (880010, 'Descarga familiar', 'unknown')",
+                [],
+            )
+            .expect("insertar catálogo familiar");
+
+        record_cached_path(
+            &database,
+            880_010,
+            ArtVariant::Cover,
+            "/cache/steam-art/880010/cover.jpg",
+        )
+        .expect("omitir registro relacional sin fallar la descarga familiar");
+
+        let cached_rows: i64 = database
+            .open()
+            .expect("abrir base")
+            .query_row(
+                "SELECT COUNT(*) FROM image_cache WHERE app_id = 880010",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar caché relacional");
+        assert_eq!(cached_rows, 0);
     }
 }

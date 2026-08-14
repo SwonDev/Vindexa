@@ -20,6 +20,8 @@ describe("sesión de biblioteca", () => {
       sort: "lastPlayed",
       randomSeed: 27,
       view: "compact",
+      familyAvailability: "confirmed",
+      familySort: "updatedDesc",
       filters: {
         installed: false,
         tracking: true,
@@ -35,6 +37,8 @@ describe("sesión de biblioteca", () => {
       sort: "lastPlayed",
       randomSeed: 27,
       view: "compact",
+      familyAvailability: "confirmed",
+      familySort: "updatedDesc",
       filters: {
         installed: false,
         tracking: true,

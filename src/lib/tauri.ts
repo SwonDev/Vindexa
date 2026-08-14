@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
   AppBootstrap,
   AppPreferences,
@@ -145,9 +146,15 @@ export const api = {
   uninstallGame: (appId: number) => invoke<void>("uninstall_game", { appId }),
   openStore: (appId: number) => invoke<void>("open_store", { appId }),
   revealInstallation: (appId: number) => invoke<void>("reveal_installation", { appId }),
-  cacheGameArt: (appId: number, variant: "icon" | "cover" | "header" | "hero") =>
-    invoke<CachedArtwork>("cache_game_art", { appId, variant }),
-  clearArtCache: () => invoke<void>("clear_art_cache"),
+  cacheGameArt: (
+    appId: number,
+    variant: "icon" | "cover" | "header" | "hero",
+    sourceUrl?: string,
+  ) => invoke<CachedArtwork>("cache_game_art", { appId, variant, sourceUrl }),
+  clearArtCache: async () => {
+    await invoke<void>("clear_art_cache");
+    notifyArtworkCacheCleared();
+  },
   savePreferences: (preferences: AppPreferences) =>
     invoke<void>("save_preferences", { preferences }),
   checkForUpdates: () => invoke<UpdateCheckResult>("check_for_updates"),

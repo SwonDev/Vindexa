@@ -299,6 +299,7 @@ impl StartupRecovery {
                 ),
             ));
         }
+        self.database.advance_generation();
         self.issue = None;
         self.quarantine_failure = None;
         Ok(())

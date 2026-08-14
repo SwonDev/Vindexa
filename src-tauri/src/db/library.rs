@@ -5,7 +5,7 @@ use crate::models::{
     is_valid_game_sort,
 };
 use chrono::NaiveDate;
-use rusqlite::{Connection, OptionalExtension, Row, ToSql, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, ToSql, Transaction, params, params_from_iter};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -614,7 +614,7 @@ pub fn list_games(
         _ if manual_collection_id.is_some() => {
             "(SELECT cg.position FROM collection_games cg WHERE cg.collection_id = ? AND cg.app_id = g.app_id) ASC, g.app_id ASC".to_string()
         }
-        _ => "p.pinned DESC, p.priority DESC, p.manual_position ASC, g.title COLLATE NOCASE ASC, g.app_id ASC".to_string(),
+        _ => "p.manual_position ASC, p.pinned DESC, p.priority DESC, g.title COLLATE NOCASE ASC, g.app_id ASC".to_string(),
     };
 
     let total: i64 = connection.query_row(
@@ -1012,19 +1012,7 @@ fn query_strings(connection: &Connection, sql: &str, app_id: u32) -> AppResult<V
 }
 
 pub fn update_game(connection: &mut Connection, input: &UpdateGameInput) -> AppResult<()> {
-    if input.app_id == 0 || input.progress > 100 || input.priority > 5 {
-        return Err(AppError::validation(
-            "Los valores del juego no son válidos.",
-        ));
-    }
-    if input
-        .rating
-        .is_some_and(|rating| !(1..=10).contains(&rating))
-    {
-        return Err(AppError::validation(
-            "La valoración debe estar entre 1 y 10.",
-        ));
-    }
+    validate_update_game_input(input)?;
     let transaction = connection.transaction()?;
     let status_exists = transaction
         .query_row(
@@ -1071,6 +1059,71 @@ pub fn update_game(connection: &mut Connection, input: &UpdateGameInput) -> AppR
         ],
     )?;
     transaction.commit()?;
+    Ok(())
+}
+
+fn validate_update_game_input(input: &UpdateGameInput) -> AppResult<()> {
+    if input.app_id == 0 || input.progress > 100 || input.priority > 5 {
+        return Err(AppError::validation(
+            "Los valores del juego no son válidos.",
+        ));
+    }
+    if input
+        .rating
+        .is_some_and(|rating| !(1..=10).contains(&rating))
+    {
+        return Err(AppError::validation(
+            "La valoración debe estar entre 1 y 10.",
+        ));
+    }
+
+    if input.estimated_minutes == Some(0) {
+        return Err(AppError::validation(
+            "La duración estimada debe ser mayor que cero.",
+        ));
+    }
+
+    if let Some(value) = input
+        .target_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| {
+            AppError::validation("La fecha objetivo debe usar el formato AAAA-MM-DD y ser válida.")
+        })?;
+        if date.format("%Y-%m-%d").to_string() != value {
+            return Err(AppError::validation(
+                "La fecha objetivo debe usar el formato AAAA-MM-DD y ser válida.",
+            ));
+        }
+    }
+
+    validate_optional_text(
+        &input.next_action,
+        500,
+        "La siguiente acción no puede superar 500 caracteres.",
+    )?;
+    validate_optional_text(
+        &input.checkpoint,
+        2_000,
+        "El checkpoint no puede superar 2000 caracteres.",
+    )?;
+    validate_optional_text(
+        &input.notes,
+        20_000,
+        "Las notas no pueden superar 20000 caracteres.",
+    )?;
+    Ok(())
+}
+
+fn validate_optional_text(value: &Option<String>, limit: usize, message: &str) -> AppResult<()> {
+    if value
+        .as_deref()
+        .is_some_and(|value| value.chars().count() > limit)
+    {
+        return Err(AppError::validation(message));
+    }
     Ok(())
 }
 
@@ -1172,6 +1225,16 @@ pub fn upsert_imported_games(
     reset_installed: bool,
 ) -> AppResult<(usize, usize)> {
     let transaction = connection.transaction()?;
+    let result = upsert_imported_games_in_transaction(&transaction, games, reset_installed)?;
+    transaction.commit()?;
+    Ok(result)
+}
+
+pub(crate) fn upsert_imported_games_in_transaction(
+    transaction: &Transaction<'_>,
+    games: &[ImportedGame],
+    reset_installed: bool,
+) -> AppResult<(usize, usize)> {
     if reset_installed {
         transaction.execute("UPDATE game_personal SET installed = 0", [])?;
         transaction.execute("DELETE FROM game_installations", [])?;
@@ -1302,7 +1365,6 @@ pub fn upsert_imported_games(
             imported += 1;
         }
     }
-    transaction.commit()?;
     Ok((imported, updated))
 }
 

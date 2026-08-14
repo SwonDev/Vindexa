@@ -590,9 +590,18 @@ export interface FamilyCatalogGame {
   updatedAt: string;
 }
 
+export type FamilyCatalogAvailability = "all" | "confirmed" | "unknown";
+export type FamilyCatalogSort =
+  | "availability"
+  | "alphabetical"
+  | "alphabeticalDesc"
+  | "updatedDesc"
+  | "discoveredDesc";
+
 export interface FamilyCatalogRequest {
   query?: string;
-  availability?: "unknown" | "confirmed";
+  availability?: Exclude<FamilyCatalogAvailability, "all">;
+  sort?: FamilyCatalogSort;
   limit?: number;
   offset?: number;
 }

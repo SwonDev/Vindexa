@@ -225,12 +225,26 @@ export function createTestState(scenario: VindexaScenario): TestBackendState {
     statuses: structuredClone(statuses),
     collections: scenarioCollections,
     planner: plannerFor(scenarioGames),
-    steam: {
-      apiKeyConfigured: false,
-      apiKeyVerificationRequired: false,
-      localSteamDetected: false,
-      localManifestCount: 0,
-    },
+    steam:
+      scenario === "empty"
+        ? {
+            apiKeyConfigured: false,
+            apiKeyVerificationRequired: false,
+            localSteamDetected: false,
+            localManifestCount: 0,
+          }
+        : {
+            account: {
+              steamId: "76561198000000000",
+              personaName: "Vindexa E2E",
+              lastSyncAt: "2026-08-14T10:00:00Z",
+              lastSyncStatus: "success",
+            },
+            apiKeyConfigured: true,
+            apiKeyVerificationRequired: false,
+            localSteamDetected: true,
+            localManifestCount: 3,
+          },
     preferences: {
       density: "compact",
       periodicSyncMinutes: 0,

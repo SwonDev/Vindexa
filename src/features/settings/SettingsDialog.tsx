@@ -61,6 +61,7 @@ import {
   shortcutLabel,
 } from "@/features/shell/shortcuts";
 import { formatBytes, formatDate } from "@/lib/format";
+import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   AppBootstrap,
@@ -200,23 +201,29 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
     defaultValues: { apiKey: "" },
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
-  const run = <T,>(operation: () => Promise<T>, success: (result: T) => string) => ({
+  const refreshSteamData = () => invalidateSteamDerivedQueries(queryClient);
+  const run = <T,>(
+    operation: () => Promise<T>,
+    success: (result: T) => string,
+    onSettled: () => Promise<void> = refresh,
+  ) => ({
     mutationFn: operation,
     onSuccess: (result: T) => {
       setNotice({ kind: "success", message: success(result) });
-      void refresh();
     },
     onError: (error: unknown) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+    onSettled: () => void onSettled(),
   });
   const login = useMutation(
     run(api.startSteamLogin, () => "Cuenta de Steam vinculada correctamente."),
   );
-  const sync = useMutation(run(api.syncSteamLibrary, steamSyncSummary));
+  const sync = useMutation(run(api.syncSteamLibrary, steamSyncSummary, refreshSteamData));
   const localImport = useMutation(
     run(
       api.importLocalSteam,
       (result) =>
         `Se han leído ${result.importedGames} manifiestos en ${result.librariesScanned} bibliotecas.`,
+      refreshSteamData,
     ),
   );
   const saveKey = useMutation({
@@ -247,9 +254,9 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
           message: "La Web API Key se guardó en el almacén seguro del sistema.",
         });
       }
-      void refresh();
     },
     onError: (cause) => setNotice({ kind: "error", message: getErrorMessage(cause) }),
+    onSettled: () => void refreshSteamData(),
   });
   const verifyKey = useMutation({
     mutationFn: api.verifySavedSteamApiKey,
@@ -273,7 +280,11 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
     run(api.deleteSteamApiKey, () => "La Web API Key se eliminó del almacén seguro."),
   );
   const unlink = useMutation(
-    run(api.unlinkSteam, () => "La cuenta se ha desvinculado. Tus datos personales se conservan."),
+    run(
+      api.unlinkSteam,
+      () => "La cuenta se ha desvinculado. Tus datos personales se conservan.",
+      refreshSteamData,
+    ),
   );
   return (
     <div className="settings-section">
@@ -304,14 +315,20 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
             <Button
               size="sm"
               onClick={() => sync.mutate()}
-              disabled={sync.isPending || saveKey.isPending}
+              disabled={
+                sync.isPending ||
+                saveKey.isPending ||
+                deleteKey.isPending ||
+                unlink.isPending ||
+                localImport.isPending
+              }
             >
               {sync.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}{" "}
               Sincronizar ahora
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled={sync.isPending || unlink.isPending}>
                   <IconTrash /> Desvincular
                 </Button>
               </AlertDialogTrigger>
@@ -326,7 +343,14 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => unlink.mutate()}>Desvincular</AlertDialogAction>
+                  <AlertDialogAction
+                    disabled={sync.isPending || unlink.isPending}
+                    onClick={() => {
+                      if (!sync.isPending) unlink.mutate();
+                    }}
+                  >
+                    Desvincular
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -365,7 +389,7 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
             size="sm"
             variant="outline"
             onClick={() => verifyKey.mutate()}
-            disabled={verifyKey.isPending}
+            disabled={verifyKey.isPending || sync.isPending}
           >
             {verifyKey.isPending ? <IconLoader2 className="is-spinning" /> : <IconShieldLock />}{" "}
             Comprobar clave guardada
@@ -414,7 +438,12 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
           {bootstrap?.steam.apiKeyConfigured ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" size="sm" variant="outline" disabled={deleteKey.isPending}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={deleteKey.isPending || sync.isPending}
+                >
                   Eliminar clave
                 </Button>
               </AlertDialogTrigger>
@@ -428,7 +457,12 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => deleteKey.mutate()}>
+                  <AlertDialogAction
+                    disabled={deleteKey.isPending || sync.isPending}
+                    onClick={() => {
+                      if (!sync.isPending) deleteKey.mutate();
+                    }}
+                  >
                     Eliminar clave
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -464,7 +498,7 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
         variant="secondary"
         size="sm"
         onClick={() => localImport.mutate()}
-        disabled={localImport.isPending}
+        disabled={localImport.isPending || sync.isPending}
       >
         {localImport.isPending ? <IconLoader2 className="is-spinning" /> : <IconFolderOpen />}{" "}
         Explorar bibliotecas locales

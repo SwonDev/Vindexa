@@ -104,6 +104,12 @@ describe("ajustes y secretos", () => {
     });
     mockedApi.savePreferences.mockResolvedValue(undefined);
     mockedApi.deleteSteamApiKey.mockResolvedValue(undefined);
+    mockedApi.importLocalSteam.mockResolvedValue({
+      steamPath: "/Applications/Steam.app",
+      librariesScanned: 2,
+      importedGames: 12,
+      updatedGames: 0,
+    });
     mockedApi.deleteStatus.mockResolvedValue(undefined);
     mockedApi.deletePlannerColumn.mockResolvedValue(undefined);
     mockedApi.importBackup.mockResolvedValue(false);
@@ -211,6 +217,8 @@ describe("ajustes y secretos", () => {
       ),
     ).toBeVisible();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
   });
 
   it("muestra sin alterar el error de sincronización posterior al guardado", async () => {
@@ -240,6 +248,64 @@ describe("ajustes y secretos", () => {
     expect(mockedApi.saveSteamApiKey).toHaveBeenCalledTimes(1);
     expect(mockedApi.syncSteamLibrary).toHaveBeenCalledTimes(1);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
+  });
+
+  it("refresca todos los datos derivados incluso si la sincronización falla", async () => {
+    const user = userEvent.setup();
+    mockedApi.syncSteamLibrary.mockRejectedValueOnce(new Error("Steam no respondió."));
+    const { queryClient } = renderSettings({
+      ...bootstrap,
+      steam: {
+        ...bootstrap.steam,
+        apiKeyConfigured: true,
+        account: { steamId: "76561198000000000" },
+      },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    await user.click(screen.getByRole("button", { name: /Sincronizar ahora/ }));
+
+    expect(await screen.findByText("Steam no respondió.")).toBeVisible();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
+  });
+
+  it("refresca biblioteca, catálogo familiar y filtros tras importar Steam local", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSettings();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    await user.click(screen.getByRole("button", { name: /Explorar bibliotecas locales/ }));
+
+    expect(await screen.findByText(/Se han leído 12 manifiestos/)).toBeVisible();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["family-catalog"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["library-filter-options"] });
+  });
+
+  it("bloquea cambios de credenciales mientras Steam está sincronizando", async () => {
+    const user = userEvent.setup();
+    mockedApi.syncSteamLibrary.mockReturnValue(new Promise(() => undefined));
+    renderSettings({
+      ...bootstrap,
+      steam: {
+        ...bootstrap.steam,
+        apiKeyConfigured: true,
+        account: { steamId: "76561198000000000" },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /Sincronizar ahora/ }));
+
+    expect(screen.getByRole("button", { name: "Eliminar clave" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Desvincular" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Guardar y sincronizar/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Eliminar clave" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(mockedApi.deleteSteamApiKey).not.toHaveBeenCalled();
   });
 
   it("exige confirmación antes de eliminar la Web API Key", async () => {

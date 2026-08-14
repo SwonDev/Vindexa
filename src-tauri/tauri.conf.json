@@ -31,7 +31,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' customprotocol: asset:; script-src 'self'; img-src 'self' asset: http://asset.localhost https://shared.steamstatic.com https://media.steampowered.com https://avatars.steamstatic.com https://cdn.akamai.steamstatic.com https://steamcommunity.com; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'; frame-ancestors 'none'",
+      "csp": "default-src 'self' customprotocol: asset:; script-src 'self'; img-src 'self' asset: http://asset.localhost https://shared.steamstatic.com https://media.steampowered.com https://avatars.steamstatic.com https://avatars.fastly.steamstatic.com https://cdn.akamai.steamstatic.com https://steamcommunity.com; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'; frame-ancestors 'none'",
       "freezePrototype": true,
       "assetProtocol": {
         "enable": true,

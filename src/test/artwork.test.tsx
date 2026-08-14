@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Artwork } from "@/components/common/Artwork";
+import { ARTWORK_CACHE_CLEARED_EVENT } from "@/lib/artwork-cache-events";
 
 const mocks = vi.hoisted(() => ({
   cacheGameArt: vi.fn(),
@@ -107,7 +108,11 @@ describe("artwork local-first", () => {
     expect(mocks.cacheGameArt).not.toHaveBeenCalled();
 
     act(() => reveal());
-    expect(mocks.cacheGameArt).toHaveBeenCalledWith(910_001, "cover");
+    expect(mocks.cacheGameArt).toHaveBeenCalledWith(
+      910_001,
+      "cover",
+      "https://shared.steamstatic.com/store_item_assets/steam/apps/910001/cover.jpg",
+    );
     await act(async () => request.resolve({ localPath: "/cache/910001/cover.jpg" }));
 
     const image = await screen.findByRole("img", { name: "Carátula de Nebula Forge" });
@@ -160,7 +165,11 @@ describe("artwork local-first", () => {
       />,
     );
 
-    expect(mocks.cacheGameArt).toHaveBeenCalledWith(910_004, "header");
+    expect(mocks.cacheGameArt).toHaveBeenCalledWith(
+      910_004,
+      "header",
+      "https://steam.test/header.jpg",
+    );
     await waitFor(() =>
       expect(screen.getByRole("img", { name: "Cabecera de Titan Circuit" })).toHaveAttribute(
         "loading",
@@ -185,7 +194,11 @@ describe("artwork local-first", () => {
       />,
     );
 
-    expect(mocks.cacheGameArt).toHaveBeenCalledWith(910_006, "hero");
+    expect(mocks.cacheGameArt).toHaveBeenCalledWith(
+      910_006,
+      "hero",
+      "https://store.akamai.steamstatic.com/images/storepagebackground/app/910006?t=1",
+    );
     await waitFor(() =>
       expect(screen.getByRole("img", { name: "Arte principal de Portal Vector" })).toHaveAttribute(
         "src",
@@ -214,5 +227,94 @@ describe("artwork local-first", () => {
     const image = screen.getByRole("img", { name: "Carátula de Broken Signal" });
     fireEvent.error(image);
     expect(screen.getByRole("img", { name: "Carátula de Broken Signal" })).toHaveTextContent("BS");
+  });
+
+  it("envía al backend la fuente fallback exacta aunque no coincida con la variante visual", async () => {
+    mocks.cacheGameArt.mockResolvedValueOnce({ localPath: "/cache/910007/icon-from-cover.jpg" });
+    render(
+      <Artwork
+        appId={910_007}
+        src="https://shared.steamstatic.com/store_item_assets/steam/apps/910007/library_600x900.jpg"
+        title="Family Signal"
+        kind="icon"
+        priority
+      />,
+    );
+
+    expect(mocks.cacheGameArt).toHaveBeenCalledWith(
+      910_007,
+      "icon",
+      "https://shared.steamstatic.com/store_item_assets/steam/apps/910007/library_600x900.jpg",
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Icono de Family Signal" })).toHaveAttribute(
+        "src",
+        "asset:///cache/910007/icon-from-cover.jpg",
+      ),
+    );
+  });
+
+  it("invalida de inmediato las entradas positivas al vaciar la caché nativa", async () => {
+    mocks.cacheGameArt
+      .mockResolvedValueOnce({ localPath: "/cache/910008/cover-old.jpg" })
+      .mockResolvedValueOnce({ localPath: "/cache/910008/cover-new.jpg" });
+    const props = {
+      appId: 910_008,
+      src: "https://shared.steamstatic.com/store_item_assets/steam/apps/910008/library_600x900.jpg",
+      title: "Cache Reborn",
+      priority: true,
+    } as const;
+    const first = render(<Artwork {...props} />);
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Carátula de Cache Reborn" })).toHaveAttribute(
+        "src",
+        "asset:///cache/910008/cover-old.jpg",
+      ),
+    );
+    first.unmount();
+
+    window.dispatchEvent(new Event(ARTWORK_CACHE_CLEARED_EVENT));
+    render(<Artwork {...props} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Carátula de Cache Reborn" })).toHaveAttribute(
+        "src",
+        "asset:///cache/910008/cover-new.jpg",
+      ),
+    );
+    expect(mocks.cacheGameArt).toHaveBeenCalledTimes(2);
+  });
+
+  it("descarta una respuesta antigua que llega después de invalidar la caché", async () => {
+    const oldRequest = deferred<{ localPath: string }>();
+    const freshRequest = deferred<{ localPath: string }>();
+    mocks.cacheGameArt
+      .mockReturnValueOnce(oldRequest.promise)
+      .mockReturnValueOnce(freshRequest.promise);
+    render(
+      <Artwork
+        appId={910_009}
+        src="https://shared.steamstatic.com/store_item_assets/steam/apps/910009/header.jpg"
+        title="Generation Gate"
+        kind="header"
+      />,
+    );
+    expect(mocks.cacheGameArt).toHaveBeenCalledTimes(1);
+
+    act(() => window.dispatchEvent(new Event(ARTWORK_CACHE_CLEARED_EVENT)));
+    await waitFor(() => expect(mocks.cacheGameArt).toHaveBeenCalledTimes(2));
+    await act(async () => oldRequest.resolve({ localPath: "/cache/910009/stale.jpg" }));
+    expect(screen.getByRole("img", { name: "Cabecera de Generation Gate" })).not.toHaveAttribute(
+      "src",
+      "asset:///cache/910009/stale.jpg",
+    );
+
+    await act(async () => freshRequest.resolve({ localPath: "/cache/910009/fresh.jpg" }));
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Cabecera de Generation Gate" })).toHaveAttribute(
+        "src",
+        "asset:///cache/910009/fresh.jpg",
+      ),
+    );
   });
 });

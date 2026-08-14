@@ -838,6 +838,46 @@ mod tests {
     }
 
     #[test]
+    fn global_manual_query_keeps_the_drag_order_even_when_games_are_pinned_or_prioritized() {
+        let connection = database();
+        for app_id in [10, 20, 30] {
+            insert_game(&connection, app_id, &format!("Juego {app_id}"));
+        }
+        write_manual_order(&connection, &[10, 20, 30]).expect("ordenar biblioteca");
+        connection
+            .execute(
+                "UPDATE game_personal SET pinned = 1, priority = 5 WHERE app_id = 30",
+                [],
+            )
+            .expect("destacar juego posterior");
+        connection
+            .execute(
+                "UPDATE game_personal SET priority = 4 WHERE app_id = 20",
+                [],
+            )
+            .expect("priorizar juego intermedio");
+
+        let page = library::list_games(
+            &connection,
+            &GameListRequest {
+                sort: Some("manual".to_string()),
+                limit: Some(20),
+                ..GameListRequest::default()
+            },
+            None,
+        )
+        .expect("listar biblioteca en orden manual");
+
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|game| game.app_id)
+                .collect::<Vec<_>>(),
+            vec![10, 20, 30]
+        );
+    }
+
+    #[test]
     fn global_manual_order_moves_a_batch_before_an_anchor_and_undoes_exactly() {
         let mut connection = database();
         for app_id in [10, 20, 30, 40] {
