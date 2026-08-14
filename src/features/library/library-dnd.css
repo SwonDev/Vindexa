@@ -1,0 +1,248 @@
+.game-drag-handle {
+  cursor: grab;
+}
+
+.game-card {
+  position: relative;
+}
+
+.game-drag-handle:active {
+  cursor: grabbing;
+}
+
+.game-drag-handle {
+  position: absolute;
+  z-index: 5;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--v-muted) 38%, transparent);
+  background: color-mix(in srgb, var(--v-deepest) 88%, transparent);
+  color: var(--v-muted);
+  opacity: 0;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 32%);
+}
+
+.game-card:hover .game-drag-handle,
+.game-row:hover .game-drag-handle,
+.game-drag-handle:focus-visible,
+[data-library-dragging="true"] .game-drag-handle {
+  color: var(--v-cyan);
+  opacity: 1;
+}
+
+.game-drag-handle svg {
+  width: 14px;
+}
+
+.game-row .game-drag-handle {
+  top: 50%;
+  left: 4px;
+  width: 22px;
+  height: 28px;
+  transform: translateY(-50%);
+}
+
+[data-library-dragging="true"] {
+  opacity: 0.38;
+}
+
+.sidebar-item[data-drop-target="true"] {
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--v-cyan) 56%, transparent);
+}
+
+.sidebar-item[data-drop-over="true"] {
+  border-left-color: var(--v-lime);
+  background: color-mix(in srgb, var(--v-lime) 18%, var(--v-surface-selected));
+  color: var(--foreground);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--v-lime) 58%, transparent),
+    0 5px 14px rgb(0 0 0 / 24%);
+}
+
+.sidebar-item[data-drop-rejected="true"],
+.sidebar-collection[data-drop-rejected="true"] {
+  border-left-color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 16%, var(--v-surface-selected));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 58%, transparent);
+}
+
+.sidebar-item[data-drop-disabled="true"] {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 9px
+  );
+  color: var(--v-muted);
+  cursor: not-allowed;
+}
+
+.sidebar-collection {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: stretch;
+}
+
+.sidebar-collection > [data-slot="tooltip-trigger"] {
+  min-width: 0;
+}
+
+.sidebar-collection .sidebar-item {
+  width: 100%;
+  min-width: 0;
+}
+
+.sidebar-collection__handle {
+  display: grid;
+  width: 24px;
+  min-height: 30px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--v-muted) 60%, transparent);
+  cursor: grab;
+}
+
+.sidebar-collection__handle:hover,
+.sidebar-collection__handle:focus-visible {
+  color: var(--v-cyan);
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+}
+
+.sidebar-collection__handle:active {
+  cursor: grabbing;
+}
+
+.sidebar-collection__handle svg {
+  width: 13px;
+}
+
+.sidebar-collection[data-collection-sorting="true"] {
+  z-index: 3;
+  opacity: 0.52;
+}
+
+.sidebar-collection[data-drop-target="true"] {
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--v-cyan) 56%, transparent);
+}
+
+.sidebar-collection[data-drop-over="true"] {
+  background: color-mix(in srgb, var(--v-lime) 18%, var(--v-surface-selected));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--v-lime) 58%, transparent);
+}
+
+.sidebar-collection[data-drop-disabled="true"] {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 9px
+  );
+}
+
+.game-card[data-position-over="true"],
+.game-row[data-position-over="true"] {
+  box-shadow:
+    inset 3px 0 var(--v-lime),
+    0 10px 24px rgb(0 0 0 / 34%);
+}
+
+.library-drag-overlay {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  max-width: 280px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--v-cyan);
+  background: color-mix(in srgb, var(--v-surface-raised) 96%, transparent);
+  color: var(--foreground);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 48%);
+}
+
+.library-drag-overlay > svg {
+  color: var(--v-cyan);
+}
+
+.library-drag-overlay strong,
+.library-drag-overlay span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-drag-overlay strong {
+  font-size: 12px;
+}
+
+.library-drag-overlay span {
+  margin-top: 2px;
+  color: var(--v-muted);
+  font-size: 10px;
+}
+
+.library-batch-feedback {
+  position: absolute;
+  z-index: 7;
+  right: 18px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 36px));
+  min-height: 42px;
+  padding: 5px 7px 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--v-lime) 52%, var(--border));
+  background: color-mix(in srgb, var(--v-surface-raised) 97%, transparent);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 45%);
+}
+
+.library-batch-feedback[data-error="true"] {
+  border-color: color-mix(in srgb, var(--destructive) 64%, var(--border));
+}
+
+.library-batch-feedback > span {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-bar [data-slot="select-trigger"] {
+  width: min(180px, 22vw);
+}
+
+.library-main:has(.selection-bar) .game-browser {
+  padding-bottom: 72px;
+  scroll-padding-bottom: 72px;
+}
+
+@media (max-width: 780px) {
+  .selection-bar strong {
+    display: none;
+  }
+
+  .selection-bar [data-slot="select-trigger"] {
+    width: min(190px, 32vw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-drag-overlay {
+    transition: none;
+  }
+}

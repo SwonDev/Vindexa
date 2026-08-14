@@ -1,0 +1,47 @@
+[package]
+name = "vindexa"
+version = "0.1.0"
+description = "Biblioteca personal de Steam, planificación y seguimiento."
+authors = ["Vindexa contributors"]
+license = "MIT"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "vindexa_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+chrono = { version = "=0.4.45", features = ["serde"] }
+keyring = "=4.1.6"
+reqwest = { version = "=0.13.4", default-features = false, features = ["form", "gzip", "json", "query", "rustls"] }
+rusqlite = { version = "=0.40.2", features = ["backup", "bundled", "chrono"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+steamlocate = "=2.1.1"
+tauri = { version = "=2.11.5", features = ["protocol-asset"] }
+tauri-plugin-dialog = "=2.7.2"
+tauri-plugin-opener = "=2.5.4"
+thiserror = "=2.0.20"
+tokio = { version = "=1.53.1", features = ["io-util", "net", "rt", "sync", "time"] }
+url = "=2.5.8"
+uuid = { version = "=1.24.0", features = ["serde", "v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "=0.6.2"
+objc2 = "=0.6.4"
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSError", "NSString"] }
+objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["WKContentRuleList", "WKContentRuleListStore", "WKUserContentController", "block2"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"

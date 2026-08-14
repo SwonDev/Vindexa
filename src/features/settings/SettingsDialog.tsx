@@ -1,0 +1,916 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  IconAlertCircle,
+  IconBrandSteam,
+  IconCheck,
+  IconDatabase,
+  IconDeviceDesktop,
+  IconDownload,
+  IconExternalLink,
+  IconEye,
+  IconEyeOff,
+  IconFolderOpen,
+  IconKey,
+  IconKeyboard,
+  IconLoader2,
+  IconRefresh,
+  IconRoute,
+  IconShieldLock,
+  IconTrash,
+  IconUpload,
+} from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
+import {
+  DEFAULT_SHORTCUTS,
+  eventToShortcut,
+  findShortcutCollision,
+  getReservedShortcutName,
+  shortcutLabel,
+} from "@/features/shell/shortcuts";
+import { formatBytes, formatDate } from "@/lib/format";
+import { api, getErrorMessage } from "@/lib/tauri";
+import type {
+  AppBootstrap,
+  AppPreferences,
+  ShortcutAction,
+  ShortcutBindings,
+  SteamSyncResult,
+} from "@/lib/types";
+
+const apiKeySchema = z.object({
+  apiKey: z.string().trim().min(16, "Introduce una Web API Key válida.").max(128),
+});
+type ApiKeyForm = z.infer<typeof apiKeySchema>;
+
+interface SettingsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  bootstrap?: AppBootstrap | undefined;
+}
+
+export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: SettingsDialogProps) {
+  const [section, setSection] = useState<
+    "steam" | "organization" | "appearance" | "shortcuts" | "data" | "privacy" | "about"
+  >("steam");
+  return (
+    <Dialog open={dialogOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="settings-dialog" showCloseButton>
+        <DialogHeader className="settings-dialog__header">
+          <DialogTitle>Ajustes de Vindexa</DialogTitle>
+          <DialogDescription>
+            Cuenta, sincronización, comportamiento y datos locales.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="settings-dialog__body">
+          <nav className="settings-nav" aria-label="Apartados de ajustes">
+            <SettingsNavItem
+              active={section === "steam"}
+              icon={IconBrandSteam}
+              label="Steam"
+              onClick={() => setSection("steam")}
+            />
+            <SettingsNavItem
+              active={section === "organization"}
+              icon={IconRoute}
+              label="Organización"
+              onClick={() => setSection("organization")}
+            />
+            <SettingsNavItem
+              active={section === "appearance"}
+              icon={IconDeviceDesktop}
+              label="Apariencia"
+              onClick={() => setSection("appearance")}
+            />
+            <SettingsNavItem
+              active={section === "shortcuts"}
+              icon={IconKeyboard}
+              label="Atajos"
+              onClick={() => setSection("shortcuts")}
+            />
+            <SettingsNavItem
+              active={section === "data"}
+              icon={IconDatabase}
+              label="Datos y copias"
+              onClick={() => setSection("data")}
+            />
+            <SettingsNavItem
+              active={section === "privacy"}
+              icon={IconShieldLock}
+              label="Privacidad"
+              onClick={() => setSection("privacy")}
+            />
+            <SettingsNavItem
+              active={section === "about"}
+              icon={IconAlertCircle}
+              label="Acerca de"
+              onClick={() => setSection("about")}
+            />
+          </nav>
+          <div className="settings-pane">
+            {section === "steam" && <SteamSettings bootstrap={bootstrap} />}
+            {section === "organization" && <OrganizationSettings bootstrap={bootstrap} />}
+            {section === "appearance" && <AppearanceSettings bootstrap={bootstrap} />}
+            {section === "shortcuts" && <ShortcutSettings bootstrap={bootstrap} />}
+            {section === "data" && <DataSettings bootstrap={bootstrap} />}
+            {section === "privacy" && <PrivacySettings />}
+            {section === "about" && <AboutSettings />}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettingsNavItem({
+  active,
+  icon: NavIcon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: typeof IconBrandSteam;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-active={active}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+    >
+      <NavIcon aria-hidden="true" size={17} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function steamSyncSummary(result: SteamSyncResult): string {
+  const family =
+    result.familyMembersDetected > 0
+      ? ` Steam Family: ${result.familyCatalogGamesDetected} visibles, ${result.familyGamesImported} confirmados localmente${
+          result.familyMembersInaccessible > 0
+            ? ` y ${result.familyMembersInaccessible} perfiles sin acceso.`
+            : "."
+        }`
+      : "";
+  return `Sincronización completada: ${result.importedGames} importados y ${result.updatedGames} actualizados.${family}`;
+}
+
+function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+  const [showKey, setShowKey] = useState(false);
+  const account = bootstrap?.steam.account;
+  const form = useForm<ApiKeyForm>({
+    resolver: zodResolver(apiKeySchema),
+    defaultValues: { apiKey: "" },
+  });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+  const run = <T,>(operation: () => Promise<T>, success: (result: T) => string) => ({
+    mutationFn: operation,
+    onSuccess: (result: T) => {
+      setNotice({ kind: "success", message: success(result) });
+      void refresh();
+    },
+    onError: (error: unknown) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  const login = useMutation(
+    run(api.startSteamLogin, () => "Cuenta de Steam vinculada correctamente."),
+  );
+  const sync = useMutation(run(api.syncSteamLibrary, steamSyncSummary));
+  const localImport = useMutation(
+    run(
+      api.importLocalSteam,
+      (result) =>
+        `Se han leído ${result.importedGames} manifiestos en ${result.librariesScanned} bibliotecas.`,
+    ),
+  );
+  const saveKey = useMutation({
+    mutationFn: async (data: ApiKeyForm) => {
+      await api.saveSteamApiKey(data.apiKey);
+      if (!account) return { kind: "saved" } as const;
+
+      try {
+        const result = await api.syncSteamLibrary();
+        return { kind: "synced", result } as const;
+      } catch (cause) {
+        return { kind: "sync-error", message: getErrorMessage(cause) } as const;
+      }
+    },
+    onSuccess: (result) => {
+      form.reset();
+      setShowKey(false);
+      if (result.kind === "sync-error") {
+        setNotice({ kind: "error", message: result.message });
+      } else if (result.kind === "synced") {
+        setNotice({
+          kind: "success",
+          message: `Clave guardada. ${steamSyncSummary(result.result)}`,
+        });
+      } else {
+        setNotice({
+          kind: "success",
+          message: "La Web API Key se guardó en el almacén seguro del sistema.",
+        });
+      }
+      void refresh();
+    },
+    onError: (cause) => setNotice({ kind: "error", message: getErrorMessage(cause) }),
+  });
+  const verifyKey = useMutation({
+    mutationFn: api.verifySavedSteamApiKey,
+    onSuccess: (configured) => {
+      setNotice(
+        configured
+          ? {
+              kind: "success",
+              message: "La clave guardada está disponible para sincronizar con Steam.",
+            }
+          : {
+              kind: "error",
+              message: "No se encontró una Web API Key guardada en el almacén seguro del sistema.",
+            },
+      );
+      void refresh();
+    },
+    onError: (cause) => setNotice({ kind: "error", message: getErrorMessage(cause) }),
+  });
+  const deleteKey = useMutation(
+    run(api.deleteSteamApiKey, () => "La Web API Key se eliminó del almacén seguro."),
+  );
+  const unlink = useMutation(
+    run(api.unlinkSteam, () => "La cuenta se ha desvinculado. Tus datos personales se conservan."),
+  );
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Cuenta de Steam"
+        description="La autenticación se realiza en el navegador oficial de Steam. Vindexa nunca ve tu contraseña."
+      />
+      {notice ? (
+        <InlineNotice {...notice} />
+      ) : account?.lastSyncErrorMessage ? (
+        <InlineNotice kind="error" message={account.lastSyncErrorMessage} />
+      ) : null}
+      {account ? (
+        <div className="steam-account-card">
+          <div className="steam-account-card__identity">
+            {account.avatarUrl ? (
+              <img src={account.avatarUrl} alt="" />
+            ) : (
+              <IconBrandSteam size={34} />
+            )}
+            <div>
+              <strong>{account.personaName ?? "Cuenta de Steam"}</strong>
+              <span>SteamID64 · {account.steamId}</span>
+              <span>Última sincronización · {formatDate(account.lastSyncAt)}</span>
+            </div>
+          </div>
+          <div className="button-row">
+            <Button
+              size="sm"
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending || saveKey.isPending}
+            >
+              {sync.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}{" "}
+              Sincronizar ahora
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <IconTrash /> Desvincular
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Desvincular la cuenta?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Se eliminará la identidad vinculada y el acceso a futuras sincronizaciones. Tus
+                    estados, notas, colecciones y progreso personal permanecerán intactos. El
+                    catálogo derivado de Steam Family se retirará del equipo.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => unlink.mutate()}>Desvincular</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      ) : (
+        <div className="settings-callout">
+          <IconBrandSteam aria-hidden="true" size={30} />
+          <div>
+            <strong>Vincula tu biblioteca oficial</strong>
+            <p>Abre Steam OpenID en tu navegador para identificar tu cuenta de forma segura.</p>
+          </div>
+          <Button size="sm" onClick={() => login.mutate()} disabled={login.isPending}>
+            {login.isPending ? <IconLoader2 className="is-spinning" /> : <IconBrandSteam />}{" "}
+            Continuar con Steam
+          </Button>
+        </div>
+      )}
+      <SettingsDivider />
+      <SettingsHeading
+        title="Web API Key"
+        description="Algunas bibliotecas requieren una clave personal para obtener juegos y tiempo jugado. Se almacena en Keychain, nunca en SQLite ni en la interfaz."
+      />
+      {bootstrap?.steam.apiKeyVerificationRequired && (
+        <div className="settings-callout">
+          <IconShieldLock aria-hidden="true" size={26} />
+          <div>
+            <strong>Comprueba si ya tienes una clave guardada</strong>
+            <p>
+              Por privacidad, Vindexa no consulta Keychain al iniciar. Esta acción voluntaria accede
+              una vez al almacén seguro y solo guarda localmente si encontró una clave.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => verifyKey.mutate()}
+            disabled={verifyKey.isPending}
+          >
+            {verifyKey.isPending ? <IconLoader2 className="is-spinning" /> : <IconShieldLock />}{" "}
+            Comprobar clave guardada
+          </Button>
+        </div>
+      )}
+      <form
+        className="api-key-form"
+        onSubmit={form.handleSubmit((values) => {
+          if (!saveKey.isPending && !sync.isPending) saveKey.mutate(values);
+        })}
+      >
+        <label className="sr-only" htmlFor="steam-api-key">
+          Web API Key de Steam
+        </label>
+        <div className="secure-input">
+          <IconKey aria-hidden="true" size={16} />
+          <Input
+            id="steam-api-key"
+            {...form.register("apiKey")}
+            type={showKey ? "text" : "password"}
+            autoComplete="off"
+            placeholder={
+              bootstrap?.steam.apiKeyConfigured
+                ? "Clave configurada · introduce otra para sustituirla"
+                : "Introduce tu Web API Key"
+            }
+            aria-invalid={Boolean(form.formState.errors.apiKey)}
+          />
+          <button
+            type="button"
+            aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}
+            onClick={() => setShowKey((value) => !value)}
+          >
+            {showKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+          </button>
+        </div>
+        {form.formState.errors.apiKey && (
+          <p className="field-error">{form.formState.errors.apiKey.message}</p>
+        )}
+        <div className="button-row">
+          <Button size="sm" type="submit" disabled={saveKey.isPending || sync.isPending}>
+            {saveKey.isPending ? <IconLoader2 className="is-spinning" /> : <IconShieldLock />}{" "}
+            {account ? "Guardar y sincronizar" : "Guardar de forma segura"}
+          </Button>
+          {bootstrap?.steam.apiKeyConfigured ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" size="sm" variant="outline" disabled={deleteKey.isPending}>
+                  Eliminar clave
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar la Web API Key?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tu cuenta vinculada, biblioteca y datos locales permanecerán intactos, pero las
+                    sincronizaciones con Steam se detendrán hasta que guardes otra clave.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteKey.mutate()}>
+                    Eliminar clave
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => openUrl("https://steamcommunity.com/dev/apikey")}
+            >
+              <IconExternalLink /> Obtener una Web API Key
+            </Button>
+          )}
+        </div>
+        {!bootstrap?.steam.apiKeyConfigured && (
+          <p className="settings-note">
+            Steam abrirá su página oficial y puede pedirte que inicies sesión.
+          </p>
+        )}
+      </form>
+      <SettingsDivider />
+      <SettingsHeading
+        title="Bibliotecas instaladas"
+        description={
+          bootstrap?.steam.localSteamDetected
+            ? `Steam detectado con ${bootstrap.steam.localManifestCount} manifiestos locales.`
+            : "Todavía no se ha detectado una instalación local de Steam."
+        }
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => localImport.mutate()}
+        disabled={localImport.isPending}
+      >
+        {localImport.isPending ? <IconLoader2 className="is-spinning" /> : <IconFolderOpen />}{" "}
+        Explorar bibliotecas locales
+      </Button>
+    </div>
+  );
+}
+
+function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
+  const queryClient = useQueryClient();
+  const [preferences, setPreferences] = useState<AppPreferences>(
+    bootstrap?.preferences ?? {
+      density: "compact",
+      periodicSyncMinutes: 60,
+      confirmUninstall: true,
+      librarySort: "manual",
+      shortcuts: DEFAULT_SHORTCUTS,
+    },
+  );
+  useEffect(() => {
+    if (bootstrap) setPreferences(bootstrap.preferences);
+  }, [bootstrap]);
+  const mutation = useMutation({
+    mutationFn: (next: AppPreferences) => api.savePreferences(next),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
+  });
+  const update = (next: AppPreferences) => {
+    setPreferences(next);
+    mutation.mutate(next);
+  };
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Apariencia y comportamiento"
+        description="Ajusta la densidad sin perder la arquitectura compacta de la biblioteca."
+      />
+      <SettingRow
+        label="Densidad"
+        description="Cambia la altura y separación de filas, controles y portadas."
+      >
+        <Select
+          value={preferences.density}
+          onValueChange={(density: AppPreferences["density"]) =>
+            update({ ...preferences, density })
+          }
+        >
+          <SelectTrigger className="w-40" aria-label="Densidad de la interfaz">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="compact">Compacta</SelectItem>
+            <SelectItem value="comfortable">Cómoda</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+      <SettingRow
+        label="Confirmar desinstalación"
+        description="Pide confirmación en Vindexa antes de entregar la solicitud al cliente de Steam."
+      >
+        <Switch
+          aria-label="Confirmar desinstalación"
+          checked={preferences.confirmUninstall}
+          onCheckedChange={(confirmUninstall) => update({ ...preferences, confirmUninstall })}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Sincronización periódica"
+        description="Intervalo entre comprobaciones automáticas cuando Steam está vinculado."
+      >
+        <Select
+          value={String(preferences.periodicSyncMinutes)}
+          onValueChange={(minutes) =>
+            update({ ...preferences, periodicSyncMinutes: Number(minutes) })
+          }
+        >
+          <SelectTrigger className="w-40" aria-label="Intervalo de sincronización">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0">Solo manual</SelectItem>
+            <SelectItem value="30">Cada 30 min</SelectItem>
+            <SelectItem value="60">Cada hora</SelectItem>
+            <SelectItem value="360">Cada 6 horas</SelectItem>
+            <SelectItem value="1440">Cada día</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+      <p className="settings-save-state">
+        {mutation.isPending
+          ? "Guardando…"
+          : mutation.isError
+            ? getErrorMessage(mutation.error)
+            : mutation.isSuccess
+              ? "Guardado"
+              : "Los cambios se guardan automáticamente."}
+      </p>
+    </div>
+  );
+}
+
+const shortcutNames: Record<ShortcutAction, string> = {
+  library: "Biblioteca",
+  planner: "Planificador",
+  collections: "Colecciones",
+  tracking: "Seguimiento",
+  search: "Buscar en la biblioteca",
+  sync: "Sincronizar con Steam",
+  closePanel: "Cerrar panel activo",
+};
+
+function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
+  const queryClient = useQueryClient();
+  const [bindings, setBindings] = useState<ShortcutBindings>(
+    bootstrap?.preferences.shortcuts ?? DEFAULT_SHORTCUTS,
+  );
+  const [recording, setRecording] = useState<ShortcutAction>();
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+  useEffect(() => {
+    if (bootstrap) setBindings(bootstrap.preferences.shortcuts);
+  }, [bootstrap]);
+  const mutation = useMutation({
+    mutationFn: (next: AppPreferences) => api.savePreferences(next),
+    onSuccess: () => {
+      setNotice({ kind: "success", message: "Atajos guardados." });
+      void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+    },
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  useEffect(() => {
+    if (!recording) return;
+    const capture = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const shortcut = eventToShortcut(event);
+      if (!shortcut) return;
+      const reserved = getReservedShortcutName(shortcut);
+      if (reserved) {
+        setNotice({
+          kind: "error",
+          message: `${shortcutLabel(shortcut)} está reservado para ${reserved}.`,
+        });
+        setRecording(undefined);
+        return;
+      }
+      const collision = findShortcutCollision(bindings, recording, shortcut);
+      if (collision) {
+        setNotice({
+          kind: "error",
+          message: `${shortcutLabel(shortcut)} ya está asignado a ${shortcutNames[collision]}.`,
+        });
+        setRecording(undefined);
+        return;
+      }
+      const next = { ...bindings, [recording]: shortcut };
+      setBindings(next);
+      setRecording(undefined);
+      setNotice(undefined);
+      if (bootstrap) mutation.mutate({ ...bootstrap.preferences, shortcuts: next });
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [bindings, bootstrap, mutation, recording]);
+  const reset = () => {
+    setBindings(DEFAULT_SHORTCUTS);
+    setRecording(undefined);
+    setNotice(undefined);
+    if (bootstrap) mutation.mutate({ ...bootstrap.preferences, shortcuts: DEFAULT_SHORTCUTS });
+  };
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Atajos de teclado"
+        description="Selecciona una acción y pulsa la nueva combinación. Las colisiones se rechazan antes de guardar."
+      />
+      {notice && <InlineNotice {...notice} />}
+      <div className="shortcut-list">
+        {(Object.keys(shortcutNames) as ShortcutAction[]).map((action) => (
+          <div className="shortcut-row" key={action}>
+            <span>{shortcutNames[action]}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant={recording === action ? "secondary" : "outline"}
+              aria-label={`Cambiar ${shortcutNames[action]}`}
+              aria-pressed={recording === action}
+              onClick={() => {
+                setNotice(undefined);
+                setRecording(action);
+              }}
+            >
+              {recording === action ? (
+                "Pulsa una combinación…"
+              ) : (
+                <kbd>{shortcutLabel(bindings[action])}</kbd>
+              )}
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="button-row">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={reset}
+          disabled={mutation.isPending}
+        >
+          Restablecer atajos
+        </Button>
+      </div>
+      <p className="settings-note">
+        Los atajos no se ejecutan mientras escribes en campos, áreas de texto o editores.
+      </p>
+    </div>
+  );
+}
+
+function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+  const diagnostics = useQuery({
+    queryKey: ["diagnostics"],
+    queryFn: api.diagnostics,
+    enabled: true,
+  });
+  const backup = useMutation({
+    mutationFn: api.exportBackup,
+    onSuccess: (completed) => {
+      if (completed) {
+        setNotice({ kind: "success", message: "Copia creada y verificada correctamente." });
+      }
+    },
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  const restore = useMutation({
+    mutationFn: api.importBackup,
+    onSuccess: (completed) => {
+      if (completed) {
+        setNotice({ kind: "success", message: "Copia restaurada y verificada correctamente." });
+        void queryClient.invalidateQueries();
+      }
+    },
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  const clearCache = useMutation({
+    mutationFn: api.clearArtCache,
+    onSuccess: () =>
+      setNotice({
+        kind: "success",
+        message: "La caché de imágenes se ha vaciado; se reconstruirá bajo demanda.",
+      }),
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Datos y copias de seguridad"
+        description="SQLite es la fuente de verdad. Las restauraciones crean antes una copia de seguridad automática."
+      />
+      {notice && <InlineNotice {...notice} />}
+      <div className="button-row">
+        <Button size="sm" onClick={() => backup.mutate()} disabled={backup.isPending}>
+          <IconDownload /> Exportar copia
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={restore.isPending}>
+              <IconUpload /> Restaurar copia
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Seleccionar una copia para restaurarla?</AlertDialogTitle>
+              <AlertDialogDescription>
+                La restauración sustituirá la base activa. Antes de aplicar ningún cambio, Vindexa
+                creará y verificará automáticamente un snapshot de seguridad de la base actual.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => restore.mutate()}>
+                Elegir copia y restaurar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => clearCache.mutate()}
+          disabled={clearCache.isPending}
+        >
+          <IconRefresh /> Vaciar caché de imágenes
+        </Button>
+      </div>
+      <SettingsDivider />
+      <SettingsHeading
+        title="Diagnóstico local"
+        description="Estado técnico de la base de datos activa."
+      />
+      <dl className="diagnostics-grid">
+        <div>
+          <dt>Integridad</dt>
+          <dd>{diagnostics.data?.integrity ?? "Comprobando…"}</dd>
+        </div>
+        <div>
+          <dt>Modo WAL</dt>
+          <dd>{diagnostics.data?.walEnabled ? "Activo" : "No disponible"}</dd>
+        </div>
+        <div>
+          <dt>Esquema</dt>
+          <dd>v{diagnostics.data?.schemaVersion ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Tamaño</dt>
+          <dd>{formatBytes(diagnostics.data?.sizeBytes)}</dd>
+        </div>
+      </dl>
+      <label className="path-field" htmlFor="database-path">
+        <span>Ubicación de datos</span>
+        <Input
+          id="database-path"
+          value={diagnostics.data?.path ?? bootstrap?.databasePath ?? ""}
+          readOnly
+        />
+      </label>
+    </div>
+  );
+}
+
+function PrivacySettings() {
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Privacidad por diseño"
+        description="Tu organización personal permanece en este equipo."
+      />
+      <ul className="privacy-list">
+        <li>
+          <IconCheck /> La contraseña de Steam nunca entra en Vindexa.
+        </li>
+        <li>
+          <IconCheck /> La Web API Key vive en el almacén seguro del sistema.
+        </li>
+        <li>
+          <IconCheck /> Notas, checkpoints y colecciones se guardan únicamente en SQLite local.
+        </li>
+        <li>
+          <IconCheck /> Las sincronizaciones no sobrescriben tu organización personal.
+        </li>
+      </ul>
+    </div>
+  );
+}
+function AboutSettings() {
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+  const updateCheck = useMutation({
+    mutationFn: api.checkForUpdates,
+    onSuccess: (result) =>
+      setNotice({
+        kind: result.status === "notConfigured" ? "error" : "success",
+        message: result.message,
+      }),
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  return (
+    <div className="settings-section">
+      <SettingsHeading
+        title="Vindexa"
+        description="Un índice personal para decidir mejor qué jugar, continuar y terminar."
+      />
+      <dl className="about-grid">
+        <div>
+          <dt>Versión</dt>
+          <dd>0.1.0</dd>
+        </div>
+        <div>
+          <dt>Motor</dt>
+          <dd>Tauri 2 · React 19</dd>
+        </div>
+        <div>
+          <dt>Persistencia</dt>
+          <dd>SQLite local</dd>
+        </div>
+        <div>
+          <dt>Interfaz</dt>
+          <dd>Español de España</dd>
+        </div>
+      </dl>
+      {notice && <InlineNotice {...notice} />}
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => updateCheck.mutate()}
+        disabled={updateCheck.isPending}
+      >
+        {updateCheck.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}
+        Buscar actualizaciones
+      </Button>
+      <p className="settings-note">
+        La comprobación es manual. Este build nunca descargará ni instalará una versión sin un
+        endpoint HTTPS y una clave pública de firma configurados.
+      </p>
+      <p className="settings-note">
+        Vindexa no está afiliada a Valve Corporation. Steam y sus marcas pertenecen a sus
+        respectivos titulares.
+      </p>
+    </div>
+  );
+}
+
+function SettingsHeading({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="settings-heading">
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </div>
+  );
+}
+function SettingsDivider() {
+  return <div className="settings-divider" />;
+}
+function SettingRow({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{label}</strong>
+        <span>{description}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+function InlineNotice({ kind, message }: { kind: "success" | "error"; message: string }) {
+  return (
+    <div className="inline-notice" data-kind={kind} role={kind === "error" ? "alert" : "status"}>
+      {kind === "success" ? <IconCheck /> : <IconAlertCircle />}
+      <span>{message}</span>
+    </div>
+  );
+}
