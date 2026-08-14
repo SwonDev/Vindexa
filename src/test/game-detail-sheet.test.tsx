@@ -83,7 +83,7 @@ const detail = {
   activity: [],
 } as GameDetail;
 
-function renderSheet() {
+function renderSheet(onOpenChange = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -93,7 +93,7 @@ function renderSheet() {
         <GameDetailSheet
           appId={620}
           open
-          onOpenChange={vi.fn()}
+          onOpenChange={onOpenChange}
           statuses={[
             {
               id: "playing",
@@ -232,6 +232,57 @@ describe("ficha inmersiva de juego", () => {
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Steam recibió la orden de iniciar el juego.")).toBeVisible();
     expect(mockedApi.launchGame).toHaveBeenCalledTimes(2);
+  });
+
+  it("vacía el debounce al cerrar y conserva el último formulario aunque se desmonte", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    mockedApi.updateGame.mockImplementation(async (input) => ({ ...detail, notes: input.notes }));
+    const view = renderSheet(onOpenChange);
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    await user.type(
+      screen.getByLabelText("Notas privadas"),
+      "Este cambio debe sobrevivir al cierre inmediato.",
+    );
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    view.unmount();
+
+    await waitFor(() =>
+      expect(mockedApi.updateGame).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: "Este cambio debe sobrevivir al cierre inmediato." }),
+      ),
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("encola una edición nueva durante un guardado y no la pisa con la respuesta anterior", async () => {
+    const user = userEvent.setup();
+    let resolveFirst: (value: GameDetail) => void = () => undefined;
+    mockedApi.updateGame
+      .mockImplementationOnce(
+        () =>
+          new Promise<GameDetail>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(async (input) => ({ ...detail, notes: input.notes }));
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    const notes = screen.getByLabelText("Notas privadas");
+
+    await user.type(notes, "Primera edición");
+    await waitFor(() => expect(mockedApi.updateGame).toHaveBeenCalledTimes(1));
+    await user.clear(notes);
+    await user.type(notes, "Edición más reciente");
+    await new Promise((resolve) => window.setTimeout(resolve, 750));
+    resolveFirst({ ...detail, notes: "Primera edición" });
+
+    await waitFor(() => expect(mockedApi.updateGame).toHaveBeenCalledTimes(2));
+    expect(mockedApi.updateGame).toHaveBeenLastCalledWith(
+      expect.objectContaining({ notes: "Edición más reciente" }),
+    );
+    await waitFor(() => expect(notes).toHaveValue("Edición más reciente"));
   });
 
   it("confirma antes de solicitar a Steam la desinstalación y comunica el traspaso", async () => {

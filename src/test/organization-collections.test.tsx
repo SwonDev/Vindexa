@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CollectionsScreen } from "@/features/collections/CollectionsScreen";
 import { LibraryScreen } from "@/features/library/LibraryScreen";
+import { resetLibrarySessionForTests } from "@/features/library/library-session";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
 import { api } from "@/lib/tauri";
 import type { AppBootstrap } from "@/lib/types";
@@ -25,9 +26,31 @@ vi.mock("@/lib/tauri", () => ({
     libraryFilterOptions: vi.fn(),
     listGames: vi.fn(),
     listFamilyCatalog: vi.fn(),
+    cacheGameArt: vi.fn(),
+    startMetadataEnrichment: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "No se pudo completar la operación.",
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: (path: string) => `asset://${path}`,
+}));
+
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        key: index,
+        index,
+        start: index * 320,
+        size: 320,
+        end: (index + 1) * 320,
+        lane: 0,
+      })),
+    getTotalSize: () => count * 320,
+    measure: vi.fn(),
+  }),
 }));
 
 const mockedApi = api as unknown as {
@@ -140,6 +163,7 @@ function renderWithQuery(ui: React.ReactNode) {
 describe("organización editable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetLibrarySessionForTests();
     mockedApi.saveStatus.mockResolvedValue(undefined);
     mockedApi.reorderStatuses.mockResolvedValue(undefined);
     mockedApi.savePlannerColumn.mockResolvedValue(undefined);
@@ -170,6 +194,24 @@ describe("organización editable", () => {
       total: 0,
       limit: 240,
       offset: 0,
+    });
+    mockedApi.cacheGameArt.mockResolvedValue({
+      appId: 620,
+      variant: "cover",
+      localPath: "/tmp/portal-2.jpg",
+    });
+    mockedApi.startMetadataEnrichment.mockResolvedValue({
+      running: false,
+      totalGames: 1,
+      freshMetadata: 1,
+      queued: 0,
+      processing: 0,
+      retrying: 0,
+      succeeded: 1,
+      unavailable: 0,
+      failed: 0,
+      steamDeckAvailability: "disabled",
+      steamDeckExplanation: "Steam no expone esta señal en la API pública utilizada.",
     });
   });
 
@@ -339,5 +381,48 @@ describe("organización editable", () => {
     await user.click(screen.getByRole("combobox", { name: "Estado de la regla" }));
     expect(await screen.findByRole("option", { name: "Pendiente" })).toBeVisible();
     expect(screen.getByRole("option", { name: "En pausa" })).toBeVisible();
+  });
+
+  it("descarta la selección al cambiar a Steam Family para no modificar juegos invisibles", async () => {
+    const user = userEvent.setup();
+    mockedApi.listGames.mockResolvedValue({
+      items: [
+        {
+          appId: 620,
+          title: "Portal 2",
+          coverUrl: "https://shared.steamstatic.com/store_item_assets/steam/apps/620/cover.jpg",
+          playtimeMinutes: 60,
+          playtimeRecentMinutes: 0,
+          isEarlyAccess: false,
+          installed: true,
+          statusId: "backlog",
+          statusName: "Pendiente",
+          statusColor: "#5CAAC1",
+          progress: 0,
+          priority: 0,
+          pinned: false,
+          tracking: false,
+          manualPosition: 0,
+        },
+      ],
+      total: 1,
+      limit: 240,
+      offset: 0,
+    });
+    renderWithQuery(
+      <LibraryScreen
+        bootstrap={bootstrap}
+        loading={false}
+        error={undefined}
+        onRetry={() => undefined}
+      />,
+    );
+
+    const game = await screen.findByRole("button", { name: /Portal 2, Pendiente/ });
+    await user.click(game, { ctrlKey: true });
+    expect(screen.getByText("1 seleccionado")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /Steam Family/ }));
+    expect(screen.queryByText("1 seleccionado")).not.toBeInTheDocument();
   });
 });

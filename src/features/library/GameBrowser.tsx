@@ -336,6 +336,7 @@ const GameCard = memo(function GameCard({
       <button
         type="button"
         className="game-card__target"
+        aria-pressed={selected}
         aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
         onClick={(event) => {
           const additive = event.metaKey || event.ctrlKey;
@@ -462,6 +463,7 @@ const GameRow = memo(function GameRow({
       <button
         type="button"
         className="game-row__target"
+        aria-pressed={selected}
         aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
         onClick={(event) => {
           const additive = event.metaKey || event.ctrlKey;

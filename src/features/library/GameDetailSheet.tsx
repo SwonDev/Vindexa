@@ -17,7 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MotionConfig, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { Artwork } from "@/components/common/Artwork";
@@ -99,6 +99,11 @@ interface MetadataRefreshRequest {
   force: boolean;
 }
 
+interface AutosaveJob {
+  fingerprint: string;
+  values: UpdateGameInput;
+}
+
 export function GameDetailSheet({
   appId,
   open,
@@ -136,15 +141,74 @@ export function GameDetailSheet({
   });
   const watched = useWatch({ control: form.control });
   const parallaxAppId = detailQuery.data?.appId;
+  const queuedSaveRef = useRef<AutosaveJob | undefined>(undefined);
+  const saveLoopRef = useRef<Promise<void> | undefined>(undefined);
+  const startSaveLoopRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const lastEnqueuedFingerprintRef = useRef<string | undefined>(undefined);
+  const lastPersistedFingerprintRef = useRef<string | undefined>(undefined);
   const mutation = useMutation({
     mutationFn: (input: UpdateGameInput) => api.updateGame(input),
-    onSuccess: (detail) => {
-      form.reset(detailToForm(detail));
+    onSuccess: (detail, input) => {
+      lastPersistedFingerprintRef.current = saveFingerprint(input);
+      const current = detailSchema.safeParse(form.getValues());
+      if (current.success && saveFingerprint(current.data) === saveFingerprint(input)) {
+        form.reset(detailToForm(detail));
+      }
       queryClient.setQueryData(["game", detail.appId], detail);
       void queryClient.invalidateQueries({ queryKey: ["games"] });
       void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
     },
   });
+  const mutateAsyncRef = useRef(mutation.mutateAsync);
+  mutateAsyncRef.current = mutation.mutateAsync;
+  const drainSaveQueue = useCallback(async () => {
+    while (queuedSaveRef.current) {
+      const job = queuedSaveRef.current;
+      queuedSaveRef.current = undefined;
+      try {
+        await mutateAsyncRef.current(job.values);
+      } catch {
+        if (lastEnqueuedFingerprintRef.current === job.fingerprint) {
+          lastEnqueuedFingerprintRef.current = undefined;
+        }
+      }
+    }
+  }, []);
+  const startSaveLoop = useCallback(() => {
+    if (saveLoopRef.current) return saveLoopRef.current;
+    const loop = drainSaveQueue().finally(() => {
+      if (saveLoopRef.current === loop) saveLoopRef.current = undefined;
+      if (queuedSaveRef.current) void startSaveLoopRef.current?.();
+    });
+    saveLoopRef.current = loop;
+    return loop;
+  }, [drainSaveQueue]);
+  startSaveLoopRef.current = startSaveLoop;
+  const queueSave = useCallback(
+    (input: UpdateGameInput, force = false) => {
+      const parsed = detailSchema.safeParse(input);
+      if (!parsed.success) return Promise.resolve();
+      const fingerprint = saveFingerprint(parsed.data);
+      if (
+        !force &&
+        (lastEnqueuedFingerprintRef.current === fingerprint ||
+          lastPersistedFingerprintRef.current === fingerprint)
+      ) {
+        return saveLoopRef.current ?? Promise.resolve();
+      }
+      lastEnqueuedFingerprintRef.current = fingerprint;
+      queuedSaveRef.current = { fingerprint, values: parsed.data };
+      return startSaveLoop();
+    },
+    [startSaveLoop],
+  );
+  const flushCurrentSave = useCallback(
+    (force = false) => {
+      const current = detailSchema.safeParse(form.getValues());
+      if (current.success) void queueSave(current.data, force);
+    },
+    [form, queueSave],
+  );
   const metadataMutation = useMutation({
     mutationFn: ({ gameId, force }: MetadataRefreshRequest) =>
       api.refreshGameMetadata(gameId, force),
@@ -182,7 +246,9 @@ export function GameDetailSheet({
   useEffect(() => {
     if (!detailQuery.data || initializedId.current === detailQuery.data.appId) return;
     initializedId.current = detailQuery.data.appId;
-    form.reset(detailToForm(detailQuery.data));
+    const values = detailToForm(detailQuery.data);
+    lastPersistedFingerprintRef.current = saveFingerprint(values);
+    form.reset(values);
   }, [detailQuery.data, form]);
   useEffect(() => {
     if (open) return;
@@ -192,19 +258,21 @@ export function GameDetailSheet({
     setAchievementError(undefined);
   }, [open]);
   useEffect(() => {
+    return () => {
+      flushCurrentSave();
+    };
+  }, [flushCurrentSave]);
+  useEffect(() => {
     const detail = detailQuery.data;
     if (!open || !detail || metadataAttemptedId.current === detail.appId) return;
     metadataAttemptedId.current = detail.appId;
     metadataMutation.mutate({ gameId: detail.appId, force: false });
   }, [detailQuery.data, metadataMutation, open]);
   useEffect(() => {
-    if (!watched.appId || !form.formState.isDirty || !appId || mutation.isPending) return;
-    const timer = window.setTimeout(
-      () => void form.handleSubmit((values) => mutation.mutate(values))(),
-      700,
-    );
+    if (!watched.appId || !form.formState.isDirty || !appId) return;
+    const timer = window.setTimeout(() => flushCurrentSave(), 700);
     return () => window.clearTimeout(timer);
-  }, [appId, form, mutation, watched]);
+  }, [appId, flushCurrentSave, form.formState.isDirty, watched]);
   useEffect(() => {
     const scroller = scrollRef.current;
     const media = heroMediaRef.current;
@@ -251,7 +319,13 @@ export function GameDetailSheet({
       }
     : undefined;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) flushCurrentSave();
+        onOpenChange(nextOpen);
+      }}
+    >
       <SheetContent ref={scrollRef} className="game-detail-sheet" side="right">
         {detailQuery.isPending ? (
           <LoadingState label="Cargando ficha" />
@@ -569,7 +643,8 @@ export function GameDetailSheet({
                   collections={collections}
                   watched={watched}
                   form={form}
-                  mutation={mutation}
+                  onSave={(values, force) => void queueSave(values, force)}
+                  savePending={mutation.isPending}
                   collectionMutation={collectionMutation}
                 />
               </TabsContent>
@@ -625,7 +700,8 @@ function DetailForm({
   collections,
   watched,
   form,
-  mutation,
+  onSave,
+  savePending,
   collectionMutation,
 }: {
   detail: GameDetail;
@@ -633,17 +709,21 @@ function DetailForm({
   collections: CollectionSummary[];
   watched: Partial<DetailValues>;
   form: ReturnType<typeof useForm<DetailValues>>;
-  mutation: ReturnType<typeof useMutation<GameDetail, Error, UpdateGameInput>>;
+  onSave: (values: UpdateGameInput, force?: boolean) => void;
+  savePending: boolean;
   collectionMutation: ReturnType<typeof useMutation<GameDetail, Error, string[]>>;
 }) {
   return (
-    <form className="detail-form" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+    <form className="detail-form" onSubmit={form.handleSubmit((values) => onSave(values, true))}>
       <div className="detail-form__row">
         <div className="detail-field">
           <span>Estado</span>
           <Select
             value={watched.statusId ?? "unclassified"}
-            onValueChange={(value) => form.setValue("statusId", value, { shouldDirty: true })}
+            onValueChange={(value) => {
+              if (!value) return;
+              form.setValue("statusId", value, { shouldDirty: true });
+            }}
           >
             <SelectTrigger aria-label="Estado personal">
               <SelectValue />
@@ -664,11 +744,12 @@ function DetailForm({
           <span>Valoración</span>
           <Select
             value={watched.rating ? String(watched.rating) : "none"}
-            onValueChange={(value) =>
+            onValueChange={(value) => {
+              if (!value) return;
               form.setValue("rating", value === "none" ? undefined : Number(value), {
                 shouldDirty: true,
-              })
-            }
+              });
+            }}
           >
             <SelectTrigger aria-label="Valoración personal">
               <SelectValue />
@@ -817,7 +898,7 @@ function DetailForm({
             })}
         </fieldset>
       )}
-      <Button type="submit" size="sm" disabled={!form.formState.isDirty || mutation.isPending}>
+      <Button type="submit" size="sm" disabled={!form.formState.isDirty || savePending}>
         Guardar ahora
       </Button>
     </form>
@@ -839,6 +920,10 @@ function detailToForm(detail: GameDetail): DetailValues {
     checkpoint: detail.checkpoint ?? "",
     notes: detail.notes ?? "",
   };
+}
+
+function saveFingerprint(input: UpdateGameInput): string {
+  return JSON.stringify(input);
 }
 function DetailMetric({
   label,

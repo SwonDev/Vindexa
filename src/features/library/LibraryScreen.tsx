@@ -382,6 +382,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     libraryDrop.mutate({ appIds: current.appIds, ...destination });
   };
   const changeScope = (nextScope: LibraryScope) => {
+    setSelected(new Set());
     setScope(nextScope);
     const collection = bootstrap?.collections.find(
       (candidate) => candidate.id === nextScope.id && candidate.kind === "manual",

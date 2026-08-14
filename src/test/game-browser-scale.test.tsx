@@ -145,6 +145,33 @@ describe("ventana virtual para bibliotecas grandes", () => {
     expect(screen.getByRole("button", { name: /Juego 0001, Sin clasificar/ })).toBeVisible();
   });
 
+  it("expone la selección múltiple en el botón interactivo", () => {
+    render(
+      <TooltipProvider>
+        <GameBrowser
+          games={games.slice(0, 2)}
+          total={2}
+          view="grid"
+          selected={new Set([1])}
+          hasMore={false}
+          loadingMore={false}
+          onLoadMore={vi.fn()}
+          onSelect={vi.fn()}
+          onOpen={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: /Juego 0001, Sin clasificar/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Juego 0002, Sin clasificar/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("muestra el error exacto de una acción de Steam en una alerta accesible", async () => {
     const user = userEvent.setup();
     vi.mocked(api.launchGame).mockRejectedValueOnce(new Error("Steam no está disponible"));
