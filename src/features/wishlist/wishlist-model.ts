@@ -340,6 +340,8 @@ export interface PriceCoverage {
   headline: string;
   /** Lo que matiza la cifra. Vacío sólo cuando no hay nada que matizar. */
   caveat: string;
+  /** Juegos con descuento vigente según el último precio observado. */
+  onSale: number;
 }
 
 /**
@@ -356,6 +358,7 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
     (status) => status.price?.freshness === "stale" || status.price?.freshness === "unknown",
   ).length;
   const meetingTarget = statuses.filter((status) => status.comparable && status.meetsTarget).length;
+  const onSale = statuses.filter((status) => (status.price?.discountPercent ?? 0) > 0).length;
 
   const caveats: string[] = [];
   if (withPrice < total) {
@@ -381,7 +384,68 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
     meetingTarget,
     headline: total === 0 ? "Sin precios" : `${withPrice} de ${total} con precio`,
     caveat: caveats.length ? `${caveats.join("; ")}.` : "",
+    onSale,
   };
+}
+
+/* --- Ofertas vigentes ---------------------------------------------------- */
+
+/** Una entrada de la lista que ahora mismo está rebajada. */
+export interface WishlistOffer {
+  appId: number;
+  title: string;
+  discountPercent: number;
+  finalCents: number;
+  initialCents: number;
+  currency: string;
+  /** Cuánto falta para el objetivo. Negativo significa que ya lo cumple. */
+  differenceCents?: number;
+  meetsTarget: boolean;
+  /** El precio observado está caducado y puede haber cambiado. */
+  stale: boolean;
+}
+
+/**
+ * Ofertas vigentes de la lista, de mayor descuento a menor.
+ *
+ * Existe porque con mil quinientos deseados repartidos en cuatro carriles nadie
+ * encuentra una rebaja mirando: la razón de tener precios es poder localizar lo
+ * que ha bajado, y eso exige una lista aparte, no un dato escondido en cada
+ * tarjeta.
+ *
+ * El desempate es el ahorro absoluto y después el título, para que dos juegos
+ * con el mismo porcentaje no bailen entre recargas.
+ */
+export function collectOffers(
+  entries: readonly WishlistEntry[],
+  statuses: readonly WishlistPriceStatus[],
+): WishlistOffer[] {
+  const porAppId = new Map(statuses.map((status) => [status.appId, status] as const));
+  const ofertas: WishlistOffer[] = [];
+  for (const entry of entries) {
+    const status = porAppId.get(entry.game.appId);
+    const price = status?.price;
+    if (!price || price.discountPercent <= 0) continue;
+    ofertas.push({
+      appId: entry.game.appId,
+      title: entry.game.title,
+      discountPercent: price.discountPercent,
+      finalCents: price.finalCents,
+      initialCents: price.initialCents,
+      currency: price.currency,
+      ...(status?.differenceCents === undefined ? {} : { differenceCents: status.differenceCents }),
+      meetsTarget: Boolean(status?.comparable && status.meetsTarget),
+      stale: price.freshness === "stale" || price.freshness === "unknown",
+    });
+  }
+  return ofertas.sort(
+    (izquierda, derecha) =>
+      derecha.discountPercent - izquierda.discountPercent ||
+      derecha.initialCents -
+        derecha.finalCents -
+        (izquierda.initialCents - izquierda.finalCents) ||
+      izquierda.title.localeCompare(derecha.title, "es"),
+  );
 }
 
 /* --- Vídeos -------------------------------------------------------------- */

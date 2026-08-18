@@ -795,6 +795,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn the_allowlist_wins_over_the_blocklist() {
         // Aunque alguien añadiese un dominio de Steam a la lista de bloqueo, la
@@ -822,6 +823,7 @@ mod tests {
         );
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn cosmetic_rules_are_last_so_nothing_cancels_them() {
         let rules = rules();

@@ -893,6 +893,7 @@ mod tests {
         );
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn the_blocker_installed_in_the_window_is_the_versioned_one() {
         let compiled = blocker::content_rule_list_json();

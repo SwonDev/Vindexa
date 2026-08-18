@@ -361,11 +361,14 @@ mod tests {
         // El identificador es la sesión de la persona usuaria: si dos tiendas
         // compartieran almacén verían las cookies de la otra, y si alguno
         // cambiase se cerraría la sesión sin avisar.
+        // Se lee el UUID del perfil en lugar de `session_store_id`, que sólo
+        // existe en macOS: lo que se comprueba es una propiedad de los datos y
+        // tiene que valer en las tres plataformas.
         let mut vistos: Vec<[u8; 16]> = Vec::new();
         for store in STORES {
-            let identificador = store
-                .session_store_id()
-                .unwrap_or_else(|| panic!("{} necesita un UUID válido", store.id));
+            let identificador = uuid::Uuid::parse_str(store.session_store)
+                .map(uuid::Uuid::into_bytes)
+                .unwrap_or_else(|_| panic!("{} necesita un UUID válido", store.id));
             assert!(
                 !vistos.contains(&identificador),
                 "{} comparte almacén de sesión con otra tienda",
