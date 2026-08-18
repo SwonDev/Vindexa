@@ -95,6 +95,11 @@ jobs:
       # ahí mantiene el AppImage utilizable en distribuciones anteriores.
       - name: Instalar dependencias de sistema (sólo Linux)
         if: matrix.runner == 'ubuntu-22.04'
+        # Sin frontend interactivo: cualquier pregunta de configuración dejaría el
+        # trabajo esperando una respuesta que nadie va a dar, y el fallo se ve
+        # como un trabajo colgado sin mensaje.
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
