@@ -8,32 +8,13 @@ mod library;
 #[path = "../src/models.rs"]
 mod models;
 
+#[path = "support/schema.rs"]
+mod schema;
 use models::GameListRequest;
 use rusqlite::{Connection, params};
 
-const INITIAL_SCHEMA: &str = include_str!("../migrations/001_initial.sql");
-const INDEXES: &str = include_str!("../migrations/002_indexes.sql");
-const STORE_METADATA: &str = include_str!("../migrations/005_store_metadata.sql");
-const HERO: &str = include_str!("../migrations/006_game_hero.sql");
-const COMPLETE_METADATA: &str = include_str!("../migrations/007_steam_metadata_complete.sql");
-const FILTER_INDEXES: &str = include_str!("../migrations/010_library_filters.sql");
-const PRICING_AND_ARCHIVE: &str = include_str!("../migrations/029_pricing_and_archive.sql");
-
 fn database() -> Connection {
-    let connection = Connection::open_in_memory().expect("abrir SQLite temporal");
-    for migration in [
-        INITIAL_SCHEMA,
-        INDEXES,
-        STORE_METADATA,
-        HERO,
-        COMPLETE_METADATA,
-        FILTER_INDEXES,
-        PRICING_AND_ARCHIVE,
-    ] {
-        connection
-            .execute_batch(migration)
-            .expect("aplicar esquema de filtros");
-    }
+    let connection = schema::base_en_memoria();
     connection
         .execute(
             "INSERT INTO statuses(id, name, color, position, built_in)

@@ -70,10 +70,15 @@ use url::Url;
 pub const STORE: &str = "itch";
 
 /// Nombre visible de la tienda. Es una constante del producto.
+#[allow(dead_code, reason = "el nombre visible lo pone hoy la interfaz")]
 pub const DISPLAY_NAME: &str = "itch.io";
 
 /// Página donde la persona usuaria genera y revoca su clave. Se enseña en
 /// Ajustes para no obligar a buscarla.
+#[allow(
+    dead_code,
+    reason = "la interfaz y las capacidades ya declaran esta URL"
+)]
 pub const API_KEYS_URL: &str = "https://itch.io/user/settings/api-keys";
 
 const PROFILE_ENDPOINT: &str = "https://api.itch.io/profile";
@@ -165,14 +170,15 @@ pub mod secrets {
     /// si la clave sirve es itch.io, y lo dice respondiendo a `/profile`.
     pub fn validate_api_key(value: &str) -> AppResult<()> {
         let length = value.chars().count();
-        if length < MIN_KEY_CHARS || length > MAX_KEY_CHARS {
+        if !(MIN_KEY_CHARS..=MAX_KEY_CHARS).contains(&length) {
             return Err(AppError::validation(
                 "La clave de itch.io no tiene una longitud admisible. Cópiala entera desde los ajustes de tu cuenta.",
             ));
         }
-        if !value.chars().all(|character| {
-            character.is_ascii_graphic() && character != '"' && character != '\\'
-        }) {
+        if !value
+            .chars()
+            .all(|character| character.is_ascii_graphic() && character != '"' && character != '\\')
+        {
             return Err(AppError::validation(
                 "La clave de itch.io contiene caracteres que no puede tener. Cópiala tal cual desde los ajustes de tu cuenta.",
             ));
@@ -483,7 +489,8 @@ impl PageCursor {
 // ---------------------------------------------------------------------------
 
 fn parse_profile(bytes: &[u8]) -> AppResult<ItchAccountProfile> {
-    let envelope: ProfileEnvelope = serde_json::from_slice(bytes).map_err(|_| unexpected_shape())?;
+    let envelope: ProfileEnvelope =
+        serde_json::from_slice(bytes).map_err(|_| unexpected_shape())?;
     let user = envelope.user.ok_or_else(unexpected_shape)?;
     let username = user
         .username
@@ -501,16 +508,12 @@ fn parse_profile(bytes: &[u8]) -> AppResult<ItchAccountProfile> {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string),
-        url: user
-            .url
-            .as_deref()
-            .and_then(|value| sanitize_profile_url(value)),
+        url: user.url.as_deref().and_then(sanitize_profile_url),
     })
 }
 
 fn parse_owned_keys(bytes: &[u8]) -> AppResult<Vec<WireOwnedKey>> {
-    let page: WireOwnedKeysPage =
-        serde_json::from_slice(bytes).map_err(|_| unexpected_shape())?;
+    let page: WireOwnedKeysPage = serde_json::from_slice(bytes).map_err(|_| unexpected_shape())?;
     Ok(page.owned_keys)
 }
 
@@ -859,7 +862,10 @@ fn missing_key_error() -> AppError {
 /// migración 027 la protege, igual que en el escaneo de Epic y GOG. Tampoco se
 /// borra ninguna fila que itch.io deje de devolver: destruiría esa corrección
 /// manual sin necesidad.
-pub fn persist_library(connection: &mut Connection, fetch: &ItchFetch) -> AppResult<ItchImportReport> {
+pub fn persist_library(
+    connection: &mut Connection,
+    fetch: &ItchFetch,
+) -> AppResult<ItchImportReport> {
     if fetch.entries.len() > MAX_DISCOVERED_GAMES {
         return Err(AppError::validation(
             "La importación de itch.io supera el límite seguro.",
@@ -1298,7 +1304,10 @@ mod tests {
             entries[0].cover_url.as_deref(),
             Some("https://img.itch.zone/portada.png")
         );
-        assert_eq!(entries[0].acquired_at.as_deref(), Some("2024-01-05T10:00:00Z"));
+        assert_eq!(
+            entries[0].acquired_at.as_deref(),
+            Some("2024-01-05T10:00:00Z")
+        );
     }
 
     // -- Qué entra y qué no --------------------------------------------------
@@ -1492,7 +1501,9 @@ mod tests {
             Some(3_600)
         );
         assert_eq!(
-            retry_after_seconds(Some(&HeaderValue::from_static("Wed, 21 Oct 2026 07:28:00 GMT"))),
+            retry_after_seconds(Some(&HeaderValue::from_static(
+                "Wed, 21 Oct 2026 07:28:00 GMT"
+            ))),
             None,
             "la forma de fecha de Retry-After no se adivina: se ignora"
         );
@@ -1581,7 +1592,10 @@ mod tests {
     fn reimporting_neither_duplicates_nor_overwrites_a_manual_decision() {
         let mut connection = connection();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (500, 'Otro Juego')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (500, 'Otro Juego')",
+                [],
+            )
             .expect("sembrar Steam");
 
         let primera = fetch_with(vec![entry("1", "Primero"), entry("2", "Segundo")]);
@@ -1681,7 +1695,10 @@ mod tests {
     fn a_matching_steam_title_is_proposed_but_never_forced() {
         let mut connection = connection();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (77, 'Celeste')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (77, 'Celeste')",
+                [],
+            )
             .expect("sembrar Steam");
 
         let fetch = fetch_with(vec![entry("1", "Celeste"), entry("2", "Algo Distinto")]);
@@ -1695,7 +1712,10 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("leer fuente");
-        assert_eq!(fuente, "automatic", "la propuesta nunca se marca como humana");
+        assert_eq!(
+            fuente, "automatic",
+            "la propuesta nunca se marca como humana"
+        );
     }
 
     #[test]

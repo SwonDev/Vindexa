@@ -296,7 +296,10 @@ async fn request_token(query: &[(&str, &str)]) -> AppResult<StoredSession> {
 pub async fn fetch_account_name(session: &StoredSession) -> Option<String> {
     let response = net::client()
         .ok()?
-        .get(format!("{USERS_HOST}/users/{}", encode_path(&session.account_id)))
+        .get(format!(
+            "{USERS_HOST}/users/{}",
+            encode_path(&session.account_id)
+        ))
         .bearer_auth(&session.access_token)
         .send()
         .await
@@ -509,7 +512,9 @@ mod tests {
         assert!(url.starts_with("https://auth.gog.com/auth?"));
         assert!(url.contains(CLIENT_ID));
         assert!(url.contains("response_type=code"));
-        assert!(url.contains("redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient"));
+        assert!(url.contains(
+            "redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient"
+        ));
     }
 
     #[test]
@@ -573,7 +578,8 @@ mod tests {
 
     #[test]
     fn art_is_never_invented_when_gamesdb_does_not_publish_it() {
-        let entry = release(r#"{"title": {"*": "Un juego"}, "game": {"title": {"*": "Un juego"}}}"#);
+        let entry =
+            release(r#"{"title": {"*": "Un juego"}, "game": {"title": {"*": "Un juego"}}}"#);
         let game = into_discovered("1207658930".to_string(), entry).expect("es un juego");
         assert_eq!(game.cover_url, None);
         assert_eq!(game.header_url, None);

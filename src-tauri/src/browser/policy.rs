@@ -250,7 +250,9 @@ fn parse_as_url(text: &str) -> Option<(Url, bool)> {
     if !text.contains('.') {
         return None;
     }
-    Url::parse(&format!("https://{text}")).ok().map(|url| (url, false))
+    Url::parse(&format!("https://{text}"))
+        .ok()
+        .map(|url| (url, false))
 }
 
 /// Interpreta una URL del canal de control.
@@ -314,9 +316,7 @@ mod tests {
         assert!(NavigationVerdict::Bootstrap.should_continue());
         assert!(NavigationVerdict::Allowed(steam()).should_continue());
         assert!(!NavigationVerdict::Control(ControlCommand::Back).should_continue());
-        assert!(
-            !NavigationVerdict::Rejected(RejectionReason::HostNotAllowed).should_continue()
-        );
+        assert!(!NavigationVerdict::Rejected(RejectionReason::HostNotAllowed).should_continue());
     }
 
     #[test]
@@ -408,7 +408,11 @@ mod tests {
     fn control_urls_are_parsed_and_never_continue() {
         let token = new_control_token();
         assert_eq!(token.len(), 32);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase())
+        );
         let base = control_origin(&token);
 
         let cases = [
@@ -464,7 +468,8 @@ mod tests {
         assert_eq!(resolved.as_str(), "https://store.steampowered.com/app/620");
 
         // Escribir una URL de otra tienda soportada cambia de ventana, no de host.
-        let (target, resolved) = resolve_query(steam(), "https://www.gog.com/game/cyberpunk").unwrap();
+        let (target, resolved) =
+            resolve_query(steam(), "https://www.gog.com/game/cyberpunk").unwrap();
         assert_eq!(target.id, "gog");
         assert_eq!(resolved.host_str(), Some("www.gog.com"));
 

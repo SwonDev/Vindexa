@@ -76,74 +76,248 @@ struct DrmPattern {
 /// DRM y lanzadores de terceros. La coincidencia es por frontera de palabra:
 /// «origin» no coincide con «original soundtrack».
 const THIRD_PARTY_PATTERNS: &[DrmPattern] = &[
-    DrmPattern { needle: "denuvo", label: "Denuvo Anti-Tamper" },
-    DrmPattern { needle: "securom", label: "SecuROM" },
-    DrmPattern { needle: "starforce", label: "StarForce" },
-    DrmPattern { needle: "safedisc", label: "SafeDisc" },
-    DrmPattern { needle: "tages", label: "Tagès" },
-    DrmPattern { needle: "arxan", label: "Arxan" },
-    DrmPattern { needle: "themida", label: "Themida" },
-    DrmPattern { needle: "vmprotect", label: "VMProtect" },
-    DrmPattern { needle: "gameguard", label: "nProtect GameGuard" },
-    DrmPattern { needle: "nprotect", label: "nProtect GameGuard" },
-    DrmPattern { needle: "ea app", label: "EA app" },
-    DrmPattern { needle: "ea desktop", label: "EA app" },
-    DrmPattern { needle: "origin", label: "EA (Origin)" },
-    DrmPattern { needle: "electronic arts account", label: "Cuenta de Electronic Arts" },
-    DrmPattern { needle: "cuenta de electronic arts", label: "Cuenta de Electronic Arts" },
-    DrmPattern { needle: "ubisoft connect", label: "Ubisoft Connect" },
-    DrmPattern { needle: "uplay", label: "Uplay" },
-    DrmPattern { needle: "ubisoft account", label: "Cuenta de Ubisoft" },
-    DrmPattern { needle: "cuenta de ubisoft", label: "Cuenta de Ubisoft" },
-    DrmPattern { needle: "rockstar games launcher", label: "Rockstar Games Launcher" },
-    DrmPattern { needle: "rockstar games social club", label: "Rockstar Social Club" },
-    DrmPattern { needle: "social club", label: "Rockstar Social Club" },
-    DrmPattern { needle: "battle net", label: "Battle.net" },
-    DrmPattern { needle: "blizzard account", label: "Cuenta de Blizzard" },
-    DrmPattern { needle: "cuenta de blizzard", label: "Cuenta de Blizzard" },
-    DrmPattern { needle: "2k launcher", label: "2K Launcher" },
-    DrmPattern { needle: "2k account", label: "Cuenta 2K" },
-    DrmPattern { needle: "epic online services", label: "Epic Online Services" },
-    DrmPattern { needle: "epic games account", label: "Cuenta de Epic Games" },
-    DrmPattern { needle: "epic games launcher", label: "Epic Games Launcher" },
-    DrmPattern { needle: "cuenta de epic games", label: "Cuenta de Epic Games" },
-    DrmPattern { needle: "bethesda net", label: "Bethesda.net" },
-    DrmPattern { needle: "bethesda account", label: "Cuenta de Bethesda" },
-    DrmPattern { needle: "paradox account", label: "Cuenta de Paradox" },
-    DrmPattern { needle: "cuenta de paradox", label: "Cuenta de Paradox" },
-    DrmPattern { needle: "gog galaxy", label: "GOG Galaxy" },
-    DrmPattern { needle: "microsoft account", label: "Cuenta de Microsoft" },
-    DrmPattern { needle: "cuenta de microsoft", label: "Cuenta de Microsoft" },
-    DrmPattern { needle: "xbox live", label: "Xbox Live" },
-    DrmPattern { needle: "square enix account", label: "Cuenta de Square Enix" },
-    DrmPattern { needle: "third party drm", label: "DRM de terceros" },
-    DrmPattern { needle: "drm de terceros", label: "DRM de terceros" },
+    DrmPattern {
+        needle: "denuvo",
+        label: "Denuvo Anti-Tamper",
+    },
+    DrmPattern {
+        needle: "securom",
+        label: "SecuROM",
+    },
+    DrmPattern {
+        needle: "starforce",
+        label: "StarForce",
+    },
+    DrmPattern {
+        needle: "safedisc",
+        label: "SafeDisc",
+    },
+    DrmPattern {
+        needle: "tages",
+        label: "Tagès",
+    },
+    DrmPattern {
+        needle: "arxan",
+        label: "Arxan",
+    },
+    DrmPattern {
+        needle: "themida",
+        label: "Themida",
+    },
+    DrmPattern {
+        needle: "vmprotect",
+        label: "VMProtect",
+    },
+    DrmPattern {
+        needle: "gameguard",
+        label: "nProtect GameGuard",
+    },
+    DrmPattern {
+        needle: "nprotect",
+        label: "nProtect GameGuard",
+    },
+    DrmPattern {
+        needle: "ea app",
+        label: "EA app",
+    },
+    DrmPattern {
+        needle: "ea desktop",
+        label: "EA app",
+    },
+    DrmPattern {
+        needle: "origin",
+        label: "EA (Origin)",
+    },
+    DrmPattern {
+        needle: "electronic arts account",
+        label: "Cuenta de Electronic Arts",
+    },
+    DrmPattern {
+        needle: "cuenta de electronic arts",
+        label: "Cuenta de Electronic Arts",
+    },
+    DrmPattern {
+        needle: "ubisoft connect",
+        label: "Ubisoft Connect",
+    },
+    DrmPattern {
+        needle: "uplay",
+        label: "Uplay",
+    },
+    DrmPattern {
+        needle: "ubisoft account",
+        label: "Cuenta de Ubisoft",
+    },
+    DrmPattern {
+        needle: "cuenta de ubisoft",
+        label: "Cuenta de Ubisoft",
+    },
+    DrmPattern {
+        needle: "rockstar games launcher",
+        label: "Rockstar Games Launcher",
+    },
+    DrmPattern {
+        needle: "rockstar games social club",
+        label: "Rockstar Social Club",
+    },
+    DrmPattern {
+        needle: "social club",
+        label: "Rockstar Social Club",
+    },
+    DrmPattern {
+        needle: "battle net",
+        label: "Battle.net",
+    },
+    DrmPattern {
+        needle: "blizzard account",
+        label: "Cuenta de Blizzard",
+    },
+    DrmPattern {
+        needle: "cuenta de blizzard",
+        label: "Cuenta de Blizzard",
+    },
+    DrmPattern {
+        needle: "2k launcher",
+        label: "2K Launcher",
+    },
+    DrmPattern {
+        needle: "2k account",
+        label: "Cuenta 2K",
+    },
+    DrmPattern {
+        needle: "epic online services",
+        label: "Epic Online Services",
+    },
+    DrmPattern {
+        needle: "epic games account",
+        label: "Cuenta de Epic Games",
+    },
+    DrmPattern {
+        needle: "epic games launcher",
+        label: "Epic Games Launcher",
+    },
+    DrmPattern {
+        needle: "cuenta de epic games",
+        label: "Cuenta de Epic Games",
+    },
+    DrmPattern {
+        needle: "bethesda net",
+        label: "Bethesda.net",
+    },
+    DrmPattern {
+        needle: "bethesda account",
+        label: "Cuenta de Bethesda",
+    },
+    DrmPattern {
+        needle: "paradox account",
+        label: "Cuenta de Paradox",
+    },
+    DrmPattern {
+        needle: "cuenta de paradox",
+        label: "Cuenta de Paradox",
+    },
+    DrmPattern {
+        needle: "gog galaxy",
+        label: "GOG Galaxy",
+    },
+    DrmPattern {
+        needle: "microsoft account",
+        label: "Cuenta de Microsoft",
+    },
+    DrmPattern {
+        needle: "cuenta de microsoft",
+        label: "Cuenta de Microsoft",
+    },
+    DrmPattern {
+        needle: "xbox live",
+        label: "Xbox Live",
+    },
+    DrmPattern {
+        needle: "square enix account",
+        label: "Cuenta de Square Enix",
+    },
+    DrmPattern {
+        needle: "third party drm",
+        label: "DRM de terceros",
+    },
+    DrmPattern {
+        needle: "drm de terceros",
+        label: "DRM de terceros",
+    },
 ];
 
 /// Subconjunto admitido en `legal_notice`: solo tecnologías anti-tamper con
 /// nombre propio. Los nombres de editoras y lanzadores quedan fuera a propósito
 /// porque el aviso legal es, casi siempre, una lista de marcas registradas.
 const LEGAL_NOTICE_PATTERNS: &[DrmPattern] = &[
-    DrmPattern { needle: "denuvo", label: "Denuvo Anti-Tamper" },
-    DrmPattern { needle: "securom", label: "SecuROM" },
-    DrmPattern { needle: "starforce", label: "StarForce" },
-    DrmPattern { needle: "safedisc", label: "SafeDisc" },
-    DrmPattern { needle: "arxan", label: "Arxan" },
-    DrmPattern { needle: "themida", label: "Themida" },
-    DrmPattern { needle: "vmprotect", label: "VMProtect" },
-    DrmPattern { needle: "gameguard", label: "nProtect GameGuard" },
-    DrmPattern { needle: "nprotect", label: "nProtect GameGuard" },
+    DrmPattern {
+        needle: "denuvo",
+        label: "Denuvo Anti-Tamper",
+    },
+    DrmPattern {
+        needle: "securom",
+        label: "SecuROM",
+    },
+    DrmPattern {
+        needle: "starforce",
+        label: "StarForce",
+    },
+    DrmPattern {
+        needle: "safedisc",
+        label: "SafeDisc",
+    },
+    DrmPattern {
+        needle: "arxan",
+        label: "Arxan",
+    },
+    DrmPattern {
+        needle: "themida",
+        label: "Themida",
+    },
+    DrmPattern {
+        needle: "vmprotect",
+        label: "VMProtect",
+    },
+    DrmPattern {
+        needle: "gameguard",
+        label: "nProtect GameGuard",
+    },
+    DrmPattern {
+        needle: "nprotect",
+        label: "nProtect GameGuard",
+    },
 ];
 
 /// Señales del propio Steam.
 const STEAM_PATTERNS: &[DrmPattern] = &[
-    DrmPattern { needle: "steamworks drm", label: "Steamworks DRM" },
-    DrmPattern { needle: "steamworks", label: "Steamworks DRM" },
-    DrmPattern { needle: "steam drm", label: "Steam DRM" },
-    DrmPattern { needle: "steam client", label: "Cliente de Steam" },
-    DrmPattern { needle: "cliente de steam", label: "Cliente de Steam" },
-    DrmPattern { needle: "requires steam", label: "Requiere Steam" },
-    DrmPattern { needle: "requiere steam", label: "Requiere Steam" },
+    DrmPattern {
+        needle: "steamworks drm",
+        label: "Steamworks DRM",
+    },
+    DrmPattern {
+        needle: "steamworks",
+        label: "Steamworks DRM",
+    },
+    DrmPattern {
+        needle: "steam drm",
+        label: "Steam DRM",
+    },
+    DrmPattern {
+        needle: "steam client",
+        label: "Cliente de Steam",
+    },
+    DrmPattern {
+        needle: "cliente de steam",
+        label: "Cliente de Steam",
+    },
+    DrmPattern {
+        needle: "requires steam",
+        label: "Requiere Steam",
+    },
+    DrmPattern {
+        needle: "requiere steam",
+        label: "Requiere Steam",
+    },
 ];
 
 /// Clasifica el estado de DRM a partir de las señales oficiales.
@@ -228,12 +402,7 @@ fn assessment(state: DrmState, mut evidence: Vec<DrmEvidence>) -> DrmAssessment 
     DrmAssessment { state, evidence }
 }
 
-fn collect(
-    normalized: &str,
-    patterns: &[DrmPattern],
-    source: &str,
-    output: &mut Vec<DrmEvidence>,
-) {
+fn collect(normalized: &str, patterns: &[DrmPattern], source: &str, output: &mut Vec<DrmEvidence>) {
     for pattern in patterns {
         if !contains_phrase(normalized, pattern.needle) {
             continue;
@@ -309,7 +478,11 @@ mod tests {
     use super::{DrmSignals, classify};
     use crate::db::rich_metadata::{DrmAssessment, DrmState};
 
-    fn signals<'a>(drm: Option<&'a str>, ext: Option<&'a str>, legal: Option<&'a str>) -> DrmSignals<'a> {
+    fn signals<'a>(
+        drm: Option<&'a str>,
+        ext: Option<&'a str>,
+        legal: Option<&'a str>,
+    ) -> DrmSignals<'a> {
         DrmSignals {
             drm_notice: drm,
             ext_user_account_notice: ext,
@@ -376,11 +549,7 @@ mod tests {
 
     #[test]
     fn battle_net_is_third_party_even_written_with_a_dot() {
-        let result = classify(&signals(
-            None,
-            Some("Requires a Battle.net account."),
-            None,
-        ));
+        let result = classify(&signals(None, Some("Requires a Battle.net account."), None));
         assert_eq!(result.state, DrmState::ThirdPartyDrm);
         assert!(labels(&result).contains(&"Battle.net"));
     }
@@ -451,7 +620,7 @@ mod tests {
             None,
             None,
             Some("This game is protected by Denuvo Anti-Tamper technology."),
-            ));
+        ));
         assert_eq!(result.state, DrmState::ThirdPartyDrm);
         assert_eq!(result.evidence[0].source, "legalNotice");
     }
@@ -513,7 +682,11 @@ mod tests {
         ));
         assert_eq!(result.state, DrmState::Unknown);
         assert_eq!(result.evidence[0].source, "drmNotice");
-        assert!(result.evidence[0].matched.starts_with("Este juego requiere"));
+        assert!(
+            result.evidence[0]
+                .matched
+                .starts_with("Este juego requiere")
+        );
     }
 
     #[test]

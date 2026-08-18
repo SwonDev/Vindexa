@@ -1,8 +1,6 @@
 use crate::db::{Database, MetadataJob};
 use crate::error::{AppError, AppResult};
-use crate::steam::store_api::{
-    self, StoreBundleOutcome, StoreMetadataFailure, StoreMetadataOutcome,
-};
+use crate::steam::store_api::{self, StoreBundleOutcome, StoreMetadataFailure};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -36,13 +34,6 @@ impl Default for MetadataEnrichmentCoordinator {
 impl MetadataEnrichmentCoordinator {
     pub fn is_running(&self) -> bool {
         self.worker_running.load(Ordering::Acquire)
-    }
-
-    pub async fn fetch(&self, app_id: u32) -> Result<StoreMetadataOutcome, StoreMetadataFailure> {
-        Ok(match self.fetch_bundle(app_id).await? {
-            StoreBundleOutcome::Found(bundle) => StoreMetadataOutcome::Found(Box::new(bundle.metadata)),
-            StoreBundleOutcome::Unavailable => StoreMetadataOutcome::Unavailable,
-        })
     }
 
     /// Igual que `fetch`, pero conserva los metadatos enriquecidos de ficha.
@@ -180,15 +171,23 @@ async fn process_job(
     // restauración obtiene el write lock y espera a que estos trabajos drenen,
     // por lo que una respuesta antigua nunca puede escribirse en la nueva DB.
     let _maintenance_guard = maintenance.read().await;
-    let result = match coordinator.fetch(job.app_id).await {
-        Ok(StoreMetadataOutcome::Found(metadata)) => {
+    // Se pide el paquete completo, no sólo los campos de biblioteca: la misma
+    // respuesta de la tienda ya trae la descripción, las capturas y los vídeos.
+    // Quedarse sólo con la primera mitad obligaba a repetir la petición al abrir
+    // la ficha, y era justo el tirón que se notaba al hacerlo.
+    let result = match coordinator.fetch_bundle(job.app_id).await {
+        Ok(StoreBundleOutcome::Found(bundle)) => {
             let database = database.clone();
             run_database_unlocked(move || {
-                database.complete_metadata_enrichment(job.app_id, &metadata)
+                database.complete_metadata_enrichment_bundle(
+                    job.app_id,
+                    &bundle.metadata,
+                    &bundle.rich,
+                )
             })
             .await
         }
-        Ok(StoreMetadataOutcome::Unavailable) => {
+        Ok(StoreBundleOutcome::Unavailable) => {
             let database = database.clone();
             run_database_unlocked(move || database.complete_metadata_unavailable(job.app_id)).await
         }

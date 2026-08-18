@@ -646,14 +646,12 @@ pub enum DescriptionBlock {
     List { ordered: bool, items: Vec<String> },
 }
 
-
 /// Descripción completa de un juego como secuencia de bloques seguros.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StructuredDescription {
     pub blocks: Vec<DescriptionBlock>,
 }
-
 
 /// Clasificación de DRM derivada solo de señales oficiales de la tienda.
 ///
@@ -674,7 +672,6 @@ pub enum DrmState {
     SteamDrm,
 }
 
-
 /// Señal exacta que motivó una clasificación, para que la ficha pueda
 /// justificarla ante el usuario.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -687,7 +684,6 @@ pub struct DrmEvidence {
     pub matched: String,
 }
 
-
 /// Estado de DRM más las evidencias que lo sostienen.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -695,7 +691,6 @@ pub struct DrmAssessment {
     pub state: DrmState,
     pub evidence: Vec<DrmEvidence>,
 }
-
 
 /// Recuento de juegos por estado de DRM, para los filtros de biblioteca.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -707,14 +702,12 @@ pub struct DrmStateCounts {
     pub steam_drm: i64,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMediaKind {
     Screenshot,
     Movie,
 }
-
 
 /// Una captura o un vídeo oficial del juego.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -731,7 +724,6 @@ pub struct GameMediaItem {
     pub position: u32,
 }
 
-
 /// Colocación del logotipo sobre el hero, tal y como la publica Steam para su
 /// propia biblioteca. `appdetails` no la expone: la columna queda a `NULL`
 /// mientras ninguna fuente oficial la aporte.
@@ -742,7 +734,6 @@ pub struct LogoPosition {
     pub width_pct: f64,
     pub height_pct: f64,
 }
-
 
 /// Lectura completa para la ficha inmersiva.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -767,4 +758,3 @@ pub struct RichGameMetadata {
     pub screenshots: Vec<GameMediaItem>,
     pub movies: Vec<GameMediaItem>,
 }
-

@@ -558,8 +558,7 @@ mod tests {
     fn persisting_only_touches_the_rows_that_change() {
         let directory = TempDir::new().expect("crear directorio temporal");
         let database = temp_database(&directory);
-        let convencional =
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/3483510/library_600x900_2x.jpg";
+        let convencional = "https://shared.steamstatic.com/store_item_assets/steam/apps/3483510/library_600x900_2x.jpg";
         database
             .open()
             .expect("abrir base")
@@ -645,9 +644,7 @@ mod tests {
         escribir(&chrono::Utc::now().to_rfc3339());
         assert!(!refresh_due(&database).expect("marca reciente"));
 
-        escribir(
-            &(chrono::Utc::now() - chrono::Duration::hours(13)).to_rfc3339(),
-        );
+        escribir(&(chrono::Utc::now() - chrono::Duration::hours(13)).to_rfc3339());
         assert!(refresh_due(&database).expect("marca caducada"));
 
         // Una marca ilegible no bloquea el refresco.
@@ -660,7 +657,10 @@ mod tests {
         let directory = TempDir::new().expect("crear directorio temporal");
         let database = temp_database(&directory);
         let connection = database.open().expect("abrir base");
-        for (app_id, updated_at) in [(10_u32, "2026-08-18T10:00:00.000Z"), (20, "2020-01-01T00:00:00.000Z")] {
+        for (app_id, updated_at) in [
+            (10_u32, "2026-08-18T10:00:00.000Z"),
+            (20, "2020-01-01T00:00:00.000Z"),
+        ] {
             connection
                 .execute(
                     "INSERT INTO games(app_id, title, updated_at) VALUES (?1, 'Juego', ?2)",

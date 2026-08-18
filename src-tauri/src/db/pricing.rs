@@ -262,7 +262,10 @@ pub fn parse_store_price_overview(
     };
     // Sin `initial` la tienda está diciendo que no hay precio de referencia
     // distinto del vigente; no es motivo para descartar la observación.
-    let initial_cents = block.get("initial").and_then(json_i64).unwrap_or(final_cents);
+    let initial_cents = block
+        .get("initial")
+        .and_then(json_i64)
+        .unwrap_or(final_cents);
     let discount = block
         .get("discount_percent")
         .and_then(json_i64)
@@ -287,9 +290,11 @@ pub fn parse_store_price_overview(
 }
 
 fn json_i64(value: &serde_json::Value) -> Option<i64> {
-    value
-        .as_i64()
-        .or_else(|| value.as_str().and_then(|raw| raw.trim().parse::<i64>().ok()))
+    value.as_i64().or_else(|| {
+        value
+            .as_str()
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -298,9 +303,7 @@ fn json_i64(value: &serde_json::Value) -> Option<i64> {
 
 /// Normaliza y comprueba una observación. Devuelve moneda, país y procedencia
 /// ya en su forma canónica.
-fn validate(
-    observation: &PriceObservation,
-) -> AppResult<(String, Option<String>, String)> {
+fn validate(observation: &PriceObservation) -> AppResult<(String, Option<String>, String)> {
     if observation.app_id == 0 {
         return Err(AppError::validation("El juego indicado no es válido."));
     }
@@ -368,14 +371,7 @@ pub fn record_observation(
                FROM game_prices
               WHERE app_id = ?1 AND currency = ?2",
             params![observation.app_id, currency],
-            |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                ))
-            },
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()?;
 
@@ -521,9 +517,11 @@ pub fn evaluate_alert(
     }
 
     let title: String = connection
-        .query_row("SELECT title FROM games WHERE app_id = ?1", [app_id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT title FROM games WHERE app_id = ?1",
+            [app_id],
+            |row| row.get(0),
+        )
         .optional()?
         .ok_or_else(|| AppError::not_found("El juego ya no está en la biblioteca."))?;
 
@@ -570,7 +568,11 @@ fn ensure_game_exists(connection: &Connection, app_id: u32) -> AppResult<()> {
         return Err(AppError::validation("El juego indicado no es válido."));
     }
     connection
-        .query_row("SELECT 1 FROM games WHERE app_id = ?1", [app_id], |_| Ok(()))
+        .query_row(
+            "SELECT 1 FROM games WHERE app_id = ?1",
+            [app_id],
+            |_| Ok(()),
+        )
         .optional()?
         .ok_or_else(|| AppError::not_found(format!("El juego {app_id} no está en la biblioteca.")))
 }
@@ -771,8 +773,8 @@ pub fn stale_wishlist_app_ids(
     } else {
         limit.min(MAX_REFRESH_BATCH)
     };
-    let cutoff = (now - chrono::Duration::hours(FRESH_HOURS))
-        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    let cutoff =
+        (now - chrono::Duration::hours(FRESH_HOURS)).to_rfc3339_opts(SecondsFormat::Millis, true);
     let mut statement = connection.prepare(
         "SELECT w.app_id,
                 (SELECT MAX(p.observed_at) FROM game_prices p WHERE p.app_id = w.app_id) AS seen
@@ -875,7 +877,11 @@ mod tests {
         assert!(status.difference_cents.is_none());
         assert!(!status.meets_target);
         // Con objetivo pero sin precio no hay nada que comparar y no hay aviso.
-        assert!(evaluate_alert(&connection, 10, at(1, 12)).expect("evaluar").is_none());
+        assert!(
+            evaluate_alert(&connection, 10, at(1, 12))
+                .expect("evaluar")
+                .is_none()
+        );
         assert!(events(&connection).is_empty());
 
         // Y sigue apareciendo en la lista de lo que hay que consultar.
@@ -969,8 +975,8 @@ mod tests {
         game(&connection, 10, "Moneda rara");
         let mut invalid = observation(10, "EUROS", 1999);
         invalid.discount_percent = 0;
-        let error = record_observation(&mut connection, &invalid, at(1, 12))
-            .expect_err("debe rechazar");
+        let error =
+            record_observation(&mut connection, &invalid, at(1, 12)).expect_err("debe rechazar");
         assert!(error.to_string().contains("moneda"));
     }
 
@@ -982,8 +988,9 @@ mod tests {
         game(&connection, 10, "Rebajado");
         wish(&connection, 10, Some(2999), Some("EUR"));
 
-        let recorded = record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 12))
-            .expect("registrar");
+        let recorded =
+            record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 12))
+                .expect("registrar");
         let alert = recorded.alert.expect("hay aviso");
         assert!(alert.created);
         assert_eq!(alert.final_cents, 1999);
@@ -1013,8 +1020,9 @@ mod tests {
         record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 12))
             .expect("primera");
         // Segunda consulta con el mismo importe: la `dedupe_key` lo frena.
-        let repeated = record_observation(&mut connection, &observation(10, "EUR", 1999), at(2, 12))
-            .expect("segunda");
+        let repeated =
+            record_observation(&mut connection, &observation(10, "EUR", 1999), at(2, 12))
+                .expect("segunda");
         let alert = repeated.alert.expect("evalúa");
         assert!(!alert.created);
         assert_eq!(events(&connection).len(), 1);
@@ -1075,8 +1083,9 @@ mod tests {
         game(&connection, 10, "Estable");
         record_observation(&mut connection, &observation(10, "EUR", 2999), at(1, 12))
             .expect("primera");
-        let repeated = record_observation(&mut connection, &observation(10, "EUR", 2999), at(5, 12))
-            .expect("segunda");
+        let repeated =
+            record_observation(&mut connection, &observation(10, "EUR", 2999), at(5, 12))
+                .expect("segunda");
 
         assert!(!repeated.changed);
         // La frescura avanza…
@@ -1176,15 +1185,20 @@ mod tests {
         let mut connection = database();
         game(&connection, 10, "Uno");
         game(&connection, 20, "Otro");
-        record_observation(&mut connection, &observation(10, "EUR", 999), at(1, 12))
-            .expect("uno");
+        record_observation(&mut connection, &observation(10, "EUR", 999), at(1, 12)).expect("uno");
         record_observation(&mut connection, &observation(20, "EUR", 1999), at(1, 12))
             .expect("otro");
 
         forget_prices(&mut connection, 10).expect("olvidar");
-        assert!(prices_for_game(&connection, 10, at(1, 12)).expect("precios").is_empty());
+        assert!(
+            prices_for_game(&connection, 10, at(1, 12))
+                .expect("precios")
+                .is_empty()
+        );
         assert_eq!(
-            prices_for_game(&connection, 20, at(1, 12)).expect("precios").len(),
+            prices_for_game(&connection, 20, at(1, 12))
+                .expect("precios")
+                .len(),
             1
         );
     }

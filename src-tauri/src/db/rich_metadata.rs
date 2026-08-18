@@ -179,12 +179,7 @@ impl GameMediaKind {
 // Posición del logotipo
 // ---------------------------------------------------------------------------
 
-const PINNED_POSITIONS: [&str; 4] = [
-    "BottomLeft",
-    "BottomCenter",
-    "CenterCenter",
-    "UpperCenter",
-];
+const PINNED_POSITIONS: [&str; 4] = ["BottomLeft", "BottomCenter", "CenterCenter", "UpperCenter"];
 
 impl LogoPosition {
     pub fn validate(&self) -> AppResult<()> {
@@ -395,7 +390,10 @@ pub fn save_in_transaction(
     let detailed_description = encode_description(update.detailed_description.as_ref())?;
     let about_the_game = encode_description(update.about_the_game.as_ref())?;
     let logo_position = match &update.logo_position {
-        Some(position) => Some(encode_json(position, "No se pudo preparar la posición del logotipo recibida de Steam.")?),
+        Some(position) => Some(encode_json(
+            position,
+            "No se pudo preparar la posición del logotipo recibida de Steam.",
+        )?),
         None => None,
     };
     let (drm_state, drm_evidence) = match &update.drm {
@@ -731,7 +729,8 @@ mod tests {
             required_age: Some(0),
             controller_support: Some("full".into()),
             background_url: Some(
-                "https://store.akamai.steamstatic.com/images/storepagebackground/app/620?t=1".into(),
+                "https://store.akamai.steamstatic.com/images/storepagebackground/app/620?t=1"
+                    .into(),
             ),
             library_hero_url: Some(
                 "https://shared.steamstatic.com/store_item_assets/steam/apps/620/library_hero.jpg"
@@ -759,7 +758,10 @@ mod tests {
 
         let stored = get(&connection, 620).expect("leer metadatos ricos");
         assert_eq!(stored.detailed_description, Some(description()));
-        assert_eq!(stored.supported_languages.as_deref(), Some("Español, Inglés"));
+        assert_eq!(
+            stored.supported_languages.as_deref(),
+            Some("Español, Inglés")
+        );
         assert_eq!(stored.metacritic_score, Some(95));
         assert_eq!(stored.controller_support.as_deref(), Some("full"));
         assert_eq!(stored.drm.state, DrmState::DrmFree);
@@ -926,12 +928,8 @@ mod tests {
         .expect_err("rechazar URL sin HTTPS");
         assert_eq!(insecure_url.code, "validation");
 
-        let duplicated = replace_media(
-            &mut connection,
-            620,
-            &[screenshot(1, 0), screenshot(1, 1)],
-        )
-        .expect_err("rechazar medios duplicados");
+        let duplicated = replace_media(&mut connection, 620, &[screenshot(1, 0), screenshot(1, 1)])
+            .expect_err("rechazar medios duplicados");
         assert_eq!(duplicated.code, "validation");
 
         let unsupported_pad = save(

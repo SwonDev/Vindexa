@@ -1,0 +1,34 @@
+# Actualizaciones de dependencias.
+#
+# Agrupadas y mensuales a propósito: el proyecto fija versiones exactas y una
+# avalancha semanal de propuestas de un solo paquete no se revisa, se ignora.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      interfaz:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore(deps)'
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      backend:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore(deps)'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'

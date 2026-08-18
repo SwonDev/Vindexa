@@ -221,6 +221,10 @@ pub fn complete(
 }
 
 /// Fila pendiente lista para confirmarse o rechazarse.
+// Los campos que hoy nadie lee forman parte del modelo que el puente
+// devuelve a quien lo integre: recortarlos obligaría a volver a consultar
+// la base para reconstruirlos.
+#[allow(dead_code, reason = "modelo público del puente de agentes")]
 #[derive(Debug, Clone)]
 pub struct PendingAction {
     pub id: String,
@@ -263,6 +267,10 @@ pub fn find_pending(connection: &Connection, audit_id: &str) -> AppResult<Pendin
 }
 
 /// Acción aplicada localizada por su token de deshacer.
+// Los campos que hoy nadie lee forman parte del modelo que el puente
+// devuelve a quien lo integre: recortarlos obligaría a volver a consultar
+// la base para reconstruirlos.
+#[allow(dead_code, reason = "modelo público del puente de agentes")]
 #[derive(Debug, Clone)]
 pub struct UndoableAction {
     pub id: String,

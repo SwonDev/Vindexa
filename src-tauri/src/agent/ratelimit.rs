@@ -79,6 +79,10 @@ impl RateLimiter {
         Ok(())
     }
 
+    // Sólo la ejercitan las pruebas: ninguna respuesta del puente publica
+    // todavía el margen restante. Se conserva porque es el dato que hace
+    // falta para devolver una cabecera de límite al cliente.
+    #[allow(dead_code, reason = "aún no se publica el margen al cliente")]
     /// Peticiones que aún caben en la ventana actual.
     pub fn remaining(&self, client_id: &str, now_millis: i64) -> usize {
         let seen = match self.seen.lock() {

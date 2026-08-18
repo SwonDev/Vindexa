@@ -125,7 +125,11 @@ pub(crate) fn delete_catalog_game(connection: &Connection, app_id: u32) -> AppRe
 /// ¿Tiene este juego ficha en la biblioteca?
 pub(crate) fn in_library(connection: &Connection, app_id: u32) -> AppResult<bool> {
     Ok(connection
-        .query_row("SELECT 1 FROM games WHERE app_id = ?1", [app_id], |_| Ok(()))
+        .query_row(
+            "SELECT 1 FROM games WHERE app_id = ?1",
+            [app_id],
+            |_| Ok(()),
+        )
         .optional()?
         .is_some())
 }
@@ -207,7 +211,10 @@ mod tests {
     fn a_game_in_the_library_cannot_enter_the_catalog() {
         let connection = database();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (10, 'Poseído')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (10, 'Poseído')",
+                [],
+            )
             .expect("crear juego de biblioteca");
 
         let rejected = upsert_catalog_game(&connection, 10, "Poseído", "steam_wishlist")

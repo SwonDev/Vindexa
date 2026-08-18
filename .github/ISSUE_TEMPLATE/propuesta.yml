@@ -1,0 +1,22 @@
+name: Proponer una mejora
+description: Una idea para que Vindexa haga mejor su trabajo.
+labels: ['propuesta']
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema tienes
+      description: Cuenta la situación, no la solución. Es la parte que más ayuda.
+      placeholder: 'Tengo 3000 juegos y cuando quiero decidir qué jugar…'
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Qué se te ocurre
+      description: Opcional. Si ya tienes una idea de cómo resolverlo, cuéntala.
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Cómo lo resuelves ahora
+      description: Qué haces hoy para salir del paso, dentro o fuera de Vindexa.

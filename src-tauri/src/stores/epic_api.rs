@@ -199,8 +199,8 @@ fn validate_code(code: &str) -> AppResult<String> {
     // Epic emite códigos hexadecimales de treinta y dos caracteres, pero el
     // rango se deja holgado a propósito: rechazar un código válido porque su
     // longitud cambió sería peor que dejar que Epic conteste que no vale.
-    let plausible = (16..=128).contains(&code.len())
-        && code.bytes().all(|byte| byte.is_ascii_alphanumeric());
+    let plausible =
+        (16..=128).contains(&code.len()) && code.bytes().all(|byte| byte.is_ascii_alphanumeric());
     if !plausible {
         return Err(invalid_code());
     }
@@ -300,7 +300,9 @@ pub async fn revoke(session: &StoredSession) -> AppResult<()> {
 fn urlencoding_path(value: &str) -> String {
     value
         .chars()
-        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        .filter(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
         .collect()
 }
 
@@ -472,8 +474,14 @@ mod tests {
         let code = "0123456789abcdef0123456789abcdef";
 
         assert_eq!(extract_authorization_code(code).unwrap(), code);
-        assert_eq!(extract_authorization_code(&format!("  {code}  ")).unwrap(), code);
-        assert_eq!(extract_authorization_code(&format!("\"{code}\"")).unwrap(), code);
+        assert_eq!(
+            extract_authorization_code(&format!("  {code}  ")).unwrap(),
+            code
+        );
+        assert_eq!(
+            extract_authorization_code(&format!("\"{code}\"")).unwrap(),
+            code
+        );
         assert_eq!(
             extract_authorization_code(&format!(
                 "{{\"redirectUrl\":\"https://localhost\",\"authorizationCode\":\"{code}\",\"sid\":null}}"
@@ -482,8 +490,10 @@ mod tests {
             code
         );
         assert_eq!(
-            extract_authorization_code(&format!("https://www.epicgames.com/id/api/redirect?code={code}"))
-                .unwrap(),
+            extract_authorization_code(&format!(
+                "https://www.epicgames.com/id/api/redirect?code={code}"
+            ))
+            .unwrap(),
             code
         );
     }
@@ -503,7 +513,10 @@ mod tests {
     #[test]
     fn a_token_can_never_turn_into_a_path_segment() {
         assert_eq!(urlencoding_path("abc123"), "abc123");
-        assert_eq!(urlencoding_path("../../account/api/oauth"), "....accountapioauth");
+        assert_eq!(
+            urlencoding_path("../../account/api/oauth"),
+            "....accountapioauth"
+        );
         assert_eq!(urlencoding_path("a/b?c=d#e"), "abcde");
     }
 
@@ -517,9 +530,8 @@ mod tests {
 
     #[test]
     fn a_mod_entry_is_not_a_game_of_the_library() {
-        let item = catalog_item(
-            r#"{"title":"Recurso","keyImages":[],"categories":[{"path":"mods"}]}"#,
-        );
+        let item =
+            catalog_item(r#"{"title":"Recurso","keyImages":[],"categories":[{"path":"mods"}]}"#);
         assert!(into_discovered("Recurso_App".to_string(), item).is_none());
     }
 

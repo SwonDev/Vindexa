@@ -129,7 +129,8 @@ pub fn resolve_launch_target(
     if let (Some(install_path), Some(launch_target)) = (install_path, launch_target) {
         let install_directory = Path::new(install_path);
         if paths::is_real_directory(install_directory)
-            && let Some(executable) = paths::resolve_executable_within(install_directory, launch_target)
+            && let Some(executable) =
+                paths::resolve_executable_within(install_directory, launch_target)
         {
             return Ok(LaunchTarget::Executable(paths::display_path(&executable)));
         }
@@ -148,10 +149,7 @@ pub fn resolve_launch_target(
 /// Vindexa entrega la acción y **no conoce el resultado**: si el cliente de la
 /// tienda decide pedir una actualización, mostrar un aviso o no hacer nada, eso
 /// ya no depende de aquí.
-pub fn open_external_game<R: Runtime>(
-    app: &AppHandle<R>,
-    target: &LaunchTarget,
-) -> AppResult<()> {
+pub fn open_external_game<R: Runtime>(app: &AppHandle<R>, target: &LaunchTarget) -> AppResult<()> {
     match target {
         LaunchTarget::ProtocolUrl(url) => app.opener().open_url(url.as_str(), None::<&str>)?,
         LaunchTarget::Executable(path) => app.opener().open_path(path.as_str(), None::<&str>)?,

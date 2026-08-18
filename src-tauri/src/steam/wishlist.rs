@@ -73,6 +73,11 @@ pub struct SteamWishlistItem {
 }
 
 /// Lo que devuelve una lectura completa de la lista de deseados.
+// `steam_id` y `titles_resolved` no los lee nadie todavía: quien importa sólo
+// mira los elementos y los recuentos de fallo. Se conservan porque son lo que
+// hace falta para explicar de qué cuenta salió la lista y cuántos títulos se
+// pudieron resolver, y recalcularlos después obligaría a repetir la lectura.
+#[allow(dead_code, reason = "modelo completo del retrato de la lista")]
 #[derive(Debug, Clone)]
 pub struct SteamWishlistSnapshot {
     pub steam_id: String,
@@ -148,7 +153,12 @@ pub async fn fetch(
     super::web_api::validate_steam_id(steam_id)?;
     let client = wishlist_client()?;
 
-    let bytes = get_bytes(client, WISHLIST_ENDPOINT, &[("steamid", steam_id.to_owned())]).await?;
+    let bytes = get_bytes(
+        client,
+        WISHLIST_ENDPOINT,
+        &[("steamid", steam_id.to_owned())],
+    )
+    .await?;
     let mut items = parse_wishlist(&bytes)?;
 
     if items.is_empty() {
@@ -502,8 +512,8 @@ fn classify_request_error(error: reqwest::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        PUBLIC_VISIBILITY, parse_retry_after, parse_store_items, parse_wishlist, private_wishlist_error,
-        rate_limited_error, store_items_input_json, unix_to_rfc3339,
+        PUBLIC_VISIBILITY, parse_retry_after, parse_store_items, parse_wishlist,
+        private_wishlist_error, rate_limited_error, store_items_input_json, unix_to_rfc3339,
     };
     use reqwest::header::HeaderValue;
     use std::time::Duration;
@@ -554,8 +564,8 @@ mod tests {
 
     #[test]
     fn a_corrupt_response_fails_with_its_own_code() {
-        let error =
-            parse_wishlist(b"{\"response\":{\"items\":[{\"appid\":").expect_err("rechazar JSON roto");
+        let error = parse_wishlist(b"{\"response\":{\"items\":[{\"appid\":")
+            .expect_err("rechazar JSON roto");
         assert_eq!(error.code, "steam_wishlist_response");
 
         let store = parse_store_items(b"no es json").expect_err("rechazar tienda ilegible");
@@ -628,15 +638,14 @@ mod tests {
             parse_retry_after(Some(&HeaderValue::from_static("0"))),
             Some(Duration::from_secs(1))
         );
-        assert_eq!(parse_retry_after(Some(&HeaderValue::from_static("ya"))), None);
+        assert_eq!(
+            parse_retry_after(Some(&HeaderValue::from_static("ya"))),
+            None
+        );
 
         let hinted = rate_limited_error(Some(Duration::from_secs(45)));
         assert_eq!(hinted.code, "steam_wishlist_rate_limited");
         assert!(hinted.message.contains("45 segundos"));
-        assert!(
-            rate_limited_error(None)
-                .message
-                .contains("unos minutos")
-        );
+        assert!(rate_limited_error(None).message.contains("unos minutos"));
     }
 }

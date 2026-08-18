@@ -198,7 +198,9 @@ fn candidate_install_roots() -> Vec<PathBuf> {
     if cfg!(target_os = "windows") {
         for drive in ['C', 'D', 'E'] {
             candidates.push(PathBuf::from(format!("{drive}:\\GOG Games")));
-            candidates.push(PathBuf::from(format!("{drive}:\\Program Files (x86)\\GOG Galaxy\\Games")));
+            candidates.push(PathBuf::from(format!(
+                "{drive}:\\Program Files (x86)\\GOG Galaxy\\Games"
+            )));
         }
     }
     if let Some(home) = paths::home_directory() {
@@ -589,7 +591,10 @@ fn query_installations(
         let product_id: i64 = row.get(0)?;
         let installation_path: Option<String> = row.get(1)?;
         let (title, images) = if with_details {
-            (row.get::<_, Option<String>>(2)?, row.get::<_, Option<String>>(3)?)
+            (
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            )
         } else {
             (None, None)
         };
@@ -703,7 +708,9 @@ fn read_play_task_parameters(connection: &Connection) -> BTreeMap<String, String
         if validate_gog_product_id(product_id).is_err() || executable.trim().is_empty() {
             continue;
         }
-        parameters.entry(product_id.to_string()).or_insert(executable);
+        parameters
+            .entry(product_id.to_string())
+            .or_insert(executable);
     }
     parameters
 }
@@ -820,11 +827,11 @@ fn parse_game_info(contents: &str, install_directory: &Path) -> Option<Discovere
     validate_gog_product_id(game_id).ok()?;
     let title = info.name.as_deref().and_then(sanitize_title)?;
 
-    let canonical_directory = paths::canonical_install_directory(&paths::display_path(install_directory));
+    let canonical_directory =
+        paths::canonical_install_directory(&paths::display_path(install_directory));
     let launch_target = canonical_directory.as_ref().and_then(|directory| {
         let declared = primary_play_task(&info.play_tasks)?;
-        paths::resolve_executable_within(directory, declared)
-            .map(|path| paths::display_path(&path))
+        paths::resolve_executable_within(directory, declared).map(|path| paths::display_path(&path))
     });
     let install_path = canonical_directory
         .as_ref()
@@ -1096,7 +1103,12 @@ mod tests {
         assert_eq!(game.external_id, "1207658924");
         assert_eq!(game.title, "The Witcher: Enhanced Edition");
         assert!(game.installed);
-        assert!(game.launch_target.as_deref().unwrap().ends_with("witcher.exe"));
+        assert!(
+            game.launch_target
+                .as_deref()
+                .unwrap()
+                .ends_with("witcher.exe")
+        );
         assert_eq!(
             game.cover_url.as_deref(),
             Some("https://images.gog.com/icono.png")
@@ -1105,7 +1117,9 @@ mod tests {
         assert_eq!(game.drm_state, DrmState::DrmFree);
 
         // El original conserva su tamaño: sólo se leyó la copia.
-        let after = fs::metadata(&database).expect("metadatos posteriores").len();
+        let after = fs::metadata(&database)
+            .expect("metadatos posteriores")
+            .len();
         assert_eq!(before, after);
     }
 
@@ -1277,9 +1291,18 @@ mod tests {
             extract_image_url(r#"{"squareIcon": "https://images.gog.com/a.png"}"#).as_deref(),
             Some("https://images.gog.com/a.png")
         );
-        assert_eq!(extract_image_url(r#"{"squareIcon": "http://images.gog.com/a.png"}"#), None);
-        assert_eq!(extract_image_url(r#"{"squareIcon": "javascript:alert(1)"}"#), None);
-        assert_eq!(extract_image_url(r#"{"squareIcon": "/relativa.png"}"#), None);
+        assert_eq!(
+            extract_image_url(r#"{"squareIcon": "http://images.gog.com/a.png"}"#),
+            None
+        );
+        assert_eq!(
+            extract_image_url(r#"{"squareIcon": "javascript:alert(1)"}"#),
+            None
+        );
+        assert_eq!(
+            extract_image_url(r#"{"squareIcon": "/relativa.png"}"#),
+            None
+        );
         assert_eq!(extract_image_url("no es json"), None);
         assert_eq!(extract_image_url("{}"), None);
     }

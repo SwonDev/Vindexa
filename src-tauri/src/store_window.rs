@@ -185,9 +185,7 @@ fn build_hardened_window<R: Runtime>(
         .disable_drag_drop_handler()
         .initialization_script(chrome::initialization_script(token, store))
         .on_navigation(move |url| decide_navigation(&nav_app, store, &nav_label, url))
-        .on_new_window(move |url, _features| {
-            deny_new_window(&popup_app, store, &popup_label, url)
-        })
+        .on_new_window(move |url, _features| deny_new_window(&popup_app, store, &popup_label, url))
         .on_download(move |_webview, event| {
             if matches!(event, DownloadEvent::Requested { .. }) {
                 notify(&download_app, &download_label, messages::DOWNLOAD_BLOCKED);
@@ -247,7 +245,8 @@ fn decide_navigation<R: Runtime>(
     match policy::evaluate(store, url) {
         NavigationVerdict::Bootstrap => true,
         NavigationVerdict::Allowed(_) => {
-            if let Some(generation) = session::with_window(label, |state| state.note_navigation(url))
+            if let Some(generation) =
+                session::with_window(label, |state| state.note_navigation(url))
             {
                 watch_load(app.clone(), label.to_string(), generation);
             }
@@ -367,7 +366,9 @@ async fn run_control<R: Runtime>(
                 (state.database.clone(), state.maintenance.clone())
             };
             let message = crate::steam::wishlist_session::add_current_page_to_wishlist(
-                &label, database, maintenance,
+                &label,
+                database,
+                maintenance,
             )
             .await;
             notify(&app, &label, &message);
@@ -638,8 +639,7 @@ async fn install_native_content_blocker<R: Runtime>(window: &WebviewWindow<R>) -
         std::fs::create_dir_all(&store_directory).map_err(|_| store_protection_error())?;
         let store_path = CString::new(store_directory.to_string_lossy().as_bytes())
             .map_err(|_| store_protection_error())?;
-        let identifier =
-            CString::new(blocker::BLOCKER_ID).map_err(|_| store_protection_error())?;
+        let identifier = CString::new(blocker::BLOCKER_ID).map_err(|_| store_protection_error())?;
         Ok::<_, AppError>((store_path, identifier))
     })();
     let (store_path, identifier) = match native_inputs {
@@ -822,7 +822,9 @@ mod tests {
             reviewed += 1;
 
             assert!(
-                capability.get("remote").is_none_or(serde_json::Value::is_null),
+                capability
+                    .get("remote")
+                    .is_none_or(serde_json::Value::is_null),
                 "ninguna capability puede abrirse a orígenes remotos: {}",
                 path.display()
             );

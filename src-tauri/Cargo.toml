@@ -1,7 +1,7 @@
 [package]
 name = "vindexa"
 version = "0.1.0"
-description = "Biblioteca personal de Steam, planificación y seguimiento."
+description = "Biblioteca de juegos multitienda, planificación y seguimiento."
 authors = ["Vindexa contributors"]
 license = "MIT"
 edition = "2024"

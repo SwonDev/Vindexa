@@ -13,37 +13,12 @@ use models::GameListRequest;
 use rusqlite::Connection;
 use std::time::{Duration, Instant};
 
-const INITIAL_SCHEMA: &str = include_str!("../migrations/001_initial.sql");
-const INDEXES_AND_SEARCH: &str = include_str!("../migrations/002_indexes.sql");
-const STORE_METADATA: &str = include_str!("../migrations/005_store_metadata.sql");
-const HERO: &str = include_str!("../migrations/006_game_hero.sql");
-const COMPLETE_METADATA: &str = include_str!("../migrations/007_steam_metadata_complete.sql");
-const FILTER_INDEXES: &str = include_str!("../migrations/010_library_filters.sql");
-const PRICING_AND_ARCHIVE: &str = include_str!("../migrations/029_pricing_and_archive.sql");
 const LARGE_LIBRARY_SIZE: usize = 5_000;
 
+#[path = "support/schema.rs"]
+mod schema;
 fn large_library_database() -> (Connection, Duration) {
-    let mut connection = Connection::open_in_memory().expect("abrir SQLite temporal");
-    connection
-        .execute_batch("PRAGMA foreign_keys = ON;")
-        .expect("activar claves foráneas");
-    connection
-        .execute_batch(INITIAL_SCHEMA)
-        .expect("aplicar esquema inicial");
-    connection
-        .execute_batch(INDEXES_AND_SEARCH)
-        .expect("aplicar índices y búsqueda");
-    for migration in [
-        STORE_METADATA,
-        HERO,
-        COMPLETE_METADATA,
-        FILTER_INDEXES,
-        PRICING_AND_ARCHIVE,
-    ] {
-        connection
-            .execute_batch(migration)
-            .expect("aplicar esquema actual de biblioteca");
-    }
+    let mut connection = schema::base_en_memoria();
     connection
         .execute(
             "INSERT INTO statuses(id, name, color, position, built_in)

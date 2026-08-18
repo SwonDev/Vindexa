@@ -420,10 +420,7 @@ describe("panel de tiendas externas", () => {
     const user = userEvent.setup();
     invoke.mockImplementation((command: string) => {
       if (command === "list_external_store_sessions") {
-        return Promise.resolve([
-          session({ supportsInAppLogin: false }),
-          SIGNED_OUT_SESSIONS[1],
-        ]);
+        return Promise.resolve([session({ supportsInAppLogin: false }), SIGNED_OUT_SESSIONS[1]]);
       }
       if (command === "itch_session_state") return Promise.resolve(ITCH_IDLE);
       if (command === "begin_external_store_login") {

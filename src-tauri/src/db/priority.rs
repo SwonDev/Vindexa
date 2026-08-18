@@ -277,19 +277,47 @@ pub const TASTE_VERDICTS: [&str; 3] = ["interested", "not_interested", "owned_al
 /// columna no acabe siendo texto libre venido del frontend.
 pub const TASTE_SURFACES: [&str; 4] = ["upcoming", "library", "discovery", "detail"];
 /// Procedencias admitidas de un próximo lanzamiento, iguales al `CHECK` de 024.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 pub const UPCOMING_SOURCES: [&str; 3] = ["store", "library_relation", "manual"];
 
 /// Tope de candidatos importados de una sentada.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_UPCOMING_BATCH: usize = 2_000;
 /// Longitud máxima del título de un candidato.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_UPCOMING_TITLE: usize = 200;
 /// Longitud máxima de la descripción corta de un candidato.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_UPCOMING_DESCRIPTION: usize = 2_000;
 /// Número máximo de géneros o categorías por candidato.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_UPCOMING_FACETS: usize = 30;
 /// Longitud máxima de un valor de faceta.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_FACET_VALUE: usize = 120;
 /// Longitud máxima de cualquier URL persistida.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const MAX_URL_LENGTH: usize = 2_048;
 /// Tope de resultados de [`list_upcoming`] y [`list_priority_ranking`].
 const MAX_LIST_LIMIT: u32 = 500;
@@ -298,6 +326,10 @@ const MAX_LIST_LIMIT: u32 = 500;
 /// familia de hosts que ya autoriza la CSP de la ventana principal; se repite
 /// aquí porque la lista equivalente de `steam::store_api` es privada. Validar
 /// aquí evita persistir una URL que después la ventana no podría pintar.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 const ALLOWED_ART_HOSTS: [&str; 9] = [
     "shared.steamstatic.com",
     "shared.cloudflare.steamstatic.com",
@@ -595,8 +627,7 @@ pub fn evaluate_priority(input: &PriorityInput, now: DateTime<Utc>) -> PriorityO
             }
             None => (
                 COMPLETED_WITHOUT_DATE_FACTOR,
-                "Terminado al 100 % sin fecha registrada: la prioridad baja igual."
-                    .to_string(),
+                "Terminado al 100 % sin fecha registrada: la prioridad baja igual.".to_string(),
             ),
         };
         signals.push(signal("completed", -COMPLETED_PENALTY * factor, detail));
@@ -641,9 +672,8 @@ pub fn evaluate_priority(input: &PriorityInput, now: DateTime<Utc>) -> PriorityO
         let mut activity = 0.0;
 
         if input.playtime_recent_minutes > 0 {
-            let ratio = saturate(
-                input.playtime_recent_minutes as f64 / RECENT_PLAYTIME_SATURATION_MINUTES,
-            );
+            let ratio =
+                saturate(input.playtime_recent_minutes as f64 / RECENT_PLAYTIME_SATURATION_MINUTES);
             activity += RECENT_PLAYTIME_WEIGHT * ratio;
             parts.push(format!(
                 "{} min en las dos últimas semanas",
@@ -678,9 +708,7 @@ pub fn evaluate_priority(input: &PriorityInput, now: DateTime<Utc>) -> PriorityO
     }
 
     // ── Fecha objetivo ─────────────────────────────────────────────────────
-    if !settled
-        && let Some(target) = input.target_date
-    {
+    if !settled && let Some(target) = input.target_date {
         let days_left = (target - today).num_days();
         if days_left < 0 {
             let overdue = -days_left as f64;
@@ -1034,7 +1062,9 @@ fn load_recent_sessions(
           GROUP BY app_id",
     )?;
     let rows = statement
-        .query_map([since], |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u32>(1)?)))?
+        .query_map([since], |row| {
+            Ok((row.get::<_, u32>(0)?, row.get::<_, u32>(1)?))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows.into_iter().collect())
 }
@@ -1092,7 +1122,9 @@ fn load_priority_rows(
                     installed: row.get::<_, i64>(14)? != 0,
                     pinned: row.get::<_, i64>(15)? != 0,
                     tracking: row.get::<_, i64>(16)? != 0,
-                    rating: row.get::<_, Option<i64>>(17)?.map(|value| value.clamp(1, 10) as u8),
+                    rating: row
+                        .get::<_, Option<i64>>(17)?
+                        .map(|value| value.clamp(1, 10) as u8),
                     completed_at: parse_flexible_date(row.get(18)?),
                     abandoned_at: parse_flexible_date(row.get(19)?),
                     target_date: parse_flexible_date(row.get(20)?),
@@ -1441,8 +1473,8 @@ fn affinity_for(facets: &[(Facet, String)], weights: &BTreeMap<FacetKey, f64>) -
 }
 
 fn load_taste_weights(connection: &Connection) -> AppResult<BTreeMap<FacetKey, f64>> {
-    let mut statement =
-        connection.prepare("SELECT facet, value, weight FROM taste_weights ORDER BY facet, value")?;
+    let mut statement = connection
+        .prepare("SELECT facet, value, weight FROM taste_weights ORDER BY facet, value")?;
     let rows = statement
         .query_map([], |row| {
             Ok((
@@ -1484,8 +1516,8 @@ fn load_latest_feedback(connection: &Connection) -> AppResult<BTreeMap<u32, Stri
 
 /// Evidencia que aporta un juego propio, en `-1..1`.
 fn taste_sample(input: &PriorityInput, verdict: Option<&str>, today: NaiveDate) -> f64 {
-    let mut sample =
-        TASTE_PLAYTIME_PULL * saturate(input.playtime_minutes as f64 / TASTE_PLAYTIME_SATURATION_MINUTES);
+    let mut sample = TASTE_PLAYTIME_PULL
+        * saturate(input.playtime_minutes as f64 / TASTE_PLAYTIME_SATURATION_MINUTES);
 
     if input.completed_at.is_some() || input.progress >= 100 {
         sample += TASTE_COMPLETED_PULL;
@@ -1496,12 +1528,12 @@ fn taste_sample(input: &PriorityInput, verdict: Option<&str>, today: NaiveDate) 
     if let Some(rating) = input.rating {
         if rating >= TASTE_HIGH_RATING_THRESHOLD {
             let span = f64::from(10 - TASTE_HIGH_RATING_THRESHOLD + 1);
-            sample += TASTE_HIGH_RATING_PULL * f64::from(rating - TASTE_HIGH_RATING_THRESHOLD + 1)
-                / span;
+            sample +=
+                TASTE_HIGH_RATING_PULL * f64::from(rating - TASTE_HIGH_RATING_THRESHOLD + 1) / span;
         } else if rating <= TASTE_LOW_RATING_THRESHOLD {
             let span = f64::from(TASTE_LOW_RATING_THRESHOLD);
-            sample -= TASTE_LOW_RATING_PUSH * f64::from(TASTE_LOW_RATING_THRESHOLD + 1 - rating)
-                / span;
+            sample -=
+                TASTE_LOW_RATING_PUSH * f64::from(TASTE_LOW_RATING_THRESHOLD + 1 - rating) / span;
         }
     }
     if input.abandoned_at.is_some() {
@@ -1748,9 +1780,24 @@ pub fn record_taste_feedback(
 // Próximos lanzamientos
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Importación de próximos lanzamientos
+//
+// Esta capa valida y persiste candidatos que le entregue quien los haya
+// descargado, y está cubierta por pruebas. Todavía no tiene llamador: la
+// pantalla de descubrimiento puntúa los próximos lanzamientos a partir de los
+// juegos que ya están en la biblioteca, y falta el lector que traiga los que
+// no se poseen. Se conserva entera porque es la mitad difícil —la validación—
+// y rehacerla al escribir ese lector sería trabajo repetido.
+// ---------------------------------------------------------------------------
+
 /// Candidato tal y como lo entrega quien lo descargó. Este módulo no habla con
 /// la red: solo valida y persiste.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 pub struct ImportedUpcomingRelease {
     pub app_id: u32,
     pub title: String,
@@ -1797,12 +1844,20 @@ pub struct UpcomingRelease {
 /// Resultado de importar candidatos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 pub struct UpcomingImportSummary {
     pub received: u32,
     pub inserted: u32,
     pub updated: u32,
 }
 
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 fn validate_art_url(value: Option<&str>) -> AppResult<Option<String>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -1826,6 +1881,10 @@ fn validate_art_url(value: Option<&str>) -> AppResult<Option<String>> {
     Ok(Some(value.to_string()))
 }
 
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 fn validate_facet_values(values: &[String], label: &str) -> AppResult<Vec<String>> {
     if values.len() > MAX_UPCOMING_FACETS {
         return Err(AppError::validation(format!(
@@ -1852,6 +1911,10 @@ fn validate_facet_values(values: &[String], label: &str) -> AppResult<Vec<String
     Ok(cleaned)
 }
 
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 fn validate_optional_text(
     value: Option<&str>,
     limit: usize,
@@ -1866,6 +1929,10 @@ fn validate_optional_text(
     Ok(Some(value.to_string()))
 }
 
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 fn validate_release_date(value: Option<&str>, is_exact: bool) -> AppResult<Option<String>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -1891,6 +1958,10 @@ fn validate_release_date(value: Option<&str>, is_exact: bool) -> AppResult<Optio
 /// Conserva `match_score`, `match_reason` y `dismissed_at`: puntuar es trabajo de
 /// [`score_upcoming`] y descartar es una decisión de la persona usuaria; una
 /// reimportación no debe pisar ninguna de las dos.
+#[allow(
+    dead_code,
+    reason = "importación de próximos lanzamientos sin llamador todavía"
+)]
 pub fn upsert_upcoming(
     connection: &mut Connection,
     items: &[ImportedUpcomingRelease],
@@ -2040,9 +2111,7 @@ fn upcoming_facets(
     facets
 }
 
-fn load_dismissed_upcoming_facets(
-    connection: &Connection,
-) -> AppResult<Vec<Vec<(Facet, String)>>> {
+fn load_dismissed_upcoming_facets(connection: &Connection) -> AppResult<Vec<Vec<(Facet, String)>>> {
     let mut statement = connection.prepare(
         "SELECT genres_json, categories_json, developer, publisher
            FROM upcoming_releases
@@ -2274,7 +2343,15 @@ mod tests {
     }
 
     fn insert_game(connection: &Connection, app_id: u32, title: &str, genres: &[&str]) {
-        insert_game_full(connection, app_id, title, genres, None, 0, "2024-01-01T00:00:00Z");
+        insert_game_full(
+            connection,
+            app_id,
+            title,
+            genres,
+            None,
+            0,
+            "2024-01-01T00:00:00Z",
+        );
     }
 
     fn insert_game_full(
@@ -2908,13 +2985,20 @@ mod tests {
                 .expect("consultar señal")
         };
         assert!(has_affinity(1), "un favorito debe tener afinidad");
-        assert!(!has_affinity(99), "un género ajeno no debe inventar afinidad");
+        assert!(
+            !has_affinity(99),
+            "un género ajeno no debe inventar afinidad"
+        );
     }
 
     // -- Próximos lanzamientos ---------------------------------------------
 
-    fn upcoming(app_id: u32, title: &str, genres: &[&str], developer: Option<&str>)
-    -> ImportedUpcomingRelease {
+    fn upcoming(
+        app_id: u32,
+        title: &str,
+        genres: &[&str],
+        developer: Option<&str>,
+    ) -> ImportedUpcomingRelease {
         ImportedUpcomingRelease {
             app_id,
             title: title.to_string(),
@@ -2972,7 +3056,12 @@ mod tests {
         learn_taste(&mut connection, now()).expect("aprender");
         upsert_upcoming(
             &mut connection,
-            &[upcoming(500, "Silksong", &["Metroidvania"], Some("Team Cherry"))],
+            &[upcoming(
+                500,
+                "Silksong",
+                &["Metroidvania"],
+                Some("Team Cherry"),
+            )],
         )
         .expect("importar candidato");
         assert_eq!(score_upcoming(&mut connection, now()).expect("puntuar"), 1);
@@ -3135,7 +3224,12 @@ mod tests {
         let mut connection = database();
         let summary = upsert_upcoming(
             &mut connection,
-            &[upcoming(500, "Silksong", &["Metroidvania"], Some("Team Cherry"))],
+            &[upcoming(
+                500,
+                "Silksong",
+                &["Metroidvania"],
+                Some("Team Cherry"),
+            )],
         )
         .expect("importar");
         assert_eq!(summary.inserted, 1);
@@ -3144,7 +3238,12 @@ mod tests {
         dismiss_upcoming(&connection, 500).expect("descartar");
         let summary = upsert_upcoming(
             &mut connection,
-            &[upcoming(500, "Silksong", &["Metroidvania"], Some("Team Cherry"))],
+            &[upcoming(
+                500,
+                "Silksong",
+                &["Metroidvania"],
+                Some("Team Cherry"),
+            )],
         )
         .expect("reimportar");
         assert_eq!(summary.updated, 1);
@@ -3193,9 +3292,10 @@ mod tests {
         );
 
         let mut official_art = upcoming(910, "Arte oficial", &[], None);
-        official_art.capsule_url =
-            Some("https://shared.steamstatic.com/store_item_assets/steam/apps/910/capsule.jpg"
-                .to_string());
+        official_art.capsule_url = Some(
+            "https://shared.steamstatic.com/store_item_assets/steam/apps/910/capsule.jpg"
+                .to_string(),
+        );
         upsert_upcoming(&mut connection, &[official_art]).expect("admitir arte oficial");
 
         let duplicated = vec![

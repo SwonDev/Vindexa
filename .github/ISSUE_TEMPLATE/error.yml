@@ -1,0 +1,54 @@
+name: Informar de un error
+description: Algo no funciona como debería.
+labels: ['error']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por tomarte el rato. Antes de rellenar nada: **no pegues capturas ni registros que muestren tu correo, tu SteamID o tu nombre de usuario del sistema.** Un error se puede reproducir sin eso.
+  - type: input
+    id: version
+    attributes:
+      label: Versión de Vindexa
+      description: Aparece en Ajustes → Acerca de.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: dropdown
+    id: sistema
+    attributes:
+      label: Sistema operativo
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas que pasara
+    validations:
+      required: true
+  - type: textarea
+    id: ocurrido
+    attributes:
+      label: Qué pasó en realidad
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Cómo reproducirlo
+      description: Los pasos exactos, en orden. Si sólo ocurre con una biblioteca grande o con una tienda concreta, dilo.
+      placeholder: |
+        1. Abrir la biblioteca en vista de rejilla
+        2. Filtrar por…
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Cualquier otra cosa
+      description: Capturas, tamaño de la biblioteca, tiendas vinculadas. Revisa que no aparezcan datos personales.

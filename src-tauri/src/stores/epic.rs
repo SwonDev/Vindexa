@@ -27,8 +27,8 @@ use crate::error::AppResult;
 use crate::stores::launch::validate_epic_app_name;
 use crate::stores::paths::{self, ReadOutcome};
 use crate::stores::{
-    DiscoveredGame, ExternalStore, MAX_DISCOVERED_GAMES, ScanSource, ScanStatus, StoreScan,
-    heroic, merge_discovered, sanitize_https_url, sanitize_path, sanitize_size, sanitize_title,
+    DiscoveredGame, ExternalStore, MAX_DISCOVERED_GAMES, ScanSource, ScanStatus, StoreScan, heroic,
+    merge_discovered, sanitize_https_url, sanitize_path, sanitize_size, sanitize_title,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -96,7 +96,8 @@ pub fn detect_sources() -> EpicSources {
     let mut sources = EpicSources::default();
 
     for directory in candidate_manifest_directories() {
-        if paths::is_real_directory(&directory) && !sources.manifest_directories.contains(&directory)
+        if paths::is_real_directory(&directory)
+            && !sources.manifest_directories.contains(&directory)
         {
             sources.manifest_directories.push(directory);
         }
@@ -447,7 +448,8 @@ fn parse_item_manifest(contents: &str) -> Option<DiscoveredGame> {
         .and_then(paths::canonical_install_directory);
     let launch_target = install_directory.as_ref().and_then(|directory| {
         let executable = manifest.launch_executable.as_deref()?;
-        paths::resolve_executable_within(directory, executable).map(|path| paths::display_path(&path))
+        paths::resolve_executable_within(directory, executable)
+            .map(|path| paths::display_path(&path))
     });
     let install_path = install_directory
         .as_ref()
@@ -456,8 +458,7 @@ fn parse_item_manifest(contents: &str) -> Option<DiscoveredGame> {
 
     // «Instalado» significa que la carpeta existe de verdad y que el lanzador no
     // marcó la descarga como incompleta.
-    let installed =
-        install_path.is_some() && !manifest.is_incomplete_install.unwrap_or(false);
+    let installed = install_path.is_some() && !manifest.is_incomplete_install.unwrap_or(false);
 
     Some(DiscoveredGame {
         external_id: app_name.to_string(),
@@ -496,13 +497,15 @@ fn parse_installed_json(contents: &str) -> Option<Vec<(Option<DiscoveredGame>, u
     Some(
         entries
             .into_iter()
-            .map(|(key, value)| match serde_json::from_value::<LegendaryInstalledGame>(value) {
-                Ok(entry) => match parse_installed_entry(&key, entry) {
-                    Some(game) => (Some(game), 0),
-                    None => (None, 1),
+            .map(
+                |(key, value)| match serde_json::from_value::<LegendaryInstalledGame>(value) {
+                    Ok(entry) => match parse_installed_entry(&key, entry) {
+                        Some(game) => (Some(game), 0),
+                        None => (None, 1),
+                    },
+                    Err(_) => (None, 1),
                 },
-                Err(_) => (None, 1),
-            })
+            )
             .collect(),
     )
 }
@@ -526,7 +529,8 @@ fn parse_installed_entry(key: &str, entry: LegendaryInstalledGame) -> Option<Dis
         .and_then(paths::canonical_install_directory);
     let launch_target = install_directory.as_ref().and_then(|directory| {
         let executable = entry.executable.as_deref()?;
-        paths::resolve_executable_within(directory, executable).map(|path| paths::display_path(&path))
+        paths::resolve_executable_within(directory, executable)
+            .map(|path| paths::display_path(&path))
     });
     let install_path = install_directory
         .as_ref()
@@ -773,7 +777,12 @@ mod tests {
         assert_eq!(game.title, "Hollow Knight");
         assert!(game.installed);
         assert_eq!(game.size_on_disk, Some(9_663_676_416));
-        assert!(game.launch_target.as_deref().unwrap().ends_with("hollow_knight.exe"));
+        assert!(
+            game.launch_target
+                .as_deref()
+                .unwrap()
+                .ends_with("hollow_knight.exe")
+        );
         // Epic no publica carátula en el manifiesto: no se inventa una URL.
         assert_eq!(game.cover_url, None);
         assert_eq!(game.header_url, None);
@@ -790,8 +799,14 @@ mod tests {
         write(&manifests.join("corrupto.item"), "{ esto no es json");
         write(&manifests.join("vacio.item"), "");
         write(&manifests.join("array.item"), "[]");
-        write(&manifests.join("sin-nombre.item"), r#"{"DisplayName": "Sin AppName"}"#);
-        write(&manifests.join("sin-titulo.item"), r#"{"AppName": "SoloId"}"#);
+        write(
+            &manifests.join("sin-nombre.item"),
+            r#"{"DisplayName": "Sin AppName"}"#,
+        );
+        write(
+            &manifests.join("sin-titulo.item"),
+            r#"{"AppName": "SoloId"}"#,
+        );
         write(
             &manifests.join("titulo-vacio.item"),
             r#"{"AppName": "SoloId2", "DisplayName": "   "}"#,
@@ -1007,7 +1022,10 @@ mod tests {
         .expect("escanear origen ilegible");
 
         assert_eq!(scan.status, ScanStatus::Failed);
-        assert_eq!(scan.error_code.as_deref(), Some("epic_manifests_unreadable"));
+        assert_eq!(
+            scan.error_code.as_deref(),
+            Some("epic_manifests_unreadable")
+        );
         assert_eq!(scan.skipped, 1);
         let message = scan.error_message.expect("motivo");
         // El mensaje no revela dónde estaba mirando.
@@ -1129,7 +1147,10 @@ mod tests {
             ),
         );
 
-        let cache = root.path().join("store_cache").join("legendary_library.json");
+        let cache = root
+            .path()
+            .join("store_cache")
+            .join("legendary_library.json");
         write(
             &cache,
             r#"{"games": [

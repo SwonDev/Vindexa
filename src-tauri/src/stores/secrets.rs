@@ -93,11 +93,13 @@ impl StoredSession {
     /// Se valida tanto al escribir como al leer: el llavero es del sistema, no
     /// de Vindexa, y otro proceso podría haber dejado ahí cualquier cosa.
     pub fn validate(&self) -> AppResult<()> {
-        let token_ok = |value: &str| !value.trim().is_empty() && value.chars().count() <= MAX_TOKEN_CHARS;
+        let token_ok =
+            |value: &str| !value.trim().is_empty() && value.chars().count() <= MAX_TOKEN_CHARS;
         if !token_ok(&self.access_token) || !token_ok(&self.refresh_token) {
             return Err(invalid_session());
         }
-        if self.account_id.trim().is_empty() || self.account_id.chars().count() > MAX_ACCOUNT_CHARS {
+        if self.account_id.trim().is_empty() || self.account_id.chars().count() > MAX_ACCOUNT_CHARS
+        {
             return Err(invalid_session());
         }
         if self
@@ -188,7 +190,9 @@ fn keyring_error(_error: keyring::Error) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{EXPIRY_MARGIN_SECONDS, MAX_TOKEN_CHARS, StoredSession, keychain_account, keyring_error};
+    use super::{
+        EXPIRY_MARGIN_SECONDS, MAX_TOKEN_CHARS, StoredSession, keychain_account, keyring_error,
+    };
     use crate::stores::ExternalStore;
 
     fn session() -> StoredSession {

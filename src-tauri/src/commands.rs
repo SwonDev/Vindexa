@@ -5,20 +5,18 @@ use crate::agent::{
 use crate::art_cache::{self, ArtVariant, CachedArt};
 use crate::db::recovery::StartupRecovery;
 use crate::db::{
-    ArchiveReport, CachedNewsInput, Database, DiscoverySnapshot, DlcFilter, DlcRefreshReport,
-    DlcSummary, GamePrice, PagedArchivedGames, PriceHistory, PriceRefreshReport,
+    AddCuratedGameInput, ArchiveReport, CachedNewsInput, CuratedList, CuratedListDetail, Database,
+    DiscoverySnapshot, DlcFilter, DlcRefreshReport, DlcSummary, DrmStateCounts, FamilyCatalogGame,
+    FamilyCatalogRequest, GameDlc, GamePrice, GameReminder, GameVideo, GameVideoRef, ImportedDlc,
+    ImportedWishlistGame, LibraryDropInput, LibraryDropReceipt, LibraryDropResult,
+    NewsRefreshReport, NotificationInbox, NotificationInboxFilter, NotificationRefreshReport,
+    NotificationRule, PagedArchivedGames, PagedFamilyCatalogGames, PriceHistory,
+    PriceRefreshReport, PriorityExplanation, PriorityRanking, PriorityRecomputeReport,
+    RichGameMetadata, SaveCuratedListInput, SaveGameVideoInput, SaveNotificationRuleInput,
+    SavePersonalDatesInput, SaveReminderInput, SaveSessionInput, SaveTagInput, SaveViewInput,
+    SaveWishlistEntryInput, SavedView, SteamProfileWrite, SteamWishlistImportResult, TagDefinition,
+    TasteReport, UpcomingRelease, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
     WishlistPriceStatus,
-    FamilyCatalogGame, FamilyCatalogRequest, GameDlc, ImportedDlc,
-    GameReminder, LibraryDropInput, LibraryDropReceipt, LibraryDropResult, NewsRefreshReport,
-    PagedFamilyCatalogGames, SavePersonalDatesInput, SaveReminderInput, SaveSessionInput,
-    AddCuratedGameInput, CuratedList, CuratedListDetail, DrmStateCounts, GameVideo, GameVideoRef,
-    NotificationInbox, NotificationInboxFilter, NotificationRefreshReport, NotificationRule,
-    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, RichGameMetadata,
-    SaveCuratedListInput, SaveGameVideoInput, SaveNotificationRuleInput, SaveTagInput,
-    ImportedWishlistGame, SaveViewInput, SavedView,
-    SaveWishlistEntryInput, SteamProfileWrite, SteamWishlistImportResult, TagDefinition,
-    TasteReport,
-    UpcomingRelease, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -1035,7 +1033,10 @@ pub async fn mark_all_notifications_read(state: State<'_, AppState>) -> AppResul
 #[tauri::command]
 pub async fn dismiss_notification(state: State<'_, AppState>, id: String) -> AppResult<()> {
     let now = Utc::now();
-    database_read(&state, move |database| database.dismiss_notification(&id, now)).await
+    database_read(&state, move |database| {
+        database.dismiss_notification(&id, now)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1299,8 +1300,11 @@ pub async fn import_steam_wishlist(
 
     // La red queda fuera del cerrojo de mantenimiento, igual que en la
     // sincronización de biblioteca.
-    let snapshot =
-        await_steam_network(steam::wishlist::fetch(&account.steam_id, account.visibility)).await?;
+    let snapshot = await_steam_network(steam::wishlist::fetch(
+        &account.steam_id,
+        account.visibility,
+    ))
+    .await?;
     let titles_unresolved = snapshot.titles_unresolved;
     let visibility_unknown = snapshot.visibility_unknown;
     let games = snapshot
@@ -1360,8 +1364,10 @@ pub async fn import_steam_wishlist_from_browser(
     let hidden_by_filters = snapshot.hidden_by_filters;
     let games = steam::wishlist_session::to_imported_games(&snapshot.items);
 
-    let report =
-        database_write(&state, move |database| database.import_steam_wishlist(&games)).await?;
+    let report = database_write(&state, move |database| {
+        database.import_steam_wishlist(&games)
+    })
+    .await?;
 
     Ok(steam::wishlist_session::BrowserWishlistImportResult {
         report,
@@ -1608,7 +1614,9 @@ pub async fn reorder_game_videos(
 }
 
 #[tauri::command]
-pub async fn maintain_art_cache(state: State<'_, AppState>) -> AppResult<art_cache::MaintenanceReport> {
+pub async fn maintain_art_cache(
+    state: State<'_, AppState>,
+) -> AppResult<art_cache::MaintenanceReport> {
     let cache_dir = state.cache_dir.clone();
     database_read(&state, move |database| {
         art_cache::maintain(&database, &cache_dir, &[])
@@ -1636,7 +1644,10 @@ pub async fn list_game_dlc(
     filter: Option<String>,
 ) -> AppResult<Vec<GameDlc>> {
     let filter = DlcFilter::parse(filter.as_deref())?;
-    database_read(&state, move |database| database.list_game_dlc(app_id, filter)).await
+    database_read(&state, move |database| {
+        database.list_game_dlc(app_id, filter)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1728,8 +1739,10 @@ pub async fn refresh_game_dlc(
                     fetched_details += 1;
                 }
                 Ok(steam::dlc::DlcDetailOutcome::Unavailable) => {
-                    let missing =
-                        vec![ImportedDlc::unavailable(candidate.dlc_app_id, candidate.position)];
+                    let missing = vec![ImportedDlc::unavailable(
+                        candidate.dlc_app_id,
+                        candidate.position,
+                    )];
                     let database = database.clone();
                     blocking(move || database.save_game_dlc(app_id, &missing)).await?;
                     unavailable_details += 1;
@@ -2215,7 +2228,11 @@ pub async fn rotate_agent_token(
     client_id: String,
 ) -> AppResult<IssuedAgentClient> {
     database_read(&state, move |database| {
-        agent::clients::rotate(&mut database.open()?, &client_id, agent::TokenPolicy::default())
+        agent::clients::rotate(
+            &mut database.open()?,
+            &client_id,
+            agent::TokenPolicy::default(),
+        )
     })
     .await
 }
@@ -2256,7 +2273,10 @@ pub async fn revoke_agent_client(state: State<'_, AppState>, client_id: String) 
 
 #[tauri::command]
 pub async fn list_agent_clients(state: State<'_, AppState>) -> AppResult<Vec<AgentClientSummary>> {
-    database_read(&state, move |database| agent::clients::list(&database.open()?)).await
+    database_read(&state, move |database| {
+        agent::clients::list(&database.open()?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -2264,7 +2284,10 @@ pub async fn list_agent_audit(
     state: State<'_, AppState>,
     limit: u32,
 ) -> AppResult<Vec<AgentAuditEntry>> {
-    database_read(&state, move |database| agent::audit::list(&database.open()?, limit)).await
+    database_read(&state, move |database| {
+        agent::audit::list(&database.open()?, limit)
+    })
+    .await
 }
 
 // --- Tiendas externas (Epic Games Store y GOG) ------------------------------

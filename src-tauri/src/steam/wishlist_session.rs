@@ -202,11 +202,10 @@ pub fn is_wishlist_page(url: &Url) -> bool {
         .path_segments()
         .map(|parts| parts.filter(|part| !part.is_empty()).collect::<Vec<_>>())
         .unwrap_or_default();
-    match segments.as_slice() {
-        ["wishlist"] => true,
-        ["wishlist", "profiles", _] | ["wishlist", "id", _] => true,
-        _ => false,
-    }
+    matches!(
+        segments.as_slice(),
+        ["wishlist"] | ["wishlist", "profiles", _] | ["wishlist", "id", _]
+    )
 }
 
 /// AppID de una ficha de juego de la tienda de Steam.
@@ -366,14 +365,20 @@ pub fn parse_wishlist_payload(raw: &str) -> AppResult<BrowserWishlist> {
     })?;
 
     if !payload.ok {
-        return Err(page_error(payload.error.as_deref(), payload.reason.as_deref()));
+        return Err(page_error(
+            payload.error.as_deref(),
+            payload.reason.as_deref(),
+        ));
     }
 
     // La URL que la página dice haber leído se comprueba con el mismo criterio
     // que se usó antes de evaluar. No se exige que sea idéntica a aquélla:
     // `/wishlist/` puede acabar en `/wishlist/profiles/<id>/` por una redirección
     // legítima de Steam. Lo que no puede es dejar de ser una lista de deseados.
-    let claimed = payload.url.as_deref().and_then(|value| Url::parse(value).ok());
+    let claimed = payload
+        .url
+        .as_deref()
+        .and_then(|value| Url::parse(value).ok());
     if !claimed.as_ref().is_some_and(is_wishlist_page) {
         return Err(AppError::new(
             "wishlist_browser_page",
@@ -395,7 +400,9 @@ pub fn parse_wishlist_payload(raw: &str) -> AppResult<BrowserWishlist> {
     if payload.items.len() > MAX_ITEMS {
         return Err(AppError::new(
             "wishlist_browser_too_many",
-            format!("La página devolvió más de {MAX_ITEMS} juegos, que es más de lo que una lista de deseados de Steam admite."),
+            format!(
+                "La página devolvió más de {MAX_ITEMS} juegos, que es más de lo que una lista de deseados de Steam admite."
+            ),
         ));
     }
 
@@ -653,10 +660,7 @@ pub fn visible_store_page(label: &str) -> Result<VisibleStorePage, String> {
         return Err(unsupported_page_message(store_name));
     };
     match app_id_from_store_url(&url) {
-        Some(app_id) => Ok(VisibleStorePage {
-            app_id,
-            store_name,
-        }),
+        Some(app_id) => Ok(VisibleStorePage { app_id, store_name }),
         None => Err(unsupported_page_message(store_name)),
     }
 }
@@ -918,10 +922,17 @@ mod tests {
 
         assert_eq!(leida.steam_id, "76561197960434622");
         assert_eq!(
-            leida.items.iter().map(|item| item.app_id).collect::<Vec<_>>(),
+            leida
+                .items
+                .iter()
+                .map(|item| item.app_id)
+                .collect::<Vec<_>>(),
             [1111840, 774171, 3669430]
         );
-        assert_eq!(leida.items[0].added_at.as_deref(), Some("2019-09-29T16:48:00+00:00"));
+        assert_eq!(
+            leida.items[0].added_at.as_deref(),
+            Some("2019-09-29T16:48:00+00:00")
+        );
         assert!(leida.items.iter().all(|item| item.title.is_none()));
         // El recuento decía cinco y la página sólo mostró tres.
         assert_eq!(leida.hidden_by_filters, 2);
@@ -930,14 +941,23 @@ mod tests {
     #[test]
     fn each_failure_of_the_page_keeps_its_own_code_and_never_invents_a_reason() {
         let casos = [
-            (r#"{"ok":false,"error":"sin_sesion"}"#, "wishlist_browser_signed_out"),
+            (
+                r#"{"ok":false,"error":"sin_sesion"}"#,
+                "wishlist_browser_signed_out",
+            ),
             (
                 r#"{"ok":false,"error":"sin_lista","reason":"RateLimit"}"#,
                 "wishlist_browser_rate_limited",
             ),
-            (r#"{"ok":false,"error":"sin_lista"}"#, "wishlist_browser_empty"),
+            (
+                r#"{"ok":false,"error":"sin_lista"}"#,
+                "wishlist_browser_empty",
+            ),
             (r#"{"ok":false,"error":"pagina"}"#, "wishlist_browser_page"),
-            (r#"{"ok":false,"error":"sin_datos"}"#, "wishlist_browser_response"),
+            (
+                r#"{"ok":false,"error":"sin_datos"}"#,
+                "wishlist_browser_response",
+            ),
         ];
         for (carga, codigo) in casos {
             let error = parse_wishlist_payload(carga).expect_err("debe fallar");
@@ -995,7 +1015,11 @@ mod tests {
         }"#;
         let leida = parse_wishlist_payload(carga).expect("leer carga atípica");
 
-        let ids = leida.items.iter().map(|item| item.app_id).collect::<Vec<_>>();
+        let ids = leida
+            .items
+            .iter()
+            .map(|item| item.app_id)
+            .collect::<Vec<_>>();
         assert_eq!(ids.len(), 3, "sólo sobreviven los AppID posibles");
         assert!(ids.contains(&620) && ids.contains(&440) && ids.contains(&70));
         // Sin fecha creíble no se inventa ninguna.
@@ -1040,7 +1064,10 @@ mod tests {
             if indice > 0 {
                 juegos.push(',');
             }
-            juegos.push_str(&format!("{{\"appId\":{},\"addedAt\":1500000000}}", indice + 1));
+            juegos.push_str(&format!(
+                "{{\"appId\":{},\"addedAt\":1500000000}}",
+                indice + 1
+            ));
         }
         let carga = format!(
             "{{\"ok\":true,\"url\":\"https://store.steampowered.com/wishlist/\",\"steamId\":\"76561197960434622\",\"items\":[{juegos}]}}"
@@ -1111,7 +1138,9 @@ mod tests {
     #[test]
     fn a_store_page_only_yields_an_app_id_when_it_really_is_one() {
         assert_eq!(
-            app_id_from_store_url(&url("https://store.steampowered.com/app/620/Portal_2/?l=spanish")),
+            app_id_from_store_url(&url(
+                "https://store.steampowered.com/app/620/Portal_2/?l=spanish"
+            )),
             Some(620)
         );
         assert_eq!(
@@ -1145,7 +1174,10 @@ mod tests {
         let error = ensure_same_account(Some("76561198000000000"), "76561197960434622")
             .expect_err("cuentas distintas");
         assert_eq!(error.code, "wishlist_browser_other_account");
-        assert!(!error.message.contains("7656"), "el mensaje no publica ningún SteamID");
+        assert!(
+            !error.message.contains("7656"),
+            "el mensaje no publica ningún SteamID"
+        );
     }
 
     #[test]
@@ -1156,7 +1188,10 @@ mod tests {
             added: true,
             in_library: false,
         };
-        assert_eq!(nuevo.message(), "«Portal 2» se ha añadido a tus deseados de Vindexa.");
+        assert_eq!(
+            nuevo.message(),
+            "«Portal 2» se ha añadido a tus deseados de Vindexa."
+        );
 
         let repetido = StoreWishlistAddition {
             added: false,

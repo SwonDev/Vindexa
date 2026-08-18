@@ -1,0 +1,152 @@
+# Publicación de una versión de Vindexa.
+#
+# Se dispara al empujar una etiqueta `v*`. Compila los instaladores de las tres
+# plataformas admitidas y los adjunta a una misma release, que se queda en
+# borrador hasta que las tres han terminado: una release a medias es peor que no
+# tener release, porque alguien se descarga el único instalador que subió.
+name: Publicar versión
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      etiqueta:
+        description: 'Etiqueta a publicar, por ejemplo v0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  preparar:
+    name: Preparar la release
+    runs-on: ubuntu-24.04
+    outputs:
+      etiqueta: ${{ steps.datos.outputs.etiqueta }}
+      version: ${{ steps.datos.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolver etiqueta y versión
+        id: datos
+        shell: bash
+        run: |
+          etiqueta="${{ github.event.inputs.etiqueta || github.ref_name }}"
+          version="${etiqueta#v}"
+          # La etiqueta manda, pero tiene que coincidir con lo que declara el
+          # proyecto: publicar un binario 0.1.0 bajo la etiqueta v0.2.0 deja al
+          # usuario sin forma de saber qué tiene instalado.
+          declarada="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$declarada" ]; then
+            echo "::error::La etiqueta $etiqueta no coincide con la versión declarada ($declarada). Ejecuta scripts/version.sh antes de etiquetar."
+            exit 1
+          fi
+          echo "etiqueta=$etiqueta" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  compilar:
+    name: Compilar · ${{ matrix.nombre }}
+    needs: preparar
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Un único binario universal para Apple Silicon e Intel: evita que
+          # alguien se descargue el instalador de la arquitectura equivocada.
+          - nombre: macOS (universal)
+            runner: macos-15
+            objetivos: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+          - nombre: Windows (x64)
+            runner: windows-2025
+            objetivos: ''
+            args: ''
+          - nombre: Linux (x64)
+            runner: ubuntu-22.04
+            objetivos: ''
+            args: ''
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.20.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.objetivos }}
+
+      - name: Cachear compilación de Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Instalar dependencias de sistema (sólo Linux)
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Compilar y adjuntar los instaladores
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Firma de código: la release sale sin firmar mientras no haya
+          # certificados. Los secretos están documentados en CONTRIBUTING.md; en
+          # cuanto existan, estas variables los recogen sin tocar el flujo.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ needs.preparar.outputs.etiqueta }}
+          releaseName: Vindexa ${{ needs.preparar.outputs.etiqueta }}
+          releaseBody: |
+            Instaladores de Vindexa ${{ needs.preparar.outputs.version }} para macOS, Windows y Linux.
+
+            El registro completo de cambios está en [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
+
+            > Los instaladores todavía no van firmados. macOS y Windows avisarán al abrirlos por primera vez; en [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) está explicado cómo continuar.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  publicar:
+    name: Publicar la release
+    needs: [preparar, compilar]
+    runs-on: ubuntu-24.04
+    steps:
+      # Sólo se saca del borrador cuando las tres plataformas han subido su
+      # instalador. Si una falla, la release se queda en borrador y nadie se
+      # descarga una versión incompleta.
+      - name: Sacar del borrador
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "${{ needs.preparar.outputs.etiqueta }}" --draft=false --latest

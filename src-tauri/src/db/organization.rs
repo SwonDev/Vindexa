@@ -431,6 +431,11 @@ pub fn preview_smart_collection(
     preview_smart_rules(connection, &input.rules, &input.match_mode)
 }
 
+// La interfaz cambia la pertenencia juego a juego, nunca de golpe, así que en
+// producción no hay llamador. Las pruebas de este módulo sí la usan para
+// montar colecciones, y es la única vía transaccional para fijar el conjunto
+// completo de una vez.
+#[allow(dead_code, reason = "sin llamador en producción; la usan las pruebas")]
 pub fn set_collection_games(
     connection: &mut Connection,
     collection_id: &str,
@@ -1808,6 +1813,7 @@ fn ensure_games_exist(connection: &Connection, app_ids: &[u32]) -> AppResult<()>
     Ok(())
 }
 
+#[allow(dead_code, reason = "auxiliar de set_collection_games")]
 fn deduplicate_app_ids(app_ids: &[u32]) -> AppResult<Vec<u32>> {
     let mut seen = HashSet::new();
     let result = app_ids

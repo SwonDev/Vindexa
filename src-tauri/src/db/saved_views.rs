@@ -93,12 +93,12 @@ fn validate(input: &SaveViewInput) -> AppResult<(String, String, String)> {
         return Err(AppError::validation("La vista necesita un nombre."));
     }
     if name.chars().count() > MAX_NAME_LENGTH {
-        return Err(AppError::validation(&format!(
+        return Err(AppError::validation(format!(
             "El nombre de la vista no puede superar {MAX_NAME_LENGTH} caracteres."
         )));
     }
     if input.description.chars().count() > MAX_DESCRIPTION_LENGTH {
-        return Err(AppError::validation(&format!(
+        return Err(AppError::validation(format!(
             "La descripción no puede superar {MAX_DESCRIPTION_LENGTH} caracteres."
         )));
     }
@@ -200,7 +200,7 @@ pub fn save(connection: &mut Connection, input: &SaveViewInput) -> AppResult<Sav
             let total: i64 =
                 transaction.query_row("SELECT COUNT(*) FROM saved_views", [], |row| row.get(0))?;
             if total as usize >= MAX_SAVED_VIEWS {
-                return Err(AppError::validation(&format!(
+                return Err(AppError::validation(format!(
                     "No puedes guardar más de {MAX_SAVED_VIEWS} vistas."
                 )));
             }
@@ -405,7 +405,8 @@ mod tests {
         let segunda = save(&mut connection, &input("Beta")).expect("guardar");
 
         // Falta una: se rechaza en lugar de dejar posiciones a medias.
-        let error = reorder(&mut connection, &[primera.id.clone()]).expect_err("debe rechazar");
+        let error =
+            reorder(&mut connection, std::slice::from_ref(&primera.id)).expect_err("debe rechazar");
         assert!(error.to_string().contains("exactamente"));
 
         // Repetida: también se rechaza.

@@ -147,6 +147,7 @@ pub enum LocalDlcEvidence {
 }
 
 impl LocalDlcEvidence {
+    #[allow(dead_code, reason = "en producción se pregunta por gap_code")]
     pub fn is_conclusive(&self) -> bool {
         matches!(self, Self::Manifest { .. })
     }
@@ -254,9 +255,7 @@ pub fn scan_installed_dlc(app_id: u32) -> LocalDlcEvidence {
     match steam.find_app(app_id) {
         Ok(Some((app, _library))) => LocalDlcEvidence::Manifest {
             installed_dlc_app_ids: installed_dlc_from_depots(
-                app.installed_depots
-                    .values()
-                    .map(|depot| depot.dlc_app_id),
+                app.installed_depots.values().map(|depot| depot.dlc_app_id),
             ),
         },
         Ok(None) => LocalDlcEvidence::Unavailable {
@@ -604,7 +603,9 @@ fn normalize_release_date(value: &StoreReleaseDate) -> Option<String> {
 
 fn json_app_id(value: &serde_json::Value) -> Option<u32> {
     match value {
-        serde_json::Value::Number(number) => number.as_u64().and_then(|value| u32::try_from(value).ok()),
+        serde_json::Value::Number(number) => {
+            number.as_u64().and_then(|value| u32::try_from(value).ok())
+        }
         serde_json::Value::String(text) => text.trim().parse::<u32>().ok(),
         _ => None,
     }
@@ -957,10 +958,7 @@ mod tests {
         assert!(!items[0].owned);
         assert_eq!(items[0].installed, None);
         assert!(!evidence.is_conclusive());
-        assert_eq!(
-            evidence.gap_code(),
-            Some("dlc_evidence_game_not_installed")
-        );
+        assert_eq!(evidence.gap_code(), Some("dlc_evidence_game_not_installed"));
         assert!(
             evidence
                 .gap_explanation()
@@ -992,7 +990,10 @@ mod tests {
         );
         assert_eq!(retry_delay_seconds("steam_dlc_rate_limited", 6, None), None);
         assert_eq!(retry_delay_seconds("steam_dlc_timeout", 3, None), Some(60));
-        assert_eq!(retry_delay_seconds("steam_dlc_link_mismatch", 1, None), None);
+        assert_eq!(
+            retry_delay_seconds("steam_dlc_link_mismatch", 1, None),
+            None
+        );
     }
 
     #[test]

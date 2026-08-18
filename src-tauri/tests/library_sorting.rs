@@ -13,36 +13,10 @@ use models::GameListRequest;
 use rusqlite::{Connection, params};
 use std::collections::HashSet;
 
-const INITIAL_SCHEMA: &str = include_str!("../migrations/001_initial.sql");
-const INDEXES_AND_SEARCH: &str = include_str!("../migrations/002_indexes.sql");
-const SORT_INDEXES: &str = include_str!("../migrations/004_library_sorting.sql");
-const COMPLETE_METADATA: &str = include_str!("../migrations/007_steam_metadata_complete.sql");
-const MANUAL_POSITION_INDEX: &str = include_str!("../migrations/016_manual_position_index.sql");
-const PRICING_AND_ARCHIVE: &str = include_str!("../migrations/029_pricing_and_archive.sql");
-
+#[path = "support/schema.rs"]
+mod schema;
 fn database() -> Connection {
-    let mut connection = Connection::open_in_memory().expect("abrir SQLite temporal");
-    connection
-        .execute_batch("PRAGMA foreign_keys = ON;")
-        .expect("activar claves foráneas");
-    connection
-        .execute_batch(INITIAL_SCHEMA)
-        .expect("aplicar esquema");
-    connection
-        .execute_batch(INDEXES_AND_SEARCH)
-        .expect("aplicar índices base");
-    connection
-        .execute_batch(SORT_INDEXES)
-        .expect("aplicar índices de ordenación");
-    connection
-        .execute_batch(COMPLETE_METADATA)
-        .expect("aplicar origen y metadata completa");
-    connection
-        .execute_batch(MANUAL_POSITION_INDEX)
-        .expect("alinear índice con el orden manual");
-    connection
-        .execute_batch(PRICING_AND_ARCHIVE)
-        .expect("aplicar precios y archivado");
+    let mut connection = schema::base_en_memoria();
     connection
         .execute(
             "INSERT INTO statuses(id, name, color, position, built_in)

@@ -432,7 +432,13 @@ pub fn discriminant_numbers(normalized_title: &str) -> BTreeSet<String> {
         .split(' ')
         .filter(|token| !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_digit()))
         .map(|token| token.trim_start_matches('0').to_string())
-        .map(|token| if token.is_empty() { "0".to_string() } else { token })
+        .map(|token| {
+            if token.is_empty() {
+                "0".to_string()
+            } else {
+                token
+            }
+        })
         .collect()
 }
 
@@ -450,7 +456,11 @@ fn jaccard(left: &BTreeSet<String>, right: &BTreeSet<String>) -> f64 {
     }
     let intersection = left.intersection(right).count() as f64;
     let union = left.union(right).count() as f64;
-    if union == 0.0 { 0.0 } else { intersection / union }
+    if union == 0.0 {
+        0.0
+    } else {
+        intersection / union
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -542,8 +552,8 @@ pub fn jaro(left: &str, right: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        EXACT_CONFIDENCE, MATCH_THRESHOLD, MatchCandidate, SteamTitleIndex,
-        discriminant_numbers, jaro, jaro_winkler, normalize_title,
+        EXACT_CONFIDENCE, MATCH_THRESHOLD, MatchCandidate, SteamTitleIndex, discriminant_numbers,
+        jaro, jaro_winkler, normalize_title,
     };
 
     fn index(candidates: &[(u32, &str)]) -> SteamTitleIndex {
@@ -580,13 +590,19 @@ mod tests {
             normalize_title("The Witcher 3: Wild Hunt — Complete Edition"),
             "witcher 3 wild hunt"
         );
-        assert_eq!(normalize_title("The Witcher 3: Wild Hunt"), "witcher 3 wild hunt");
+        assert_eq!(
+            normalize_title("The Witcher 3: Wild Hunt"),
+            "witcher 3 wild hunt"
+        );
         assert_eq!(
             normalize_title("Divinity: Original Sin 2 - Definitive Edition"),
             "divinity original sin 2"
         );
         assert_eq!(normalize_title("Final Fantasy VII"), "final fantasy 7");
-        assert_eq!(normalize_title("Sid Meier's Civilization VI"), "sid meiers civilization 6");
+        assert_eq!(
+            normalize_title("Sid Meier's Civilization VI"),
+            "sid meiers civilization 6"
+        );
         assert_eq!(normalize_title("Pokémon Café ReMix"), "pokemon cafe remix");
         assert_eq!(normalize_title("Rick & Morty"), "rick and morty");
         // «I» inicial no es un numeral: sigue siendo la palabra.
@@ -644,9 +660,15 @@ mod tests {
         assert_eq!(decision.app_id, 22370);
 
         // Un juego que sólo existe fuera de Steam no inventa emparejado.
-        assert!(steam.best_match("Fallout Tactics: Brotherhood of Steel").is_none());
+        assert!(
+            steam
+                .best_match("Fallout Tactics: Brotherhood of Steel")
+                .is_none()
+        );
         // Y el spin-off nunca se pega al juego base.
-        let shelter = steam.best_match("Fallout Shelter").expect("emparejar el spin-off");
+        let shelter = steam
+            .best_match("Fallout Shelter")
+            .expect("emparejar el spin-off");
         assert_eq!(shelter.app_id, 588430);
     }
 
@@ -658,7 +680,9 @@ mod tests {
             (2300, "DOOM II"),
             (782330, "DOOM Eternal"),
         ]);
-        let classic = steam.best_match("DOOM (1993)").expect("emparejar el DOOM clásico");
+        let classic = steam
+            .best_match("DOOM (1993)")
+            .expect("emparejar el DOOM clásico");
         assert_eq!(classic.app_id, 2280);
 
         let modern = steam.best_match("DOOM").expect("emparejar el DOOM de 2016");
@@ -736,7 +760,10 @@ mod tests {
 
         let racing = index(&[(1, "F1 2020"), (2, "F1 2021")]);
         assert_eq!(
-            racing.best_match("F1 2020").expect("emparejar el año exacto").app_id,
+            racing
+                .best_match("F1 2020")
+                .expect("emparejar el año exacto")
+                .app_id,
             1
         );
         assert!(racing.best_match("F1 2019").is_none());

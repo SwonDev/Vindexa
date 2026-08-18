@@ -111,8 +111,7 @@ pub mod messages {
     pub const LOAD_TIMEOUT: &str =
         "La página no ha terminado de cargarse. Comprueba tu conexión y vuelve a intentarlo.";
     /// El bloqueador nativo no pudo instalarse.
-    pub const BLOCKER_UNAVAILABLE: &str =
-        "No se ha podido activar el bloqueo de anuncios y rastreo, así que la tienda no se ha abierto.";
+    pub const BLOCKER_UNAVAILABLE: &str = "No se ha podido activar el bloqueo de anuncios y rastreo, así que la tienda no se ha abierto.";
     /// Se vació la sesión de la ventana.
     pub const SESSION_CLEARED: &str =
         "Se han borrado las cookies y el almacenamiento de esta ventana.";
@@ -120,11 +119,9 @@ pub mod messages {
     pub const OPENED_IN_OTHER_STORE: &str =
         "Ese destino pertenece a otra tienda y se ha abierto en su propia ventana.";
     /// Una ventana emergente apuntaba fuera de las tiendas permitidas.
-    pub const POPUP_BLOCKED: &str =
-        "Se ha bloqueado una ventana emergente hacia un destino que no pertenece a las tiendas permitidas.";
+    pub const POPUP_BLOCKED: &str = "Se ha bloqueado una ventana emergente hacia un destino que no pertenece a las tiendas permitidas.";
     /// Una descarga fue denegada.
-    pub const DOWNLOAD_BLOCKED: &str =
-        "Las descargas están desactivadas en el navegador integrado. Usa el cliente de Steam o tu navegador habitual.";
+    pub const DOWNLOAD_BLOCKED: &str = "Las descargas están desactivadas en el navegador integrado. Usa el cliente de Steam o tu navegador habitual.";
 }
 
 /// Guion de inicialización que se inyecta en cada documento de la ventana.
@@ -146,19 +143,18 @@ pub fn initialization_script(token: &str, store: &'static StoreProfile) -> Strin
             .collect(),
         strings: STRINGS,
     };
-    let serialized = serde_json::to_string(&config)
-        .expect("la configuración de la barra siempre serializa");
+    let serialized =
+        serde_json::to_string(&config).expect("la configuración de la barra siempre serializa");
     CHROME_SCRIPT.replace("__VINDEXA_CONFIG__", &serialized)
 }
 
 /// Guion que empuja un estado nuevo a la barra ya inyectada.
 pub fn state_script(token: &str, state: &ChromeState) -> String {
-    let serialized =
-        serde_json::to_string(state).expect("el estado de la barra siempre serializa");
+    let serialized = serde_json::to_string(state).expect("el estado de la barra siempre serializa");
     format!(
         "(function(){{var api=window[{name}];if(api&&api.apply){{api.apply({state});}}}})();",
-        name = serde_json::to_string(&api_name(token))
-            .expect("el nombre de la API siempre serializa"),
+        name =
+            serde_json::to_string(&api_name(token)).expect("el nombre de la API siempre serializa"),
         state = serialized
     )
 }
@@ -702,7 +698,10 @@ mod tests {
             let url = tauri::Url::parse(&format!("vindexa-browser://abc/{action}?q=x&id=gog"))
                 .expect("orden de control con URL válida");
             assert!(
-                matches!(policy::evaluate(steam(), &url), NavigationVerdict::Control(_)),
+                matches!(
+                    policy::evaluate(steam(), &url),
+                    NavigationVerdict::Control(_)
+                ),
                 "la barra envía «{action}» y la política no la reconoce"
             );
             checked += 1;

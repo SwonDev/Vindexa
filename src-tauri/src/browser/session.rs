@@ -377,7 +377,10 @@ mod tests {
         history.back();
         history.push(url("https://steamcommunity.com/market/"));
         assert!(!history.can_go_forward());
-        assert_eq!(history.current().as_str(), "https://steamcommunity.com/market/");
+        assert_eq!(
+            history.current().as_str(),
+            "https://steamcommunity.com/market/"
+        );
         assert_eq!(history.len(), 3);
     }
 
@@ -506,7 +509,9 @@ mod tests {
         assert!(is_registered(label));
 
         with_window(label, |state| {
-            state.history.push(url("https://store.steampowered.com/app/620"));
+            state
+                .history
+                .push(url("https://store.steampowered.com/app/620"));
             state.zoom = 1.5;
         });
         let taken = snapshot(label).unwrap();

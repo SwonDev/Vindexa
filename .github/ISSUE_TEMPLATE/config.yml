@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Preguntas y conversación
+    url: https://github.com/SwonDev/Vindexa/discussions
+    about: Para dudas de uso, ideas a medio cocer y todo lo que no sea un error concreto.
+  - name: Vulnerabilidad de seguridad
+    url: https://github.com/SwonDev/Vindexa/security/advisories/new
+    about: No abras una incidencia pública. Usa el aviso privado; el procedimiento está en SECURITY.md.

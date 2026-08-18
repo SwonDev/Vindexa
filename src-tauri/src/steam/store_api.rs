@@ -61,14 +61,7 @@ const METACRITIC_HOSTS: &[&str] = &["www.metacritic.com", "metacritic.com"];
 
 /// Elementos cuyo contenido se descarta entero, no solo sus etiquetas.
 const RAW_TEXT_ELEMENTS: &[&str] = &[
-    "script",
-    "style",
-    "iframe",
-    "noscript",
-    "template",
-    "svg",
-    "math",
-    "object",
+    "script", "style", "iframe", "noscript", "template", "svg", "math", "object",
 ];
 
 /// Elementos que separan bloques de texto.
@@ -104,8 +97,13 @@ const BLOCK_ELEMENTS: &[&str] = &[
     "center",
 ];
 
+/// Vista reducida del paquete: sólo los campos de biblioteca. En producción no
+/// se usa —la cola persiste el paquete entero— pero las pruebas comprueban con
+/// ella que ese subconjunto del contrato con la tienda no se rompe.
+///
 /// La variante con datos pesa más de doscientos bytes frente a una vacía, así
 /// que se encapsula: mover el enum por valor no debe arrastrar la diferencia.
+#[cfg(test)]
 #[derive(Debug)]
 pub enum StoreMetadataOutcome {
     Found(Box<StoreMetadataUpdate>),
@@ -115,12 +113,9 @@ pub enum StoreMetadataOutcome {
 /// Todo lo que una única respuesta de `appdetails` aporta: los campos que ya
 /// consumía la biblioteca más los metadatos enriquecidos de ficha. Se agrupan
 /// para no duplicar la petición de red.
-// `rich` y `content_descriptors` los consume el commit de integración descrito
-// en el informe de esta tarea. **Retira estos `allow` al cablear `commands.rs`.**
 #[derive(Debug)]
 pub struct StoreMetadataBundle {
     pub metadata: StoreMetadataUpdate,
-    #[allow(dead_code)]
     pub rich: RichMetadataUpdate,
     /// Descriptores de contenido publicados por Steam. Todavía no hay columna
     /// para persistirlos, así que viajan aparte en vez de forzar el esquema.
@@ -267,17 +262,6 @@ struct StoreContentDescriptorsPayload {
     notes: Option<String>,
 }
 
-pub async fn fetch_with_retry_hint(
-    app_id: u32,
-) -> Result<StoreMetadataOutcome, StoreMetadataFailure> {
-    Ok(match fetch_bundle_with_retry_hint(app_id).await? {
-        StoreBundleOutcome::Found(bundle) => {
-            StoreMetadataOutcome::Found(Box::new(bundle.metadata))
-        }
-        StoreBundleOutcome::Unavailable => StoreMetadataOutcome::Unavailable,
-    })
-}
-
 /// Igual que [`fetch_with_retry_hint`], pero conserva además los metadatos
 /// enriquecidos de ficha. Una sola petición cubre ambos usos.
 pub async fn fetch_bundle_with_retry_hint(
@@ -400,15 +384,11 @@ fn parse_retry_after(value: Option<&header::HeaderValue>) -> Option<Duration> {
     Some(Duration::from_secs(seconds.clamp(1, 3_600)))
 }
 
-/// Vista reducida del análisis completo: solo los campos que ya consumía la
-/// biblioteca. En producción el mapeo lo hace `fetch_with_retry_hint` sobre el
-/// paquete completo; aquí sirve para verificar ese contrato desde los tests.
+/// Reduce el paquete a los campos de biblioteca para las pruebas de contrato.
 #[cfg(test)]
 fn parse_store_response(app_id: u32, bytes: &[u8]) -> AppResult<StoreMetadataOutcome> {
     Ok(match parse_store_bundle(app_id, bytes)? {
-        StoreBundleOutcome::Found(bundle) => {
-            StoreMetadataOutcome::Found(Box::new(bundle.metadata))
-        }
+        StoreBundleOutcome::Found(bundle) => StoreMetadataOutcome::Found(Box::new(bundle.metadata)),
         StoreBundleOutcome::Unavailable => StoreMetadataOutcome::Unavailable,
     })
 }
@@ -539,7 +519,10 @@ fn parse_store_bundle(app_id: u32, bytes: &[u8]) -> AppResult<StoreBundleOutcome
             .detailed_description
             .as_deref()
             .and_then(structure_store_html),
-        about_the_game: data.about_the_game.as_deref().and_then(structure_store_html),
+        about_the_game: data
+            .about_the_game
+            .as_deref()
+            .and_then(structure_store_html),
         supported_languages: data
             .supported_languages
             .as_deref()
@@ -757,8 +740,7 @@ fn sanitize_hero_url(value: &str, app_id: u32) -> Option<String> {
         return None;
     }
     let expected_path = format!("/images/storepagebackground/app/{app_id}");
-    if parsed.host_str() != Some("store.akamai.steamstatic.com") || parsed.path() != expected_path
-    {
+    if parsed.host_str() != Some("store.akamai.steamstatic.com") || parsed.path() != expected_path {
         return None;
     }
     if parsed.query_pairs().any(|(key, value)| {
@@ -835,12 +817,7 @@ fn sanitize_background_url(value: &str, app_id: u32) -> Option<String> {
 /// Capturas, miniaturas y tráileres. La ruta debe nombrar el AppID o el
 /// identificador del propio medio, de modo que una respuesta manipulada no
 /// pueda colar un recurso de otro juego ni de otro origen.
-fn sanitize_media_url(
-    value: &str,
-    app_id: u32,
-    media_key: u64,
-    hosts: &[&str],
-) -> Option<String> {
+fn sanitize_media_url(value: &str, app_id: u32, media_key: u64, hosts: &[&str]) -> Option<String> {
     let parsed = url::Url::parse(value.trim()).ok()?;
     if parsed.scheme() != "https"
         || !parsed.username().is_empty()
@@ -984,7 +961,8 @@ fn structure_store_html(value: &str) -> Option<StructuredDescription> {
             continue;
         }
         if characters[index..].starts_with(&['<', '!', '-', '-']) {
-            index = skip_until(&characters, index + 4, &['-', '-', '>']).unwrap_or(characters.len());
+            index =
+                skip_until(&characters, index + 4, &['-', '-', '>']).unwrap_or(characters.len());
             continue;
         }
         if characters[index..].starts_with(&['<', '!'])
@@ -1481,11 +1459,15 @@ mod tests {
         };
         assert_eq!(
             metadata.header_url.as_deref(),
-            Some("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3483510/3c96b19255b69aa9b2e131dda3e19d622b0d6562/header.jpg?t=1782353681")
+            Some(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3483510/3c96b19255b69aa9b2e131dda3e19d622b0d6562/header.jpg?t=1782353681"
+            )
         );
         assert_eq!(
             metadata.capsule_url.as_deref(),
-            Some("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3483510/0d5cbb1d81642a256b5a690d5c27b57cdd7891d4/capsule_616x353.jpg?t=1782353681")
+            Some(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3483510/0d5cbb1d81642a256b5a690d5c27b57cdd7891d4/capsule_616x353.jpg?t=1782353681"
+            )
         );
     }
 
@@ -1736,12 +1718,18 @@ mod tests {
             panic!("debía ser un párrafo");
         };
         assert_eq!(text.chars().count(), 2_000);
-        description.validate().expect("respetar los límites de persistencia");
+        description
+            .validate()
+            .expect("respetar los límites de persistencia");
     }
 
     #[test]
     fn a_literal_less_than_sign_survives_as_text() {
-        let rendered = texts(&structure_store_html("<p>5 < 7 y 9 > 3</p>").expect("estructurar").blocks);
+        let rendered = texts(
+            &structure_store_html("<p>5 < 7 y 9 > 3</p>")
+                .expect("estructurar")
+                .blocks,
+        );
         assert_eq!(rendered, "5 < 7 y 9 > 3");
     }
 
@@ -1813,7 +1801,9 @@ mod tests {
         );
         assert_eq!(
             rich.library_hero_url.as_deref(),
-            Some("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/620/library_hero.jpg")
+            Some(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/620/library_hero.jpg"
+            )
         );
         assert_eq!(
             rich.library_logo_url.as_deref(),
@@ -1835,7 +1825,9 @@ mod tests {
         );
         assert_eq!(
             media[2].alt_url.as_deref(),
-            Some("https://video.akamai.steamstatic.com/store_trailers/256658589/movie_max.webm?t=1")
+            Some(
+                "https://video.akamai.steamstatic.com/store_trailers/256658589/movie_max.webm?t=1"
+            )
         );
 
         assert_eq!(bundle.content_descriptors.ids, vec![2, 5]);
@@ -1850,7 +1842,9 @@ mod tests {
         let bundle = bundle(730, r#"{"730":{"success":true,"data":{"is_free":false}}}"#);
         assert_eq!(
             bundle.rich.library_hero_url.as_deref(),
-            Some("https://shared.steamstatic.com/store_item_assets/steam/apps/730/library_hero.jpg")
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/730/library_hero.jpg"
+            )
         );
         assert_eq!(
             bundle.rich.library_logo_url.as_deref(),

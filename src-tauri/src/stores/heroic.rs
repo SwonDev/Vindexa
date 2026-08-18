@@ -116,9 +116,7 @@ pub(crate) fn parse_library_cache(contents: &str, expected_runner: &str) -> Libr
     // una caché suya, y aceptarlos por la vía de serde (que sabe construir una
     // estructura a partir de una secuencia) haría pasar por «biblioteca vacía»
     // un fichero que no lo es.
-    if !serde_json::from_str::<serde_json::Value>(contents)
-        .is_ok_and(|value| value.is_object())
-    {
+    if !serde_json::from_str::<serde_json::Value>(contents).is_ok_and(|value| value.is_object()) {
         return LibraryCache::Malformed;
     }
     let Ok(file) = serde_json::from_str::<LibraryCacheFile>(contents) else {
@@ -155,16 +153,16 @@ fn parse_entry(game: LibraryGame, expected_runner: &str) -> Option<HeroicLibrary
     if game.install.is_dlc {
         return None;
     }
-    let app_name = game.app_name.as_deref().map(str::trim).filter(|value| !value.is_empty())?;
+    let app_name = game
+        .app_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
     // Sin título no se persiste: fabricar «Juego <id>» sería inventar un dato
     // que la caché no trae.
     let title = game.title.as_deref().and_then(sanitize_title)?;
 
-    let install_path = game
-        .install
-        .install_path
-        .as_deref()
-        .and_then(sanitize_path);
+    let install_path = game.install.install_path.as_deref().and_then(sanitize_path);
     // Heroic marca `is_installed`, pero la carpeta puede haberse borrado a mano
     // desde entonces. Quien consume esto revalida la ruta contra el disco.
     let installed = game.is_installed && install_path.is_some();
@@ -225,7 +223,10 @@ mod tests {
             Some("https://images.gog.com/witcher.jpg")
         );
         assert!(entries[1].installed);
-        assert_eq!(entries[1].install_path.as_deref(), Some("/Juegos/Steel Sky"));
+        assert_eq!(
+            entries[1].install_path.as_deref(),
+            Some("/Juegos/Steel Sky")
+        );
     }
 
     #[test]
@@ -263,7 +264,10 @@ mod tests {
 
     #[test]
     fn a_file_that_is_not_a_library_cache_is_refused_instead_of_read_as_empty() {
-        assert_eq!(parse_library_cache("no soy json", "gog"), LibraryCache::Malformed);
+        assert_eq!(
+            parse_library_cache("no soy json", "gog"),
+            LibraryCache::Malformed
+        );
         assert_eq!(parse_library_cache("[]", "gog"), LibraryCache::Malformed);
         // Un objeto sin `games` es lo que deja un cliente instalado que todavía
         // no ha traído su biblioteca. No es un fallo de lectura.

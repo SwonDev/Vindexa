@@ -85,6 +85,7 @@ const MAX_RECURRENCE_STEPS: u32 = 1_200;
 const MAX_INBOX_LIMIT: u32 = 200;
 const DEFAULT_INBOX_LIMIT: u32 = 50;
 /// Retención máxima admitida en la purga: diez años.
+#[allow(dead_code, reason = "límite de prune_events, todavía sin llamador")]
 const MAX_RETENTION_DAYS: u32 = 3_650;
 
 // ---------------------------------------------------------------------------
@@ -1121,6 +1122,9 @@ pub fn dismiss_event(connection: &Connection, event_id: &str, now: DateTime<Utc>
 }
 
 /// Descarta todos los avisos pendientes. Devuelve cuántos cambiaron.
+// La bandeja no ofrece todavía «descartar todos», así que nada en producción
+// llama aquí. Está probada y lista para cuando ese botón exista.
+#[allow(dead_code, reason = "falta la acción «descartar todos» en la bandeja")]
 pub fn dismiss_all(connection: &mut Connection, now: DateTime<Utc>) -> AppResult<u32> {
     let moment = iso(now);
     let transaction = connection.transaction()?;
@@ -1139,6 +1143,9 @@ pub fn dismiss_all(connection: &mut Connection, now: DateTime<Utc>) -> AppResult
 ///
 /// Nunca toca un aviso pendiente: la condición exige `dismissed_at IS NOT NULL`.
 /// Devuelve cuántas filas se eliminaron.
+// Ninguna tarea de mantenimiento la invoca aún, así que `notification_events`
+// crece sin tope. Es una deuda conocida, no una función abandonada.
+#[allow(dead_code, reason = "falta engancharla al mantenimiento periódico")]
 pub fn prune_events(
     connection: &Connection,
     now: DateTime<Utc>,

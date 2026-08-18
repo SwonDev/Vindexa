@@ -729,8 +729,8 @@ function StoreSessionBlock({
             </p>
           ) : (
             <p className="store-session__reopen">
-              {detection.displayName} se identifica en tu navegador y te pedirá pegar aquí lo que
-              te devuelva.
+              {detection.displayName} se identifica en tu navegador y te pedirá pegar aquí lo que te
+              devuelva.
             </p>
           )}
         </div>

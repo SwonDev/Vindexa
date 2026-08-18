@@ -102,7 +102,8 @@ impl StoreProfile {
 
     /// Construye la URL de búsqueda interna de la tienda para un término libre.
     pub fn search_url(&self, term: &str) -> Option<Url> {
-        let encoded: String = url::form_urlencoded::byte_serialize(term.trim().as_bytes()).collect();
+        let encoded: String =
+            url::form_urlencoded::byte_serialize(term.trim().as_bytes()).collect();
         if encoded.is_empty() {
             return None;
         }
@@ -277,18 +278,27 @@ mod tests {
             normalized_host(&url("https://STORE.steampowered.com./app/620")).as_deref(),
             Some("store.steampowered.com")
         );
-        assert!(is_allowed_store_url(&url("https://STORE.steampowered.com./app/620")));
+        assert!(is_allowed_store_url(&url(
+            "https://STORE.steampowered.com./app/620"
+        )));
     }
 
     #[test]
     fn store_resolution_is_unambiguous_and_covers_the_catalogue() {
-        assert_eq!(store_for_url(&url("https://itch.io/games")).unwrap().id, "itch");
         assert_eq!(
-            store_for_url(&url("https://sombra.itch.io/juego")).unwrap().id,
+            store_for_url(&url("https://itch.io/games")).unwrap().id,
             "itch"
         );
         assert_eq!(
-            store_for_url(&url("https://store.epicgames.com/es-ES/")).unwrap().id,
+            store_for_url(&url("https://sombra.itch.io/juego"))
+                .unwrap()
+                .id,
+            "itch"
+        );
+        assert_eq!(
+            store_for_url(&url("https://store.epicgames.com/es-ES/"))
+                .unwrap()
+                .id,
             "epic"
         );
         assert!(store_for_url(&url("https://steamdb.info/app/620/")).is_none());
@@ -299,7 +309,11 @@ mod tests {
                 .iter()
                 .filter(|other| other.allows(&store.home_url()))
                 .count();
-            assert_eq!(matches, 1, "la portada de {} pertenece a una sola tienda", store.id);
+            assert_eq!(
+                matches, 1,
+                "la portada de {} pertenece a una sola tienda",
+                store.id
+            );
         }
     }
 
@@ -308,12 +322,20 @@ mod tests {
         for store in STORES {
             let home = store.home_url();
             assert_eq!(home.scheme(), "https", "{} debe usar HTTPS", store.id);
-            assert!(store.allows(&home), "{} no admite su propia portada", store.id);
+            assert!(
+                store.allows(&home),
+                "{} no admite su propia portada",
+                store.id
+            );
 
             let search = store
                 .search_url("half life 2")
                 .unwrap_or_else(|| panic!("{} debe poder buscar", store.id));
-            assert!(store.allows(&search), "{} sale de su allowlist al buscar", store.id);
+            assert!(
+                store.allows(&search),
+                "{} sale de su allowlist al buscar",
+                store.id
+            );
             assert!(search.query().unwrap().contains("half+life+2"));
         }
     }
@@ -359,7 +381,11 @@ mod tests {
         ids.sort_unstable();
         let unique = ids.len();
         ids.dedup();
-        assert_eq!(ids.len(), unique, "los identificadores de tienda son únicos");
+        assert_eq!(
+            ids.len(),
+            unique,
+            "los identificadores de tienda son únicos"
+        );
         assert_eq!(default_store().id, "steam");
         assert_eq!(default_store().window_label(), "vindexa-store-steam");
     }

@@ -589,7 +589,10 @@ pub fn link(connection: &Connection, store: ExternalStore) -> AppResult<External
 /// registro. No toca la biblioteca de Steam ni la organización personal.
 pub fn unlink(connection: &mut Connection, store: ExternalStore) -> AppResult<()> {
     let transaction = connection.transaction()?;
-    transaction.execute("DELETE FROM external_games WHERE store = ?1", [store.as_str()])?;
+    transaction.execute(
+        "DELETE FROM external_games WHERE store = ?1",
+        [store.as_str()],
+    )?;
     transaction.execute(
         "DELETE FROM external_store_accounts WHERE store = ?1",
         [store.as_str()],
@@ -680,7 +683,10 @@ pub fn list(
     connection: &Connection,
     request: &ExternalGameRequest,
 ) -> AppResult<PagedExternalGames> {
-    let limit = request.limit.unwrap_or(DEFAULT_PAGE_LIMIT).clamp(1, MAX_PAGE_LIMIT);
+    let limit = request
+        .limit
+        .unwrap_or(DEFAULT_PAGE_LIMIT)
+        .clamp(1, MAX_PAGE_LIMIT);
     let offset = request.offset.unwrap_or(0);
     let store = match request.store.as_deref() {
         Some(value) => Some(ExternalStore::parse(value)?),
@@ -702,12 +708,24 @@ pub fn list(
     // allowlist interna; el texto de la persona usuaria siempre va como
     // parámetro.
     let order_by = match request.sort.as_deref().unwrap_or("alphabetical") {
-        "alphabetical" => "external_games.title COLLATE NOCASE ASC, external_games.store ASC, external_games.external_id ASC",
-        "alphabeticalDesc" => "external_games.title COLLATE NOCASE DESC, external_games.store ASC, external_games.external_id ASC",
-        "installed" => "external_games.installed DESC, external_games.title COLLATE NOCASE ASC, external_games.external_id ASC",
-        "sizeDesc" => "external_games.size_on_disk IS NULL, external_games.size_on_disk DESC, external_games.title COLLATE NOCASE ASC",
-        "discoveredDesc" => "datetime(external_games.discovered_at) DESC, external_games.title COLLATE NOCASE ASC",
-        "updatedDesc" => "datetime(external_games.updated_at) DESC, external_games.title COLLATE NOCASE ASC",
+        "alphabetical" => {
+            "external_games.title COLLATE NOCASE ASC, external_games.store ASC, external_games.external_id ASC"
+        }
+        "alphabeticalDesc" => {
+            "external_games.title COLLATE NOCASE DESC, external_games.store ASC, external_games.external_id ASC"
+        }
+        "installed" => {
+            "external_games.installed DESC, external_games.title COLLATE NOCASE ASC, external_games.external_id ASC"
+        }
+        "sizeDesc" => {
+            "external_games.size_on_disk IS NULL, external_games.size_on_disk DESC, external_games.title COLLATE NOCASE ASC"
+        }
+        "discoveredDesc" => {
+            "datetime(external_games.discovered_at) DESC, external_games.title COLLATE NOCASE ASC"
+        }
+        "updatedDesc" => {
+            "datetime(external_games.updated_at) DESC, external_games.title COLLATE NOCASE ASC"
+        }
         _ => {
             return Err(AppError::validation(
                 "La ordenación de los juegos externos no es válida.",

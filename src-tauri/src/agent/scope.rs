@@ -78,6 +78,10 @@ impl AgentScope {
             })
     }
 
+    // El panel de ajustes del puente todavía no existe, y es quien tiene que
+    // enseñar esto al dar de alta un cliente. La descripción vive aquí, junto
+    // al ámbito que describe, para que no puedan desincronizarse.
+    #[allow(dead_code, reason = "pendiente del panel de ajustes del puente")]
     /// Descripción en castellano para la interfaz y la documentación.
     pub const fn description(self) -> &'static str {
         match self {

@@ -121,7 +121,10 @@ struct ValidationEntry {
 
 /// Presupuesto máximo en disco para el arte cacheado. Al superarse, el
 /// mantenimiento desaloja por orden de último uso.
-#[allow(dead_code, reason = "punto de conexión con las preferencias de la aplicación")]
+#[allow(
+    dead_code,
+    reason = "punto de conexión con las preferencias de la aplicación"
+)]
 pub fn set_max_cache_bytes(limit: u64) {
     // Un presupuesto ridículo dejaría la biblioteca sin portadas.
     MAX_CACHE_BYTES.store(limit.max(1024 * 1024), Ordering::Relaxed);
@@ -1071,9 +1074,8 @@ fn existing_cache(
 /// Rechaza cualquier ruta que se salga del directorio de caché de la
 /// aplicación, tanto por componentes `..` como por enlaces simbólicos.
 fn ensure_within_root(cache_root: &Path, candidate: &Path) -> AppResult<()> {
-    let outside = || {
-        AppError::validation("La ruta de la imagen no pertenece a la caché de la aplicación.")
-    };
+    let outside =
+        || AppError::validation("La ruta de la imagen no pertenece a la caché de la aplicación.");
     if candidate
         .components()
         .any(|component| matches!(component, Component::ParentDir))
@@ -1162,11 +1164,7 @@ fn validation_cache() -> &'static Mutex<HashMap<PathBuf, ValidationEntry>> {
     VALIDATED.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn validated_recently(
-    path: &Path,
-    bytes: u64,
-    modified: Option<SystemTime>,
-) -> Option<ImageFacts> {
+fn validated_recently(path: &Path, bytes: u64, modified: Option<SystemTime>) -> Option<ImageFacts> {
     let now = Instant::now();
     let cache = validation_cache()
         .lock()
@@ -2270,13 +2268,11 @@ mod tests {
         ArtKind, ArtVariant, Conditional, DEFAULT_MAX_CACHE_BYTES, Density, FetchedAsset,
         MAX_CONCURRENT_DOWNLOADS, MaintenanceReport, NegativeEntry, allowed_content_type, cache,
         cache_file_name, candidate_sources, clear_negative, derive_library_asset, download_slots,
-        ensure_within_root, existing_cache, fetch_asset, fingerprint_from_file_name, has_valid_trailer,
-        effective_pixels, fast_path_candidates, image_dimensions, join_art_cache_task,
-        local_library_art, maintain,
-        matches_magic_bytes, rung_for, selected_rank,
-        negative_cache, negative_cache_hit, record_cached_path, request_lock, retryable_status,
-        revalidation_due,
-        set_max_cache_bytes, source_fingerprint, store_asset, trusted_cached_path,
+        effective_pixels, ensure_within_root, existing_cache, fast_path_candidates, fetch_asset,
+        fingerprint_from_file_name, has_valid_trailer, image_dimensions, join_art_cache_task,
+        local_library_art, maintain, matches_magic_bytes, negative_cache, negative_cache_hit,
+        record_cached_path, request_lock, retryable_status, revalidation_due, rung_for,
+        selected_rank, set_max_cache_bytes, source_fingerprint, store_asset, trusted_cached_path,
         valid_image_file, validate_source_url,
     };
     use crate::db::Database;
@@ -2479,7 +2475,10 @@ mod tests {
         assert_eq!(ArtVariant::parse("header@2x").unwrap(), HEADER);
         assert!(ArtVariant::parse("../../secret").is_err());
         assert!(ArtVariant::parse("cover@3x").is_err());
-        assert_eq!(allowed_content_type("image/jpeg"), Some(("image/jpeg", "jpg")));
+        assert_eq!(
+            allowed_content_type("image/jpeg"),
+            Some(("image/jpeg", "jpg"))
+        );
         assert_eq!(allowed_content_type("text/html"), None);
         assert!(matches_magic_bytes("image/jpeg", &[0xff, 0xd8, 0xff, 0xdb]));
         assert!(!matches_magic_bytes("image/jpeg", b"<html>"));
@@ -2515,9 +2514,18 @@ mod tests {
 
     #[test]
     fn image_dimensions_are_read_from_jpeg_png_and_webp_headers() {
-        assert_eq!(image_dimensions("image/jpeg", &jpeg(600, 900)), Some((600, 900)));
-        assert_eq!(image_dimensions("image/jpeg", &jpeg(3840, 1240)), Some((3840, 1240)));
-        assert_eq!(image_dimensions("image/png", &png(640, 360)), Some((640, 360)));
+        assert_eq!(
+            image_dimensions("image/jpeg", &jpeg(600, 900)),
+            Some((600, 900))
+        );
+        assert_eq!(
+            image_dimensions("image/jpeg", &jpeg(3840, 1240)),
+            Some((3840, 1240))
+        );
+        assert_eq!(
+            image_dimensions("image/png", &png(640, 360)),
+            Some((640, 360))
+        );
         assert_eq!(
             image_dimensions("image/webp", &webp_vp8x(1438, 810)),
             Some((1438, 810))
@@ -2531,7 +2539,10 @@ mod tests {
         let mut with_exif = vec![0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08];
         with_exif.extend_from_slice(b"Exif\0\0");
         with_exif.extend_from_slice(&jpeg(1920, 620)[2..]);
-        assert_eq!(image_dimensions("image/jpeg", &with_exif), Some((1920, 620)));
+        assert_eq!(
+            image_dimensions("image/jpeg", &with_exif),
+            Some((1920, 620))
+        );
 
         // Basura y cabeceras truncadas nunca hacen girar el lector.
         assert_eq!(image_dimensions("image/jpeg", b"<html>"), None);
@@ -2546,7 +2557,10 @@ mod tests {
     fn truncated_files_are_detected_by_their_trailer() {
         let complete = jpeg(600, 900);
         assert!(has_valid_trailer("image/jpeg", &complete));
-        assert!(!has_valid_trailer("image/jpeg", &complete[..complete.len() - 2]));
+        assert!(!has_valid_trailer(
+            "image/jpeg",
+            &complete[..complete.len() - 2]
+        ));
         let complete_png = png(640, 360);
         assert!(has_valid_trailer("image/png", &complete_png));
         assert!(!has_valid_trailer("image/png", &complete_png[..20]));
@@ -2560,8 +2574,7 @@ mod tests {
         let database = temp_database(&directory);
         let cache_root = directory.path().join("cache");
         let app_id = 880_020;
-        let source =
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/880020/library_600x900_2x.jpg";
+        let source = "https://shared.steamstatic.com/store_item_assets/steam/apps/880020/library_600x900_2x.jpg";
         database
             .open()
             .expect("abrir base")
@@ -2689,8 +2702,11 @@ mod tests {
 
         let orphan_dir = cache_root.join("steam-art").join(deleted.to_string());
         fs::create_dir_all(&orphan_dir).expect("crear dir huérfano");
-        fs::write(orphan_dir.join("cover-0000000000000003.jpg"), jpeg(600, 900))
-            .expect("escribir huérfano");
+        fs::write(
+            orphan_dir.join("cover-0000000000000003.jpg"),
+            jpeg(600, 900),
+        )
+        .expect("escribir huérfano");
         let junk_dir = cache_root.join("steam-art").join("no-es-un-appid");
         fs::create_dir_all(&junk_dir).expect("crear dir basura");
 
@@ -2785,7 +2801,6 @@ mod tests {
         set_max_cache_bytes(DEFAULT_MAX_CACHE_BYTES);
     }
 
-
     // --- Path traversal ------------------------------------------------------
 
     #[test]
@@ -2828,8 +2843,7 @@ mod tests {
         let database = temp_database(&directory);
         // `library_600x900.jpg` es en realidad 300×450: la interfaz la pide y la
         // caché debe intentar antes la variante `_2x`, que sí es 600×900.
-        let selected =
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/880009/library_600x900.jpg";
+        let selected = "https://shared.steamstatic.com/store_item_assets/steam/apps/880009/library_600x900.jpg";
         database
             .open()
             .expect("abrir base")
@@ -2911,8 +2925,7 @@ mod tests {
 
         // Si la interfaz todavía arrastra la URL antigua, la columna ya
         // corregida entra justo detrás: una 404 y a la primera buena.
-        let obsoleta =
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/880012/library_600x900_2x.jpg";
+        let obsoleta = "https://shared.steamstatic.com/store_item_assets/steam/apps/880012/library_600x900_2x.jpg";
         let mixtas =
             candidate_sources(&database, 880_012, COVER, Some(obsoleta)).expect("candidatas");
         assert_eq!(mixtas[0], obsoleta, "{mixtas:?}");
@@ -3027,8 +3040,7 @@ mod tests {
             header_candidates[0].ends_with("/apps/620/header.jpg"),
             "{header_candidates:?}"
         );
-        let dense_header =
-            candidate_sources(&database, 620, HEADER, None).expect("cabecera a 2x");
+        let dense_header = candidate_sources(&database, 620, HEADER, None).expect("cabecera a 2x");
         assert!(
             dense_header[0].ends_with("/apps/620/capsule_616x353.jpg"),
             "{dense_header:?}"
@@ -3068,7 +3080,10 @@ mod tests {
 
         let candidates = candidate_sources(&database, 880_007, COVER, None)
             .expect("leer arte familiar sin juego personal");
-        assert!(candidates[0].ends_with("library_600x900_2x.jpg"), "{candidates:?}");
+        assert!(
+            candidates[0].ends_with("library_600x900_2x.jpg"),
+            "{candidates:?}"
+        );
         assert!(candidates.iter().any(|url| url == cover));
 
         // Sin ninguna URL guardada se recurre a la convención oficial.
@@ -3104,10 +3119,13 @@ mod tests {
 
     #[test]
     fn derived_assets_respect_host_app_and_path_rules() {
-        let base = "https://shared.steamstatic.com/store_item_assets/steam/apps/570/library_600x900.jpg";
+        let base =
+            "https://shared.steamstatic.com/store_item_assets/steam/apps/570/library_600x900.jpg";
         assert_eq!(
             derive_library_asset(base, 570, "capsule_616x353.jpg").as_deref(),
-            Some("https://shared.steamstatic.com/store_item_assets/steam/apps/570/capsule_616x353.jpg")
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/570/capsule_616x353.jpg"
+            )
         );
         // Otro AppID no puede derivarse desde esta URL.
         assert!(derive_library_asset(base, 730, "header.jpg").is_none());
@@ -3317,8 +3335,7 @@ mod tests {
         let url = format!("http://{}/library_600x900_2x.jpg", server.addr);
         let key = (880_030_u32, COVER, source_fingerprint(&url));
         let directory = TempDir::new().expect("crear directorio temporal");
-        let stored: Arc<std::sync::Mutex<Option<PathBuf>>> =
-            Arc::new(std::sync::Mutex::new(None));
+        let stored: Arc<std::sync::Mutex<Option<PathBuf>>> = Arc::new(std::sync::Mutex::new(None));
 
         runtime.block_on(async {
             let mut tasks = Vec::new();
@@ -3430,7 +3447,9 @@ mod tests {
         let second = backoff_delay(1, 7);
         assert!(second > first);
         for attempt in 0..16 {
-            assert!(backoff_delay(attempt, u64::MAX) <= MAX_RETRY_DELAY + Duration::from_millis(120));
+            assert!(
+                backoff_delay(attempt, u64::MAX) <= MAX_RETRY_DELAY + Duration::from_millis(120)
+            );
         }
     }
 
@@ -3592,8 +3611,7 @@ mod tests {
         let database = temp_database(&directory);
         let app_id = 880_050;
         let source = "https://shared.steamstatic.com/store_item_assets/steam/apps/880050/library_600x900_2x.jpg";
-        let other =
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/880050/header.jpg";
+        let other = "https://shared.steamstatic.com/store_item_assets/steam/apps/880050/header.jpg";
         let connection = database.open().expect("abrir base");
         connection
             .execute(
@@ -3607,7 +3625,10 @@ mod tests {
                  VALUES (?1, 'cover', ?2, '\"abc\"', '2000-01-01T00:00:00.000Z')",
                 params![
                     app_id,
-                    format!("/cache/steam-art/880050/{}", cache_file_name(COVER, source, "jpg"))
+                    format!(
+                        "/cache/steam-art/880050/{}",
+                        cache_file_name(COVER, source, "jpg")
+                    )
                 ],
             )
             .expect("registrar fila antigua");

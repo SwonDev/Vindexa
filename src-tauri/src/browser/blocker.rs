@@ -79,91 +79,331 @@ pub struct CosmeticRule {
 /// tienda puede acoplar su carrito o su sesión a su propio dominio.
 pub const BLOCKED_DOMAINS: &[BlockedDomain] = &[
     // Google / DoubleClick
-    BlockedDomain { domain: "doubleclick.net", reason: "red publicitaria de Google" },
-    BlockedDomain { domain: "2mdn.net", reason: "servidor de creatividades de DoubleClick" },
-    BlockedDomain { domain: "googlesyndication.com", reason: "entrega de anuncios AdSense" },
-    BlockedDomain { domain: "googleadservices.com", reason: "conversiones de Google Ads" },
-    BlockedDomain { domain: "googletagservices.com", reason: "etiquetas publicitarias de Google" },
-    BlockedDomain { domain: "googletagmanager.com", reason: "contenedor de etiquetas de rastreo" },
-    BlockedDomain { domain: "google-analytics.com", reason: "analítica de Google" },
-    BlockedDomain { domain: "analytics.google.com", reason: "analítica de Google (GA4)" },
-    BlockedDomain { domain: "adservice.google.com", reason: "servicio de anuncios de Google" },
-    BlockedDomain { domain: "ad-delivery.net", reason: "entrega de anuncios de Google" },
-    BlockedDomain { domain: "googleoptimize.com", reason: "experimentos con seguimiento" },
-    BlockedDomain { domain: "app-measurement.com", reason: "medición de Firebase" },
+    BlockedDomain {
+        domain: "doubleclick.net",
+        reason: "red publicitaria de Google",
+    },
+    BlockedDomain {
+        domain: "2mdn.net",
+        reason: "servidor de creatividades de DoubleClick",
+    },
+    BlockedDomain {
+        domain: "googlesyndication.com",
+        reason: "entrega de anuncios AdSense",
+    },
+    BlockedDomain {
+        domain: "googleadservices.com",
+        reason: "conversiones de Google Ads",
+    },
+    BlockedDomain {
+        domain: "googletagservices.com",
+        reason: "etiquetas publicitarias de Google",
+    },
+    BlockedDomain {
+        domain: "googletagmanager.com",
+        reason: "contenedor de etiquetas de rastreo",
+    },
+    BlockedDomain {
+        domain: "google-analytics.com",
+        reason: "analítica de Google",
+    },
+    BlockedDomain {
+        domain: "analytics.google.com",
+        reason: "analítica de Google (GA4)",
+    },
+    BlockedDomain {
+        domain: "adservice.google.com",
+        reason: "servicio de anuncios de Google",
+    },
+    BlockedDomain {
+        domain: "ad-delivery.net",
+        reason: "entrega de anuncios de Google",
+    },
+    BlockedDomain {
+        domain: "googleoptimize.com",
+        reason: "experimentos con seguimiento",
+    },
+    BlockedDomain {
+        domain: "app-measurement.com",
+        reason: "medición de Firebase",
+    },
     // Medición de audiencia
-    BlockedDomain { domain: "scorecardresearch.com", reason: "panel de audiencia de Comscore" },
-    BlockedDomain { domain: "imrworldwide.com", reason: "medición de Nielsen" },
-    BlockedDomain { domain: "quantserve.com", reason: "medición de Quantcast" },
-    BlockedDomain { domain: "quantcount.com", reason: "medición de Quantcast" },
-    BlockedDomain { domain: "chartbeat.com", reason: "analítica de audiencia" },
-    BlockedDomain { domain: "chartbeat.net", reason: "analítica de audiencia" },
+    BlockedDomain {
+        domain: "scorecardresearch.com",
+        reason: "panel de audiencia de Comscore",
+    },
+    BlockedDomain {
+        domain: "imrworldwide.com",
+        reason: "medición de Nielsen",
+    },
+    BlockedDomain {
+        domain: "quantserve.com",
+        reason: "medición de Quantcast",
+    },
+    BlockedDomain {
+        domain: "quantcount.com",
+        reason: "medición de Quantcast",
+    },
+    BlockedDomain {
+        domain: "chartbeat.com",
+        reason: "analítica de audiencia",
+    },
+    BlockedDomain {
+        domain: "chartbeat.net",
+        reason: "analítica de audiencia",
+    },
     // Redes sociales usadas como píxel
-    BlockedDomain { domain: "facebook.net", reason: "píxel y SDK de Meta" },
-    BlockedDomain { domain: "ads-twitter.com", reason: "píxel publicitario de X" },
-    BlockedDomain { domain: "analytics.twitter.com", reason: "analítica de X" },
-    BlockedDomain { domain: "t.co", reason: "redirector de medición de X" },
-    BlockedDomain { domain: "analytics.tiktok.com", reason: "píxel de TikTok" },
-    BlockedDomain { domain: "sc-static.net", reason: "píxel de Snap" },
-    BlockedDomain { domain: "tr.snapchat.com", reason: "conversiones de Snap" },
-    BlockedDomain { domain: "ct.pinterest.com", reason: "píxel de Pinterest" },
-    BlockedDomain { domain: "alb.reddit.com", reason: "píxel de Reddit" },
+    BlockedDomain {
+        domain: "facebook.net",
+        reason: "píxel y SDK de Meta",
+    },
+    BlockedDomain {
+        domain: "ads-twitter.com",
+        reason: "píxel publicitario de X",
+    },
+    BlockedDomain {
+        domain: "analytics.twitter.com",
+        reason: "analítica de X",
+    },
+    BlockedDomain {
+        domain: "t.co",
+        reason: "redirector de medición de X",
+    },
+    BlockedDomain {
+        domain: "analytics.tiktok.com",
+        reason: "píxel de TikTok",
+    },
+    BlockedDomain {
+        domain: "sc-static.net",
+        reason: "píxel de Snap",
+    },
+    BlockedDomain {
+        domain: "tr.snapchat.com",
+        reason: "conversiones de Snap",
+    },
+    BlockedDomain {
+        domain: "ct.pinterest.com",
+        reason: "píxel de Pinterest",
+    },
+    BlockedDomain {
+        domain: "alb.reddit.com",
+        reason: "píxel de Reddit",
+    },
     // Intercambios publicitarios
-    BlockedDomain { domain: "adnxs.com", reason: "intercambio publicitario Xandr" },
-    BlockedDomain { domain: "rubiconproject.com", reason: "intercambio publicitario Magnite" },
-    BlockedDomain { domain: "pubmatic.com", reason: "intercambio publicitario" },
-    BlockedDomain { domain: "openx.net", reason: "intercambio publicitario" },
-    BlockedDomain { domain: "casalemedia.com", reason: "intercambio publicitario Index" },
-    BlockedDomain { domain: "33across.com", reason: "intercambio publicitario" },
-    BlockedDomain { domain: "adsrvr.org", reason: "plataforma de compra The Trade Desk" },
-    BlockedDomain { domain: "criteo.com", reason: "reorientación publicitaria" },
-    BlockedDomain { domain: "criteo.net", reason: "reorientación publicitaria" },
-    BlockedDomain { domain: "taboola.com", reason: "recomendación publicitaria" },
-    BlockedDomain { domain: "outbrain.com", reason: "recomendación publicitaria" },
-    BlockedDomain { domain: "amazon-adsystem.com", reason: "red publicitaria de Amazon" },
-    BlockedDomain { domain: "smartadserver.com", reason: "servidor de anuncios" },
-    BlockedDomain { domain: "adform.net", reason: "plataforma publicitaria" },
-    BlockedDomain { domain: "mathtag.com", reason: "sincronización de identificadores" },
-    BlockedDomain { domain: "bidswitch.net", reason: "enrutado de pujas" },
-    BlockedDomain { domain: "sharethrough.com", reason: "publicidad nativa" },
-    BlockedDomain { domain: "teads.tv", reason: "publicidad en vídeo" },
-    BlockedDomain { domain: "yieldmo.com", reason: "publicidad" },
-    BlockedDomain { domain: "serving-sys.com", reason: "servidor de creatividades" },
-    BlockedDomain { domain: "moatads.com", reason: "verificación publicitaria" },
-    BlockedDomain { domain: "doubleverify.com", reason: "verificación publicitaria" },
-    BlockedDomain { domain: "adsafeprotected.com", reason: "verificación publicitaria" },
-    BlockedDomain { domain: "adroll.com", reason: "reorientación publicitaria" },
-    BlockedDomain { domain: "media.net", reason: "red publicitaria" },
+    BlockedDomain {
+        domain: "adnxs.com",
+        reason: "intercambio publicitario Xandr",
+    },
+    BlockedDomain {
+        domain: "rubiconproject.com",
+        reason: "intercambio publicitario Magnite",
+    },
+    BlockedDomain {
+        domain: "pubmatic.com",
+        reason: "intercambio publicitario",
+    },
+    BlockedDomain {
+        domain: "openx.net",
+        reason: "intercambio publicitario",
+    },
+    BlockedDomain {
+        domain: "casalemedia.com",
+        reason: "intercambio publicitario Index",
+    },
+    BlockedDomain {
+        domain: "33across.com",
+        reason: "intercambio publicitario",
+    },
+    BlockedDomain {
+        domain: "adsrvr.org",
+        reason: "plataforma de compra The Trade Desk",
+    },
+    BlockedDomain {
+        domain: "criteo.com",
+        reason: "reorientación publicitaria",
+    },
+    BlockedDomain {
+        domain: "criteo.net",
+        reason: "reorientación publicitaria",
+    },
+    BlockedDomain {
+        domain: "taboola.com",
+        reason: "recomendación publicitaria",
+    },
+    BlockedDomain {
+        domain: "outbrain.com",
+        reason: "recomendación publicitaria",
+    },
+    BlockedDomain {
+        domain: "amazon-adsystem.com",
+        reason: "red publicitaria de Amazon",
+    },
+    BlockedDomain {
+        domain: "smartadserver.com",
+        reason: "servidor de anuncios",
+    },
+    BlockedDomain {
+        domain: "adform.net",
+        reason: "plataforma publicitaria",
+    },
+    BlockedDomain {
+        domain: "mathtag.com",
+        reason: "sincronización de identificadores",
+    },
+    BlockedDomain {
+        domain: "bidswitch.net",
+        reason: "enrutado de pujas",
+    },
+    BlockedDomain {
+        domain: "sharethrough.com",
+        reason: "publicidad nativa",
+    },
+    BlockedDomain {
+        domain: "teads.tv",
+        reason: "publicidad en vídeo",
+    },
+    BlockedDomain {
+        domain: "yieldmo.com",
+        reason: "publicidad",
+    },
+    BlockedDomain {
+        domain: "serving-sys.com",
+        reason: "servidor de creatividades",
+    },
+    BlockedDomain {
+        domain: "moatads.com",
+        reason: "verificación publicitaria",
+    },
+    BlockedDomain {
+        domain: "doubleverify.com",
+        reason: "verificación publicitaria",
+    },
+    BlockedDomain {
+        domain: "adsafeprotected.com",
+        reason: "verificación publicitaria",
+    },
+    BlockedDomain {
+        domain: "adroll.com",
+        reason: "reorientación publicitaria",
+    },
+    BlockedDomain {
+        domain: "media.net",
+        reason: "red publicitaria",
+    },
     // Gestión de datos e identidad
-    BlockedDomain { domain: "demdex.net", reason: "gestión de audiencias de Adobe" },
-    BlockedDomain { domain: "omtrdc.net", reason: "recogida de Adobe Analytics" },
-    BlockedDomain { domain: "everesttech.net", reason: "identidad publicitaria de Adobe" },
-    BlockedDomain { domain: "2o7.net", reason: "recogida heredada de Adobe" },
-    BlockedDomain { domain: "bluekai.com", reason: "plataforma de datos de Oracle" },
-    BlockedDomain { domain: "krxd.net", reason: "plataforma de datos Krux" },
-    BlockedDomain { domain: "rlcdn.com", reason: "identidad de LiveRamp" },
-    BlockedDomain { domain: "agkn.com", reason: "identidad de Neustar" },
+    BlockedDomain {
+        domain: "demdex.net",
+        reason: "gestión de audiencias de Adobe",
+    },
+    BlockedDomain {
+        domain: "omtrdc.net",
+        reason: "recogida de Adobe Analytics",
+    },
+    BlockedDomain {
+        domain: "everesttech.net",
+        reason: "identidad publicitaria de Adobe",
+    },
+    BlockedDomain {
+        domain: "2o7.net",
+        reason: "recogida heredada de Adobe",
+    },
+    BlockedDomain {
+        domain: "bluekai.com",
+        reason: "plataforma de datos de Oracle",
+    },
+    BlockedDomain {
+        domain: "krxd.net",
+        reason: "plataforma de datos Krux",
+    },
+    BlockedDomain {
+        domain: "rlcdn.com",
+        reason: "identidad de LiveRamp",
+    },
+    BlockedDomain {
+        domain: "agkn.com",
+        reason: "identidad de Neustar",
+    },
     // Producto, sesión y atribución
-    BlockedDomain { domain: "hotjar.com", reason: "grabación de sesión" },
-    BlockedDomain { domain: "hotjar.io", reason: "grabación de sesión" },
-    BlockedDomain { domain: "mouseflow.com", reason: "grabación de sesión" },
-    BlockedDomain { domain: "fullstory.com", reason: "grabación de sesión" },
-    BlockedDomain { domain: "logrocket.com", reason: "grabación de sesión" },
-    BlockedDomain { domain: "crazyegg.com", reason: "mapas de calor" },
-    BlockedDomain { domain: "clarity.ms", reason: "grabación de sesión de Microsoft" },
-    BlockedDomain { domain: "bat.bing.com", reason: "píxel de Microsoft Ads" },
-    BlockedDomain { domain: "mc.yandex.ru", reason: "analítica de Yandex" },
-    BlockedDomain { domain: "mixpanel.com", reason: "analítica de producto" },
-    BlockedDomain { domain: "amplitude.com", reason: "analítica de producto" },
-    BlockedDomain { domain: "segment.com", reason: "enrutado de eventos" },
-    BlockedDomain { domain: "segment.io", reason: "enrutado de eventos" },
-    BlockedDomain { domain: "heapanalytics.com", reason: "analítica de producto" },
-    BlockedDomain { domain: "nr-data.net", reason: "baliza de New Relic" },
-    BlockedDomain { domain: "cloudflareinsights.com", reason: "baliza de medición" },
-    BlockedDomain { domain: "branch.io", reason: "atribución de campañas" },
-    BlockedDomain { domain: "appsflyer.com", reason: "atribución de campañas" },
-    BlockedDomain { domain: "adjust.com", reason: "atribución de campañas" },
-    BlockedDomain { domain: "kochava.com", reason: "atribución de campañas" },
+    BlockedDomain {
+        domain: "hotjar.com",
+        reason: "grabación de sesión",
+    },
+    BlockedDomain {
+        domain: "hotjar.io",
+        reason: "grabación de sesión",
+    },
+    BlockedDomain {
+        domain: "mouseflow.com",
+        reason: "grabación de sesión",
+    },
+    BlockedDomain {
+        domain: "fullstory.com",
+        reason: "grabación de sesión",
+    },
+    BlockedDomain {
+        domain: "logrocket.com",
+        reason: "grabación de sesión",
+    },
+    BlockedDomain {
+        domain: "crazyegg.com",
+        reason: "mapas de calor",
+    },
+    BlockedDomain {
+        domain: "clarity.ms",
+        reason: "grabación de sesión de Microsoft",
+    },
+    BlockedDomain {
+        domain: "bat.bing.com",
+        reason: "píxel de Microsoft Ads",
+    },
+    BlockedDomain {
+        domain: "mc.yandex.ru",
+        reason: "analítica de Yandex",
+    },
+    BlockedDomain {
+        domain: "mixpanel.com",
+        reason: "analítica de producto",
+    },
+    BlockedDomain {
+        domain: "amplitude.com",
+        reason: "analítica de producto",
+    },
+    BlockedDomain {
+        domain: "segment.com",
+        reason: "enrutado de eventos",
+    },
+    BlockedDomain {
+        domain: "segment.io",
+        reason: "enrutado de eventos",
+    },
+    BlockedDomain {
+        domain: "heapanalytics.com",
+        reason: "analítica de producto",
+    },
+    BlockedDomain {
+        domain: "nr-data.net",
+        reason: "baliza de New Relic",
+    },
+    BlockedDomain {
+        domain: "cloudflareinsights.com",
+        reason: "baliza de medición",
+    },
+    BlockedDomain {
+        domain: "branch.io",
+        reason: "atribución de campañas",
+    },
+    BlockedDomain {
+        domain: "appsflyer.com",
+        reason: "atribución de campañas",
+    },
+    BlockedDomain {
+        domain: "adjust.com",
+        reason: "atribución de campañas",
+    },
+    BlockedDomain {
+        domain: "kochava.com",
+        reason: "atribución de campañas",
+    },
 ];
 
 /// Dominios que ninguna regla puede bloquear.
@@ -180,30 +420,90 @@ pub const ALLOWED_DOMAINS: &[AllowedDomain] = &[
         domain: "steamstatic.com",
         purpose: "CDN de Steam: cdn/shared/store/community/avatars/video/clan en Akamai, Cloudflare y Fastly",
     },
-    AllowedDomain { domain: "steamcommunity.com", purpose: "comunidad, mercado y capturas" },
-    AllowedDomain { domain: "steamgames.com", purpose: "recursos estáticos heredados de Steam" },
-    AllowedDomain { domain: "steam-chat.com", purpose: "vista web del chat de Steam" },
-    AllowedDomain { domain: "steamcdn-a.akamaihd.net", purpose: "CDN heredada de imágenes y vídeos de Steam" },
-    AllowedDomain { domain: "steamstore-a.akamaihd.net", purpose: "CDN heredada de la tienda" },
-    AllowedDomain { domain: "steamuserimages-a.akamaihd.net", purpose: "capturas subidas por la comunidad" },
-    AllowedDomain { domain: "steamcommunity-a.akamaihd.net", purpose: "CDN heredada de la comunidad" },
-    AllowedDomain { domain: "steambroadcast.akamaized.net", purpose: "retransmisiones de Steam" },
+    AllowedDomain {
+        domain: "steamcommunity.com",
+        purpose: "comunidad, mercado y capturas",
+    },
+    AllowedDomain {
+        domain: "steamgames.com",
+        purpose: "recursos estáticos heredados de Steam",
+    },
+    AllowedDomain {
+        domain: "steam-chat.com",
+        purpose: "vista web del chat de Steam",
+    },
+    AllowedDomain {
+        domain: "steamcdn-a.akamaihd.net",
+        purpose: "CDN heredada de imágenes y vídeos de Steam",
+    },
+    AllowedDomain {
+        domain: "steamstore-a.akamaihd.net",
+        purpose: "CDN heredada de la tienda",
+    },
+    AllowedDomain {
+        domain: "steamuserimages-a.akamaihd.net",
+        purpose: "capturas subidas por la comunidad",
+    },
+    AllowedDomain {
+        domain: "steamcommunity-a.akamaihd.net",
+        purpose: "CDN heredada de la comunidad",
+    },
+    AllowedDomain {
+        domain: "steambroadcast.akamaized.net",
+        purpose: "retransmisiones de Steam",
+    },
     // --- GOG ---
-    AllowedDomain { domain: "gog.com", purpose: "tienda, sesión y API de GOG" },
-    AllowedDomain { domain: "gog-statics.com", purpose: "imágenes y recursos estáticos de GOG" },
-    AllowedDomain { domain: "gogcdn.net", purpose: "CDN de GOG" },
+    AllowedDomain {
+        domain: "gog.com",
+        purpose: "tienda, sesión y API de GOG",
+    },
+    AllowedDomain {
+        domain: "gog-statics.com",
+        purpose: "imágenes y recursos estáticos de GOG",
+    },
+    AllowedDomain {
+        domain: "gogcdn.net",
+        purpose: "CDN de GOG",
+    },
     // --- Epic ---
-    AllowedDomain { domain: "epicgames.com", purpose: "tienda, sesión, GraphQL y verificación de Epic" },
-    AllowedDomain { domain: "unrealengine.com", purpose: "CDN de imágenes y vídeos de Epic" },
-    AllowedDomain { domain: "epicgames-download1.akamaized.net", purpose: "CDN de medios de Epic" },
+    AllowedDomain {
+        domain: "epicgames.com",
+        purpose: "tienda, sesión, GraphQL y verificación de Epic",
+    },
+    AllowedDomain {
+        domain: "unrealengine.com",
+        purpose: "CDN de imágenes y vídeos de Epic",
+    },
+    AllowedDomain {
+        domain: "epicgames-download1.akamaized.net",
+        purpose: "CDN de medios de Epic",
+    },
     // --- itch.io ---
-    AllowedDomain { domain: "itch.io", purpose: "tienda y páginas de creadores" },
-    AllowedDomain { domain: "itch.zone", purpose: "imágenes y juegos HTML5 de itch.io" },
-    AllowedDomain { domain: "hwcdn.net", purpose: "CDN donde itch.io sirve los juegos web" },
+    AllowedDomain {
+        domain: "itch.io",
+        purpose: "tienda y páginas de creadores",
+    },
+    AllowedDomain {
+        domain: "itch.zone",
+        purpose: "imágenes y juegos HTML5 de itch.io",
+    },
+    AllowedDomain {
+        domain: "hwcdn.net",
+        purpose: "CDN donde itch.io sirve los juegos web",
+    },
     // --- Verificación humana compartida ---
-    AllowedDomain { domain: "recaptcha.net", purpose: "reCAPTCHA en el inicio de sesión" },
-    AllowedDomain { domain: "gstatic.com", purpose: "recursos de reCAPTCHA y tipografías" },
-    AllowedDomain { domain: "hcaptcha.com", purpose: "hCaptcha en el inicio de sesión" },
+    AllowedDomain {
+        domain: "recaptcha.net",
+        purpose: "reCAPTCHA en el inicio de sesión",
+    },
+    AllowedDomain {
+        domain: "gstatic.com",
+        purpose: "recursos de reCAPTCHA y tipografías",
+    },
+    AllowedDomain {
+        domain: "hcaptcha.com",
+        purpose: "hCaptcha en el inicio de sesión",
+    },
 ];
 
 /// Dominios de documento de cada tienda para las reglas cosméticas.
@@ -317,9 +617,8 @@ pub fn is_blocked_request(url: &Url) -> bool {
 
 /// Construye la lista de reglas en el orden exigido por WebKit.
 fn rules() -> Vec<Value> {
-    let mut rules = Vec::with_capacity(
-        BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len(),
-    );
+    let mut rules =
+        Vec::with_capacity(BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len());
 
     for blocked in BLOCKED_DOMAINS {
         rules.push(json!({
@@ -472,10 +771,7 @@ mod tests {
     #[test]
     fn the_blocked_corpus_is_blocked() {
         for raw in BLOCKED_CORPUS {
-            assert!(
-                is_blocked_request(&url(raw)),
-                "{raw} debería bloquearse"
-            );
+            assert!(is_blocked_request(&url(raw)), "{raw} debería bloquearse");
         }
     }
 
@@ -538,7 +834,10 @@ mod tests {
         assert!(domain_matches("doubleclick.net", "doubleclick.net"));
         assert!(domain_matches("stats.g.doubleclick.net", "doubleclick.net"));
         assert!(!domain_matches("evildoubleclick.net", "doubleclick.net"));
-        assert!(!domain_matches("doubleclick.net.attacker.tld", "doubleclick.net"));
+        assert!(!domain_matches(
+            "doubleclick.net.attacker.tld",
+            "doubleclick.net"
+        ));
         assert!(!domain_matches(".doubleclick.net", "doubleclick.net"));
         // Un host que suplanta un CDN de Steam no hereda su permiso.
         assert!(!is_allowed_asset_host("steamstatic.com.attacker.tld"));
@@ -591,7 +890,9 @@ mod tests {
             );
             if kind == "css-display-none" {
                 assert!(action["selector"].as_str().is_some_and(|s| !s.is_empty()));
-                let domains = trigger["if-domain"].as_array().expect("cosmética por dominio");
+                let domains = trigger["if-domain"]
+                    .as_array()
+                    .expect("cosmética por dominio");
                 assert!(domains.iter().all(|d| d.as_str().unwrap().starts_with('*')));
             }
         }

@@ -269,7 +269,11 @@ pub fn upsert_dlc_batch(
 
     let transaction = connection.transaction()?;
     let base_exists = transaction
-        .query_row("SELECT 1 FROM games WHERE app_id = ?1", [app_id], |_| Ok(()))
+        .query_row(
+            "SELECT 1 FROM games WHERE app_id = ?1",
+            [app_id],
+            |_| Ok(()),
+        )
         .optional()?
         .is_some();
     if !base_exists {
@@ -583,6 +587,10 @@ pub fn dlc_summary(connection: &Connection, app_id: u32) -> AppResult<DlcSummary
 /// La migración 020 no guarda intentos, así que el aplazamiento es por
 /// vencimiento de estado, no exponencial por fila. El backoff exponencial vive
 /// en la capa de red (`steam::dlc::retry_delay_seconds`) durante la ráfaga.
+// El refresco global de contenido adicional no está programado todavía: lo
+// que sí corre es la variante por juego, al abrir su ficha. Esta reclama en
+// lote para una tarea de fondo que aún no existe.
+#[allow(dead_code, reason = "falta la tarea de fondo que refresque en lote")]
 pub fn claim_dlc_refresh_candidates(
     connection: &mut Connection,
     limit: usize,
@@ -765,7 +773,10 @@ fn validate_imported(app_id: u32, item: &ImportedDlc) -> AppResult<()> {
             "La fecha de lanzamiento del contenido adicional no es válida.",
         ));
     }
-    if item.price_cents.is_some_and(|value| value > MAX_PRICE_CENTS) {
+    if item
+        .price_cents
+        .is_some_and(|value| value > MAX_PRICE_CENTS)
+    {
         return Err(AppError::validation(
             "El precio del contenido adicional no es válido.",
         ));
@@ -886,8 +897,12 @@ mod tests {
         assert!(hidden.hidden);
 
         // La tienda vuelve sin ninguna evidencia de propiedad.
-        upsert_dlc_batch(&mut connection, 255710, &[detailed(346791, 0, Some((999, "EUR")))])
-            .expect("refrescar desde la tienda");
+        upsert_dlc_batch(
+            &mut connection,
+            255710,
+            &[detailed(346791, 0, Some((999, "EUR")))],
+        )
+        .expect("refrescar desde la tienda");
         let after = get_dlc(&connection, 255710, 346791).expect("releer");
         assert!(after.owned, "el marcado manual de propiedad se conserva");
         assert!(after.hidden, "una importación nunca cambia la ocultación");
@@ -901,8 +916,12 @@ mod tests {
     #[test]
     fn a_catalog_pass_does_not_erase_a_sheet_already_obtained() {
         let mut connection = database();
-        upsert_dlc_batch(&mut connection, 255710, &[detailed(346791, 0, Some((649, "EUR")))])
-            .expect("importar ficha completa");
+        upsert_dlc_batch(
+            &mut connection,
+            255710,
+            &[detailed(346791, 0, Some((649, "EUR")))],
+        )
+        .expect("importar ficha completa");
 
         upsert_dlc_batch(&mut connection, 255710, &[ImportedDlc::pending(346791, 4)])
             .expect("reimportar catálogo");
@@ -939,12 +958,20 @@ mod tests {
         installed.installed = Some(true);
         installed.owned = true;
         upsert_dlc_batch(&mut connection, 255710, &[installed]).expect("importar con evidencia");
-        assert!(get_dlc(&connection, 255710, 346791).expect("releer").installed);
+        assert!(
+            get_dlc(&connection, 255710, 346791)
+                .expect("releer")
+                .installed
+        );
 
         // Sin evidencia local, la instalación conocida se conserva.
         upsert_dlc_batch(&mut connection, 255710, &[detailed(346791, 0, None)])
             .expect("importar sin evidencia");
-        assert!(get_dlc(&connection, 255710, 346791).expect("releer").installed);
+        assert!(
+            get_dlc(&connection, 255710, 346791)
+                .expect("releer")
+                .installed
+        );
 
         // Con evidencia concluyente en contra, sí se retira.
         let mut removed = detailed(346791, 0, None);
@@ -988,7 +1015,10 @@ mod tests {
         let not_owned =
             list_dlc(&connection, 255710, DlcFilter::NotOwned).expect("listar no poseídos");
         assert_eq!(
-            not_owned.iter().map(|row| row.dlc_app_id).collect::<Vec<_>>(),
+            not_owned
+                .iter()
+                .map(|row| row.dlc_app_id)
+                .collect::<Vec<_>>(),
             vec![300, 100]
         );
         let installed =
@@ -1015,7 +1045,10 @@ mod tests {
 
     #[test]
     fn the_filter_comes_from_an_allowlist_and_rejects_anything_else() {
-        assert_eq!(DlcFilter::parse(None).expect("por defecto"), DlcFilter::Visible);
+        assert_eq!(
+            DlcFilter::parse(None).expect("por defecto"),
+            DlcFilter::Visible
+        );
         assert_eq!(
             DlcFilter::parse(Some("notOwned")).expect("no poseídos"),
             DlcFilter::NotOwned
@@ -1054,7 +1087,10 @@ mod tests {
         assert_eq!(summary.pending_value_currency.as_deref(), Some("EUR"));
         assert_eq!(summary.pending_value_cents, Some(649 + 1299));
         assert_eq!(summary.pending_counted, 2);
-        assert_eq!(summary.pending_unknown_price, 1, "el DLC sin precio no suma");
+        assert_eq!(
+            summary.pending_unknown_price, 1,
+            "el DLC sin precio no suma"
+        );
         assert_eq!(summary.pending_other_currency, 1, "el DLC en USD no suma");
 
         // Ocultar y poseer sacan al DLC del valor pendiente.
@@ -1177,7 +1213,10 @@ mod tests {
     fn a_per_game_refresh_never_steals_candidates_from_another_game() {
         let mut connection = database();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (620, 'Portal 2')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (620, 'Portal 2')",
+                [],
+            )
             .expect("crear segundo juego");
         upsert_dlc_batch(&mut connection, 255710, &[ImportedDlc::pending(100, 0)])
             .expect("importar del primero");

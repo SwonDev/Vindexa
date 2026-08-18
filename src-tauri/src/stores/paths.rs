@@ -236,7 +236,11 @@ pub(crate) fn roaming_config_directory() -> Option<PathBuf> {
     if cfg!(target_os = "windows") {
         env_path("APPDATA")
     } else if cfg!(target_os = "macos") {
-        Some(home_directory()?.join("Library").join("Application Support"))
+        Some(
+            home_directory()?
+                .join("Library")
+                .join("Application Support"),
+        )
     } else {
         xdg_config_home()
     }
@@ -393,7 +397,8 @@ mod tests {
     fn the_gog_manifest_listing_ignores_its_neighbouring_files() {
         let directory = TempDir::new().expect("crear temporal");
         fs::write(directory.path().join("goggame-1207658924.info"), "{}").expect("escribir info");
-        fs::write(directory.path().join("goggame-1207658924.hashdb"), "x").expect("escribir hashdb");
+        fs::write(directory.path().join("goggame-1207658924.hashdb"), "x")
+            .expect("escribir hashdb");
         fs::write(directory.path().join("readme.txt"), "x").expect("escribir readme");
 
         // Junto al `.info` conviven el `.hashdb` y ficheros del propio juego:

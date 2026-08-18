@@ -180,7 +180,11 @@ pub fn session_snapshot(store: ExternalStore) -> AppResult<ExternalStoreSession>
 
 /// Estado de todas las tiendas conocidas, en el orden de [`ExternalStore::ALL`].
 pub fn list_sessions() -> AppResult<Vec<ExternalStoreSession>> {
-    ExternalStore::ALL.iter().copied().map(session_snapshot).collect()
+    ExternalStore::ALL
+        .iter()
+        .copied()
+        .map(session_snapshot)
+        .collect()
 }
 
 /// Cierra la sesión: revoca en la tienda cuando se puede, borra el llavero

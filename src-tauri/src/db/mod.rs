@@ -4,11 +4,11 @@ pub mod curated;
 pub mod discovery;
 pub mod dlc;
 pub mod family_catalog;
-pub mod notifications;
 mod library;
 pub mod library_dnd;
 mod metadata_queue;
 pub(crate) mod migrations;
+pub mod notifications;
 pub mod organization;
 pub mod personal;
 pub mod pricing;
@@ -18,7 +18,6 @@ pub mod rich_metadata;
 pub mod saved_views;
 pub mod wishlist;
 
-use chrono::{DateTime, Utc};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
@@ -28,6 +27,7 @@ use crate::models::{
     SavePlannerItemInput, SmartRule, StatusDefinition, SteamConfiguration, SyncRun,
     UpdateGameInput,
 };
+use chrono::{DateTime, Utc};
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension,
     backup::{Backup, StepResult},
@@ -68,15 +68,13 @@ pub use pricing::{
     WishlistPriceStatus,
 };
 pub use priority::{
-    ImportedUpcomingRelease, PriorityExplanation, PriorityRanking, PriorityRecomputeReport,
-    TasteReport, UpcomingImportSummary, UpcomingRelease,
+    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, TasteReport, UpcomingRelease,
 };
 pub use rich_metadata::{DrmStateCounts, RichGameMetadata, RichMetadataUpdate};
 pub use saved_views::{SaveViewInput, SavedView};
 pub use wishlist::{
     GameVideo, GameVideoRef, ImportedWishlistGame, SaveGameVideoInput, SaveWishlistEntryInput,
-    SteamWishlistImportResult, WishlistEntry, WishlistGame, WishlistImportReport,
-    WishlistOverview,
+    SteamWishlistImportResult, WishlistEntry, WishlistImportReport, WishlistOverview,
 };
 
 #[derive(Debug, Clone)]
@@ -481,35 +479,6 @@ impl Database {
         library::achievements_refresh_due(&self.open()?, app_id)
     }
 
-    pub fn save_store_metadata(
-        &self,
-        app_id: u32,
-        metadata: &StoreMetadataUpdate,
-    ) -> AppResult<GameDetail> {
-        let mut connection = self.open()?;
-        library::save_store_metadata(&connection, app_id, metadata)?;
-        let (is_early_access, release_date, fetched_at) = connection.query_row(
-            "SELECT is_early_access, release_date, metadata_fetched_at
-               FROM games WHERE app_id = ?1",
-            [app_id],
-            |row| {
-                Ok((
-                    row.get::<_, Option<bool>>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            },
-        )?;
-        discovery::record_metadata_observation(
-            &mut connection,
-            app_id,
-            is_early_access,
-            release_date.as_deref(),
-            &fetched_at,
-        )?;
-        Self::detail_with_rich(&connection, app_id)
-    }
-
     pub fn mark_store_metadata_attempt(&self, app_id: u32, status: &str) -> AppResult<GameDetail> {
         let connection = self.open()?;
         library::mark_store_metadata_attempt(&connection, app_id, status)?;
@@ -529,38 +498,6 @@ impl Database {
         limit: usize,
     ) -> AppResult<Vec<MetadataJob>> {
         metadata_queue::claim_ready(&mut self.open()?, limit)
-    }
-
-    pub(crate) fn complete_metadata_enrichment(
-        &self,
-        app_id: u32,
-        metadata: &StoreMetadataUpdate,
-    ) -> AppResult<()> {
-        let mut connection = self.open()?;
-        let transaction = connection.transaction()?;
-        library::save_store_metadata(&transaction, app_id, metadata)?;
-        metadata_queue::mark_success(&transaction, app_id)?;
-        transaction.commit()?;
-
-        let (is_early_access, release_date, fetched_at) = connection.query_row(
-            "SELECT is_early_access, release_date, metadata_fetched_at
-               FROM games WHERE app_id = ?1",
-            [app_id],
-            |row| {
-                Ok((
-                    row.get::<_, Option<bool>>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            },
-        )?;
-        discovery::record_metadata_observation(
-            &mut connection,
-            app_id,
-            is_early_access,
-            release_date.as_deref(),
-            &fetched_at,
-        )
     }
 
     pub(crate) fn complete_metadata_unavailable(&self, app_id: u32) -> AppResult<()> {
@@ -746,10 +683,6 @@ impl Database {
         rich_metadata::drm_state_counts(&self.open()?)
     }
 
-    pub fn save_rich_metadata(&self, app_id: u32, update: &RichMetadataUpdate) -> AppResult<()> {
-        rich_metadata::save(&mut self.open()?, app_id, update)
-    }
-
     /// Persiste en una sola transacción todo lo que aporta una única respuesta
     /// de la tienda: los campos de biblioteca y los metadatos de ficha.
     pub fn save_store_bundle(
@@ -902,13 +835,6 @@ impl Database {
         surface: &str,
     ) -> AppResult<()> {
         priority::record_taste_feedback(&self.open()?, app_id, verdict, surface)
-    }
-
-    pub fn save_upcoming_releases(
-        &self,
-        items: &[ImportedUpcomingRelease],
-    ) -> AppResult<UpcomingImportSummary> {
-        priority::upsert_upcoming(&mut self.open()?, items)
     }
 
     pub fn score_upcoming_releases(&self) -> AppResult<usize> {
@@ -1145,7 +1071,12 @@ impl Database {
         dlc::mark_dlc_metadata_failed(&self.open()?, app_id, dlc_app_id)
     }
 
-    pub fn set_game_dlc_owned(&self, app_id: u32, dlc_app_id: u32, owned: bool) -> AppResult<GameDlc> {
+    pub fn set_game_dlc_owned(
+        &self,
+        app_id: u32,
+        dlc_app_id: u32,
+        owned: bool,
+    ) -> AppResult<GameDlc> {
         dlc::set_dlc_owned(&self.open()?, app_id, dlc_app_id, owned)
     }
 
@@ -1247,10 +1178,6 @@ impl Database {
 
     pub fn reorder_collections(&self, ids: &[String]) -> AppResult<()> {
         organization::reorder_collections(&mut self.open()?, ids)
-    }
-
-    pub fn set_collection_games(&self, collection_id: &str, app_ids: &[u32]) -> AppResult<()> {
-        organization::set_collection_games(&mut self.open()?, collection_id, app_ids)
     }
 
     pub fn smart_rules(&self, collection_id: &str) -> AppResult<Vec<SmartRule>> {

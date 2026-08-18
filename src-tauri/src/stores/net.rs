@@ -112,7 +112,10 @@ pub fn check_status(store: ExternalStore, status: StatusCode) -> AppResult<()> {
 }
 
 /// Lee el cuerpo por trozos hasta el tope y lo interpreta como JSON.
-pub async fn read_json<T: DeserializeOwned>(store: ExternalStore, response: Response) -> AppResult<T> {
+pub async fn read_json<T: DeserializeOwned>(
+    store: ExternalStore,
+    response: Response,
+) -> AppResult<T> {
     let body = read_capped(store, response).await?;
     serde_json::from_slice(&body).map_err(|_| response_error(store))
 }
@@ -127,11 +130,7 @@ async fn read_capped(store: ExternalStore, mut response: Response) -> AppResult<
         return Err(response_error(store));
     }
     let mut buffer = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| network_error(store))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|_| network_error(store))? {
         if buffer.len() + chunk.len() > MAX_RESPONSE_BYTES {
             return Err(response_error(store));
         }

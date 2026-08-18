@@ -191,10 +191,7 @@ pub fn archive_games(
 
 /// Devuelve a la biblioteca un lote de juegos archivados. También idempotente:
 /// desarchivar algo que no estaba archivado no es un error, es un no-cambio.
-pub fn unarchive_games(
-    connection: &mut Connection,
-    app_ids: &[u32],
-) -> AppResult<ArchiveReport> {
+pub fn unarchive_games(connection: &mut Connection, app_ids: &[u32]) -> AppResult<ArchiveReport> {
     let app_ids = validate_batch(app_ids)?;
     ensure_all_exist(connection, &app_ids)?;
 
@@ -439,7 +436,8 @@ mod tests {
         let mut connection = database();
         game(&connection, 10, "Uno");
         let largo = "x".repeat(MAX_REASON_LENGTH + 1);
-        let error = archive_games(&mut connection, &[10], &largo, at(1)).expect_err("debe rechazar");
+        let error =
+            archive_games(&mut connection, &[10], &largo, at(1)).expect_err("debe rechazar");
         assert!(error.to_string().contains("motivo"));
     }
 
@@ -448,7 +446,9 @@ mod tests {
         let mut connection = database();
         game(&connection, 10, "En el plan");
         let column: String = connection
-            .query_row("SELECT id FROM planner_columns LIMIT 1", [], |row| row.get(0))
+            .query_row("SELECT id FROM planner_columns LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .expect("columna sembrada");
         connection
             .execute(

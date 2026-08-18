@@ -2332,7 +2332,10 @@ mod tests {
         }
     }
 
-    fn stored_entry(connection: &Connection, app_id: u32) -> (String, u8, String, Option<i64>, String) {
+    fn stored_entry(
+        connection: &Connection,
+        app_id: u32,
+    ) -> (String, u8, String, Option<i64>, String) {
         connection
             .query_row(
                 "SELECT bucket, priority, note, target_price_cents, added_at
@@ -2547,13 +2550,8 @@ mod tests {
         .expect("importar");
 
         // Un juego del catálogo se coloca delante de uno de la biblioteca.
-        move_wishlist_entry(
-            &mut connection,
-            999,
-            WISHLIST_IMPORT_BUCKET,
-            Some(10),
-        )
-        .expect("mover el del catálogo delante");
+        move_wishlist_entry(&mut connection, 999, WISHLIST_IMPORT_BUCKET, Some(10))
+            .expect("mover el del catálogo delante");
         let overview = wishlist_overview(&connection).expect("resumen");
         assert_eq!(bucket_ids(&overview, WISHLIST_IMPORT_BUCKET), vec![999, 10]);
 
@@ -2616,16 +2614,17 @@ mod tests {
         let mut connection = database();
         import_steam_wishlist(
             &mut connection,
-            &[steam(999, "Del catálogo", Some("2020-01-01T00:00:00+00:00"))],
+            &[steam(
+                999,
+                "Del catálogo",
+                Some("2020-01-01T00:00:00+00:00"),
+            )],
         )
         .expect("importar");
         insert_game(&connection, 10);
 
         assert_eq!(wishlist_total(&connection).expect("contar"), 1);
-        assert_eq!(
-            wishlist_overview(&connection).expect("resumen").total,
-            1
-        );
+        assert_eq!(wishlist_overview(&connection).expect("resumen").total, 1);
         save_wishlist_entry(&mut connection, &wish(10, WISHLIST_IMPORT_BUCKET))
             .expect("añadir uno de biblioteca");
         assert_eq!(wishlist_total(&connection).expect("contar"), 2);
@@ -2654,7 +2653,8 @@ mod tests {
 
         let steam_wants_another_bucket = steam(10, "Primero", Some("2013-12-16T17:34:30+00:00"));
         let from_steam = std::slice::from_ref(&steam_wants_another_bucket);
-        let first = import_steam_wishlist(&mut connection, from_steam).expect("primera importación");
+        let first =
+            import_steam_wishlist(&mut connection, from_steam).expect("primera importación");
         let second =
             import_steam_wishlist(&mut connection, from_steam).expect("segunda importación");
 
@@ -2664,7 +2664,9 @@ mod tests {
         assert_eq!(second.already_present, 1);
 
         let total: i64 = connection
-            .query_row("SELECT COUNT(*) FROM wishlist_entries", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM wishlist_entries", [], |row| {
+                row.get(0)
+            })
             .expect("contar");
         assert_eq!(total, 1);
 

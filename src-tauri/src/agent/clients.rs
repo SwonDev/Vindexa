@@ -57,6 +57,10 @@ pub struct IssuedAgentClient {
 }
 
 /// Cliente autenticado, listo para autorizar una intención.
+// Los campos que hoy nadie lee forman parte del modelo que el puente
+// devuelve a quien lo integre: recortarlos obligaría a volver a consultar
+// la base para reconstruirlos.
+#[allow(dead_code, reason = "modelo público del puente de agentes")]
 #[derive(Debug, Clone)]
 pub struct AuthenticatedClient {
     pub id: String,

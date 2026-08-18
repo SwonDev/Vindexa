@@ -149,7 +149,10 @@ test.describe("separación de la rejilla", () => {
     // El anillo de selección se dibuja hacia dentro, pero la fila de abajo aún
     // necesita aire suficiente para que las carátulas no se lean pegadas.
     for (const hueco of medidas.huecos) {
-      expect(Math.round(hueco), `hueco real entre filas: ${medidas.huecos.join(", ")}`).toBeGreaterThanOrEqual(12);
+      expect(
+        Math.round(hueco),
+        `hueco real entre filas: ${medidas.huecos.join(", ")}`,
+      ).toBeGreaterThanOrEqual(12);
     }
   });
 });

@@ -277,8 +277,8 @@ pub async fn capture_authorization_code<R: Runtime>(
     if !supports_in_app(store) {
         return Err(unsupported_error(store));
     }
-    let profile = browser_stores::store_by_id(browser_store_id(store))
-        .ok_or_else(|| window_error(store))?;
+    let profile =
+        browser_stores::store_by_id(browser_store_id(store)).ok_or_else(|| window_error(store))?;
     let label = profile.window_label();
 
     if app.get_webview_window(&label).is_none() {
@@ -538,7 +538,12 @@ mod tests {
         assert!(READ_EPIC_CODE_SCRIPT.contains("location.pathname"));
         assert!(READ_EPIC_CODE_SCRIPT.contains("authorizationCode"));
         // Y no toca nada más de la sesión de la tienda.
-        for prohibido in ["document.cookie", "localStorage", "sessionStorage", "fetch("] {
+        for prohibido in [
+            "document.cookie",
+            "localStorage",
+            "sessionStorage",
+            "fetch(",
+        ] {
             assert!(
                 !READ_EPIC_CODE_SCRIPT.contains(prohibido),
                 "el guion no puede tocar {prohibido}"

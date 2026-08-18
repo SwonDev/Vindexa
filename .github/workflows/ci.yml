@@ -1,0 +1,118 @@
+# Integración continua de Vindexa.
+#
+# La aplicación se distribuye para macOS, Windows y Linux, así que el backend se
+# compila y se prueba en los tres. No basta con macOS: el puente con el motor web
+# es distinto en cada sistema (WKWebView, WebView2 y WebKitGTK) y un fallo ahí no
+# aparece hasta que se compila en el sistema afectado.
+name: Integración continua
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Un empujón nuevo sobre la misma rama cancela el anterior: interesa el último
+  # estado, no la cola entera.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # La compilación de depuración no necesita tabla de símbolos completa y así el
+  # caché de Rust cabe en el límite de la acción.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  interfaz:
+    name: Interfaz · tipos, estilo y pruebas
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.20.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # `--ignore-scripts` es deliberado: ningún script de postinstalación se
+      # ejecuta sin revisión previa. El proyecto no depende de ninguno.
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Comprobar tipos
+        run: pnpm exec tsc -b
+
+      - name: Revisar estilo
+        run: pnpm lint
+
+      - name: Ejecutar pruebas
+        run: pnpm test
+
+      - name: Compilar la interfaz
+        run: pnpm exec vite build
+
+  backend:
+    name: Backend · ${{ matrix.nombre }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Un fallo en un sistema no oculta el resultado de los otros dos: hace
+      # falta saber si el problema es de una plataforma o de todas.
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: macOS
+            runner: macos-15
+          - nombre: Windows
+            runner: windows-2025
+          - nombre: Linux
+            runner: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cachear compilación de Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Dependencias de sistema de Tauri 2 en Linux. `ubuntu-22.04` es la imagen
+      # más antigua con `libwebkit2gtk-4.1`, que es la que pide Tauri 2; compilar
+      # ahí mantiene el AppImage utilizable en distribuciones anteriores.
+      - name: Instalar dependencias de sistema (sólo Linux)
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Comprobar formato
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+
+      # `--all-targets` compila también las pruebas: es la comprobación real de
+      # que el código de esta plataforma existe y encaja, no sólo el de macOS.
+      - name: Analizar con Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- --deny warnings
+
+      - name: Ejecutar pruebas
+        run: cargo test --manifest-path src-tauri/Cargo.toml
