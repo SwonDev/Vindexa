@@ -3195,10 +3195,24 @@ input[type="search"]::-webkit-search-results-decoration {
   width: 3px;
   height: 18px;
 }
+/* La cabecera mide 42 px fijos, así que un título que no cabe no puede partirse
+   en dos líneas: se sale de su fila y descoloca el recuento, el límite y el
+   botón de añadir. Se recorta con puntos suspensivos y el nombre completo queda
+   en el rótulo del elemento. */
 .planner-lane h2 {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Lo que acompaña al título no se encoge: el recuento y el límite son datos y
+   recortarlos los haría ilegibles. */
+.planner-lane data,
+.planner-lane > header > [data-slot="badge"] {
+  flex: 0 0 auto;
 }
 /* La cabecera de columna es más clara que la columna: el gris terciario se
    queda corto sobre ella y el recuento es dato, no adorno. */

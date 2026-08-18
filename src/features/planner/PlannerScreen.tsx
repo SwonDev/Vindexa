@@ -498,7 +498,7 @@ function PlannerLane({
     <section className="planner-lane" data-over={isOver} ref={setNodeRef}>
       <header>
         <span className="lane-color" style={{ backgroundColor: column.color }} />
-        <h2>{column.name}</h2>
+        <h2 title={column.name}>{column.name}</h2>
         <data>{column.items.length}</data>
         {column.wipLimit && (
           <Badge variant={overloaded ? "destructive" : "outline"}>Límite {column.wipLimit}</Badge>
