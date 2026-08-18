@@ -6,6 +6,43 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+## [0.1.1] · 2026-08-18
+
+### Añadido
+
+- **Los juegos del préstamo familiar se pueden organizar como los tuyos.** Vivían en una tabla
+  de catálogo sin ficha personal, así que no había dónde guardarles un estado, una colección,
+  una prioridad ni una nota: se podían mirar y nada más. Ahora entran en la biblioteca como
+  compartidos —sin contarse en «Todos los juegos», porque tenerlos a la vista no es tenerlos— y
+  Steam Family usa el listado de la biblioteca: filtros, diecisiete órdenes, agrupación, vistas
+  guardadas, selección múltiple, arrastre, menú contextual y ficha.
+- **Epic, GOG e itch.io salen de Ajustes** y son ámbitos de la biblioteca, con su recuento en la
+  barra lateral y el mismo listado. Antes eran una lista de texto sin portadas.
+- **Un solo listado para los catálogos.** La rejilla, la virtualización, el cálculo de columnas,
+  el fundido de borde y la carga anticipada de portadas viven en un componente compartido; cada
+  catálogo sólo traduce sus datos.
+
+### Corregido
+
+- **El recuento de Steam Family no se veía sin entrar**, porque salía de una consulta que sólo
+  se ejecutaba dentro de esa sección: había que entrar para ver el número que te dice que ahí
+  hay algo. En una biblioteca con 1801 juegos prestados, eso se lee como que faltan.
+- **El recuento de cada estado volvía a no coincidir con su listado** al dar ficha personal a
+  los prestados: la barra ofrecía juegos que la pantalla escondía. Los recuentos de estados y
+  colecciones aplican ahora las mismas exclusiones que el listado, y los archivados dejan de
+  inflarlos.
+- **Las carátulas del catálogo de Family** seguían apuntando a la variante pequeña, que mide
+  300×450 y para muchos títulos ni existe. La migración que las subió a la grande se había
+  dejado fuera esa tabla.
+- **Dos aspas de borrar en el campo de búsqueda**: WebKit dibuja la suya dentro de
+  `input[type="search"]` junto a la del proyecto.
+- **El pulgar del interruptor no cabía en su carril** —dos píxeles más alto que su hueco— y se
+  quedaba en el color de fondo de la aplicación, porque las variantes `dark:` de shadcn nunca se
+  aplican: la aplicación es oscura de raíz y nada añade esa clase al documento.
+- **El elemento arrastrado temblaba**: llevaba la traslación del arrastre además del acompañante
+  que sigue al cursor, y dentro de una fila virtualizada esa suma peleaba contra la posición
+  recalculada en cada medida.
+
 ## [0.1.0] · 2026-08-18
 
 Primera publicación pública, con instaladores para macOS, Windows y Linux. Los

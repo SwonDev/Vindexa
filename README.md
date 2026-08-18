@@ -7,7 +7,7 @@
 Steam, Epic, GOG e itch.io en una sola aplicación de escritorio.
 Sin cuenta, sin servidor, sin telemetría: tus datos se quedan en tu equipo.
 
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-0.1.0-5CAAC1?style=for-the-badge&labelColor=171D25)](https://github.com/SwonDev/Vindexa/releases/latest)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-0.1.1-5CAAC1?style=for-the-badge&labelColor=171D25)](https://github.com/SwonDev/Vindexa/releases/latest)
 [![Plataformas](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-171D25?style=for-the-badge&labelColor=171D25)](#instalación)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-A4D007?style=for-the-badge&labelColor=171D25)](./LICENSE)
 [![Integración continua](https://img.shields.io/github/actions/workflow/status/SwonDev/Vindexa/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=171D25&color=5CAAC1)](https://github.com/SwonDev/Vindexa/actions/workflows/ci.yml)
@@ -173,10 +173,10 @@ juegos de quien tenga su biblioteca pública, que casi nunca es el caso: por eso
 otras herramientas enseñan una fracción del préstamo familiar. De los demás
 miembros no se guarda nada: ni nombre, ni avatar, ni quién presta qué.
 
-> [!NOTE]
-> Los juegos de Epic, GOG e itch.io viven hoy en el panel de tiendas, con
-> emparejado corregible y arranque directo. Todavía no se mezclan con la
-> biblioteca principal. Es lo siguiente.
+Cada tienda vinculada es un ámbito de la biblioteca, con su recuento en la barra
+lateral y el mismo listado que el resto: cambiar de sección no cambia cómo se
+navega. Los juegos siguen sin mezclarse en «Todos los juegos» —son de otra
+tienda— pero se miran igual.
 
 ## Instalación
 
@@ -295,9 +295,10 @@ descubras.
 <details>
 <summary><strong>Límites conocidos del alcance actual</strong></summary>
 
-- Los juegos de Epic, GOG e itch.io **no aparecen aún en la biblioteca
-  principal**, ni en colecciones, ni en el planificador. Viven en el panel de
-  tiendas.
+- Los juegos de Epic, GOG e itch.io tienen su propio ámbito en la biblioteca,
+  pero **no se pueden organizar todavía**: no hay ficha personal para un juego de
+  otra tienda, así que no admiten estado, colección ni nota. Los del préstamo
+  familiar sí.
 - La sincronización remota de Steam necesita una Web API Key **y** una
   biblioteca visible para esa clave. Con el perfil en privado, Steam devuelve una
   colección vacía; Vindexa lo detecta y lo dice, en lugar de enseñarte una
