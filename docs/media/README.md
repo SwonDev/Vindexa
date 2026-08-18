@@ -23,20 +23,20 @@ quedan en `artifacts/showcase/`, que no se publica.
 
 | Archivo | Qué muestra | Tamaño |
 | --- | --- | --- |
-| `biblioteca-rejilla.webp` | La biblioteca en cuadrícula, a 1920×1080 | 192 KB |
-| `biblioteca-lista.webp` | La misma biblioteca en lista, con progreso y última sesión | 60 KB |
-| `biblioteca-ultracompacta.webp` | Densidad ultracompacta, para bibliotecas de miles de juegos | 72 KB |
-| `biblioteca-agrupada.webp` | Agrupación por estado, con encabezado y recuento por grupo | 60 KB |
-| `ficha-juego.webp` | Ficha de un juego con su arte, metadatos y acciones | 76 KB |
+| `biblioteca-rejilla.webp` | La biblioteca en cuadrícula, a 1920×1080 | 188 KB |
+| `biblioteca-lista.webp` | La misma biblioteca en lista, con progreso y última sesión | 57 KB |
+| `biblioteca-ultracompacta.webp` | Densidad ultracompacta, para bibliotecas de miles de juegos | 70 KB |
+| `biblioteca-agrupada.webp` | Agrupación por estado, con encabezado y recuento por grupo | 57 KB |
+| `ficha-juego.webp` | Ficha de un juego con su arte, metadatos y acciones | 73 KB |
 | `ficha-prioridad.webp` | La explicación de la prioridad: qué señales la mueven y cuánto | 56 KB |
-| `ficha-contenido-adicional.webp` | Contenido adicional con su evidencia de propiedad | 64 KB |
+| `ficha-contenido-adicional.webp` | Contenido adicional con su evidencia de propiedad | 62 KB |
 | `deseados.webp` | Lista de deseados por intención, con precios y descuentos | 52 KB |
-| `planificador.webp` | Planificador con cola, semana y límites de trabajo en curso | 56 KB |
-| `colecciones.webp` | Colecciones manuales e inteligentes | 132 KB |
-| `seguimiento.webp` | Seguimiento: olvidados, casi terminados y próximos | 92 KB |
-| `avisos.webp` | Bandeja de avisos y reglas programables | 108 KB |
-| `paleta-comandos.webp` | Paleta de comandos buscando en toda la aplicación | 96 KB |
-| `ajustes-familia.webp` | Ajustes de Steam, con el vínculo de sesión para el catálogo de Family | 84 KB |
+| `planificador.webp` | Planificador con cola, semana y límites de trabajo en curso | 53 KB |
+| `colecciones.webp` | Colecciones manuales e inteligentes | 122 KB |
+| `seguimiento.webp` | Seguimiento: olvidados, casi terminados y próximos | 89 KB |
+| `avisos.webp` | Bandeja de avisos y reglas programables | 105 KB |
+| `paleta-comandos.webp` | Paleta de comandos buscando en toda la aplicación | 94 KB |
+| `ajustes-familia.webp` | Ajustes de Steam, con el vínculo de sesión para el catálogo de Family | 80 KB |
 | `modo-sofa.webp` | Modo sofá con el foco sobre un juego y su panel de detalle | 136 KB |
 
 Todas a 1440×936, WebP con calidad 88. Por debajo de esa calidad se ven
