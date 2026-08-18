@@ -545,8 +545,13 @@ fn page_error(code: Option<&str>, reason: Option<&str>) -> AppError {
 /// almacén aislado, bloqueador nativo, sin descargas, sin ventanas emergentes y
 /// sin IPC. Después se navega a la lista con `navigate`, que vuelve a pasar por
 /// la política de navegación como cualquier enlace de la página.
-async fn open_wishlist_window<R: Runtime>(
+/// Lleva la ventana de Steam del navegador integrado a `destino`.
+///
+/// Devuelve la ventana y su generación de carga anterior, que es lo que después
+/// permite distinguir el documento nuevo del que ya estaba.
+pub(crate) async fn open_steam_page<R: Runtime>(
     app: &AppHandle<R>,
+    destino: Url,
 ) -> AppResult<(WebviewWindow<R>, Option<u64>)> {
     let store = stores::store_by_id(stores::DEFAULT_STORE_ID).ok_or_else(|| {
         AppError::new(
@@ -574,10 +579,9 @@ async fn open_wishlist_window<R: Runtime>(
         ));
     }
 
-    let target = wishlist_page_url();
     let previous_generation = load_generation(&label);
     window
-        .navigate(target)
+        .navigate(destino)
         .and_then(|()| window.unminimize())
         .and_then(|()| window.show())
         .and_then(|()| window.set_focus())
@@ -608,14 +612,19 @@ fn load_generation(label: &str) -> Option<u64> {
 /// [`FRESH_LOAD_GRACE`] se deja de exigir: una navegación que el motor decida no
 /// repetir no puede bloquear la importación para siempre, y el documento que hay
 /// en esa URL sigue siendo una lista de deseados.
-async fn wait_for_wishlist_page(label: &str, previous_generation: Option<u64>) -> AppResult<()> {
+pub(crate) async fn wait_for_steam_page(
+    label: &str,
+    previous_generation: Option<u64>,
+    es_el_destino: fn(&Url) -> bool,
+    caducidad: &str,
+) -> AppResult<()> {
     let started = tokio::time::Instant::now();
     let deadline = started + LOAD_TIMEOUT;
     loop {
         if let Some(state) = session::snapshot(label)
             && !state.loading
             && let Ok(url) = Url::parse(&state.url)
-            && is_wishlist_page(&url)
+            && es_el_destino(&url)
         {
             let fresh = load_generation(label) != previous_generation;
             if fresh || started.elapsed() >= FRESH_LOAD_GRACE {
@@ -623,10 +632,7 @@ async fn wait_for_wishlist_page(label: &str, previous_generation: Option<u64>) -
             }
         }
         if tokio::time::Instant::now() >= deadline {
-            return Err(AppError::new(
-                "wishlist_browser_timeout",
-                "Tu lista de deseados no terminó de cargarse en el navegador integrado. Compruébala en esa ventana y vuelve a intentarlo.",
-            ));
+            return Err(AppError::new("wishlist_browser_timeout", caducidad));
         }
         tokio::time::sleep(LOAD_POLL).await;
     }
@@ -634,9 +640,15 @@ async fn wait_for_wishlist_page(label: &str, previous_generation: Option<u64>) -
 
 /// Lee la lista de deseados de la sesión abierta en el navegador integrado.
 pub async fn read_wishlist<R: Runtime>(app: &AppHandle<R>) -> AppResult<BrowserWishlist> {
-    let (window, previous_generation) = open_wishlist_window(app).await?;
+    let (window, previous_generation) = open_steam_page(app, wishlist_page_url()).await?;
     let label = window.label().to_string();
-    wait_for_wishlist_page(&label, previous_generation).await?;
+    wait_for_steam_page(
+        &label,
+        previous_generation,
+        is_wishlist_page,
+        "Tu lista de deseados no terminó de cargarse en el navegador integrado. Compruébala en esa ventana y vuelve a intentarlo.",
+    )
+    .await?;
     let raw = evaluate_json(&window, READ_WISHLIST_SCRIPT).await?;
     parse_wishlist_payload(&raw)
 }

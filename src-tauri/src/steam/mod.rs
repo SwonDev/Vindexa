@@ -3,6 +3,8 @@ pub mod actions;
 pub mod dlc;
 pub mod drm;
 pub mod family;
+pub mod family_api;
+pub mod family_session;
 pub mod local;
 pub mod metadata_enrichment;
 pub mod news_api;

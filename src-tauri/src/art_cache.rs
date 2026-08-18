@@ -2696,7 +2696,11 @@ mod tests {
         let stale_part = alive_dir.join(".cover.abc.part");
         fs::write(&stale_part, b"parcial").expect("escribir temporal");
         let old = std::time::SystemTime::now() - Duration::from_secs(7_200);
-        fs::File::open(&stale_part)
+        // Se abre con permiso de escritura a propósito: cambiar las marcas de
+        // tiempo lo exige en Windows, donde `File::open` da acceso denegado.
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&stale_part)
             .and_then(|file| file.set_times(fs::FileTimes::new().set_modified(old)))
             .expect("envejecer temporal");
 
@@ -2772,7 +2776,9 @@ mod tests {
             let path = art_dir.join(format!("cover-000000000000000{index}.jpg"));
             fs::write(&path, &bytes).expect("escribir imagen grande");
             let when = std::time::SystemTime::now() - Duration::from_secs(age_secs);
-            fs::File::open(&path)
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
                 .and_then(|file| {
                     file.set_times(fs::FileTimes::new().set_modified(when).set_accessed(when))
                 })

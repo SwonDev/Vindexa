@@ -34,6 +34,8 @@ import type {
   ExternalStoreScanReport,
   FamilyCatalogGame,
   FamilyCatalogRequest,
+  FamilySessionStatus,
+  FamilySyncReport,
   GameDetail,
   GameDlc,
   GameListRequest,
@@ -338,6 +340,10 @@ export const api = {
   savePreferences: (preferences: AppPreferences) =>
     invoke<void>("save_preferences", { preferences }),
   checkForUpdates: () => invoke<UpdateCheckResult>("check_for_updates"),
+  steamFamilySessionStatus: () => invoke<FamilySessionStatus>("steam_family_session_status"),
+  linkSteamFamilySession: () => invoke<FamilySessionStatus>("link_steam_family_session"),
+  unlinkSteamFamilySession: () => invoke<FamilySessionStatus>("unlink_steam_family_session"),
+  syncSteamFamilyCatalog: () => invoke<FamilySyncReport>("sync_steam_family_catalog"),
   agentDispatch: (request: AgentRequest) => invoke<AgentOutcome>("agent_dispatch", { request }),
   agentConfirm: (auditId: string, approve: boolean) =>
     invoke<AgentOutcome>("agent_confirm", { auditId, approve }),

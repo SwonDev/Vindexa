@@ -18,7 +18,9 @@ import {
   IconRoute,
   IconShieldLock,
   IconTrash,
+  IconUnlink,
   IconUpload,
+  IconUsersGroup,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -53,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { describeFamilyStatus, describeFamilySync } from "@/features/settings/family-session";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
 import { StoresPanel } from "@/features/settings/StoresPanel";
 import {
@@ -522,10 +525,111 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
         {localImport.isPending ? <IconLoader2 className="is-spinning" /> : <IconFolderOpen />}{" "}
         Explorar bibliotecas locales
       </Button>
+      <SettingsDivider />
+      <FamilySessionSettings />
     </div>
   );
 }
 
+/**
+ * Catálogo completo de Steam Family.
+ *
+ * La sincronización normal pregunta por cada miembro con la Web API Key, y eso
+ * sólo devuelve algo de quien tenga la biblioteca pública. Casi nadie la tiene,
+ * así que faltaban miles de juegos que el cliente de Steam sí enseña. Esta vía
+ * usa el testigo de la sesión abierta en el navegador integrado, que es lo que
+ * usa el propio cliente, y ve el catálogo entero.
+ */
+function FamilySessionSettings() {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+
+  const status = useQuery({
+    queryKey: ["steam-family-session"],
+    queryFn: api.steamFamilySessionStatus,
+  });
+
+  const refrescar = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["steam-family-session"] });
+  };
+
+  const vincular = useMutation({
+    mutationFn: api.linkSteamFamilySession,
+    onSuccess: () =>
+      setNotice({
+        kind: "success",
+        message: "Sesión de Steam vinculada. Ya puedes traer el catálogo de tu Familia.",
+      }),
+    onError: (error: unknown) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+    onSettled: () => void refrescar(),
+  });
+
+  const desvincular = useMutation({
+    mutationFn: api.unlinkSteamFamilySession,
+    onSuccess: () =>
+      setNotice({
+        kind: "success",
+        message: "Sesión olvidada. El catálogo ya importado se conserva.",
+      }),
+    onError: (error: unknown) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+    onSettled: () => void refrescar(),
+  });
+
+  const sincronizar = useMutation({
+    mutationFn: api.syncSteamFamilyCatalog,
+    onSuccess: (report) => {
+      setNotice({ kind: "success", message: describeFamilySync(report) });
+      invalidateSteamDerivedQueries(queryClient);
+    },
+    onError: (error: unknown) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+    onSettled: () => void refrescar(),
+  });
+
+  const ocupado = vincular.isPending || desvincular.isPending || sincronizar.isPending;
+  const vinculado = status.data?.linked ?? false;
+
+  return (
+    <>
+      <SettingsHeading
+        title="Catálogo de Steam Family"
+        description={describeFamilyStatus(status.data)}
+      />
+      {notice && <InlineNotice kind={notice.kind} message={notice.message} />}
+      <div className="button-row">
+        <Button size="sm" disabled={ocupado} onClick={() => vincular.mutate()}>
+          {vincular.isPending ? <IconLoader2 className="is-spinning" /> : <IconUsersGroup />}{" "}
+          {vinculado ? "Renovar la sesión" : "Vincular la sesión de Steam"}
+        </Button>
+        {vinculado && (
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={ocupado}
+              onClick={() => sincronizar.mutate()}
+            >
+              {sincronizar.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}{" "}
+              {sincronizar.isPending ? "Preguntando a Steam…" : "Traer el catálogo"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={ocupado}
+              onClick={() => desvincular.mutate()}
+            >
+              <IconUnlink /> Olvidar la sesión
+            </Button>
+          </>
+        )}
+      </div>
+      <p className="settings-note">
+        Se abrirá el navegador integrado en Steam. Si no has iniciado sesión allí, hazlo y vuelve a
+        pulsar. Vindexa sólo lee el testigo de sesión: ni cookies, ni contraseña, ni ningún dato de
+        los demás miembros de la Familia.
+      </p>
+    </>
+  );
+}
 function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
   const queryClient = useQueryClient();
   const [preferences, setPreferences] = useState<AppPreferences>(

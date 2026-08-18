@@ -2,9 +2,19 @@ use crate::error::{AppError, AppResult};
 
 const SERVICE: &str = "io.vindexa.desktop";
 const API_KEY_ACCOUNT: &str = "steam-web-api-key";
+/// Testigo de sesión de Steam, el que autoriza los servicios de Familia.
+///
+/// Va en una entrada aparte de la Web API Key porque son credenciales
+/// distintas con vidas distintas: la clave la escribe la persona y dura, el
+/// testigo lo reparte la sesión y caduca. Revocar una no puede tirar la otra.
+const SESSION_TOKEN_ACCOUNT: &str = "steam-session-token";
 
 fn entry() -> AppResult<keyring::Entry> {
     keyring::Entry::new(SERVICE, API_KEY_ACCOUNT).map_err(keyring_error)
+}
+
+fn session_entry() -> AppResult<keyring::Entry> {
+    keyring::Entry::new(SERVICE, SESSION_TOKEN_ACCOUNT).map_err(keyring_error)
 }
 
 pub fn save_api_key(value: &str) -> AppResult<()> {
@@ -30,6 +40,44 @@ pub fn has_api_key() -> AppResult<bool> {
 
 pub fn delete_api_key() -> AppResult<()> {
     match entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(keyring_error(error)),
+    }
+}
+
+/// Guarda el testigo de sesión. Nunca se registra ni se enseña.
+pub fn save_session_token(value: &str) -> AppResult<()> {
+    let value = value.trim();
+    crate::steam::family_session::validate_token(value)?;
+    session_entry()?.set_password(value).map_err(keyring_error)
+}
+
+/// Recupera el testigo guardado, si lo hay.
+///
+/// Un testigo con forma inválida se trata como ausente en lugar de propagar un
+/// error: lo que hay que hacer es volver a iniciar sesión, y una entrada
+/// corrupta no puede dejar la función bloqueada para siempre.
+pub fn load_session_token() -> AppResult<Option<String>> {
+    match session_entry()?.get_password() {
+        Ok(value) => Ok(crate::steam::family_session::validate_token(&value)
+            .is_ok()
+            .then_some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(keyring_error(error)),
+    }
+}
+
+/// ¿Hay un testigo de sesión guardado?
+///
+/// No dice si sigue siendo válido: eso sólo lo sabe Steam, y comprobarlo
+/// costaría una petición. La caducidad se descubre al usarlo y se cuenta
+/// entonces.
+pub fn has_session_token() -> AppResult<bool> {
+    load_session_token().map(|value| value.is_some())
+}
+
+pub fn delete_session_token() -> AppResult<()> {
+    match session_entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(keyring_error(error)),
     }

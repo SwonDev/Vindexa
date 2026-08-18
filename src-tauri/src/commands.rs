@@ -1391,6 +1391,181 @@ pub async fn import_steam_wishlist_from_browser(
     })
 }
 
+// --- Catálogo de Steam Family ------------------------------------------------
+
+/// Estado del vínculo con la sesión de Steam que autoriza los servicios de
+/// Familia.
+#[tauri::command]
+pub async fn steam_family_session_status(
+    state: State<'_, AppState>,
+) -> AppResult<steam::family_api::FamilySessionStatus> {
+    let linked = steam::secrets::has_session_token()?;
+    let (last_sync_at, last_app_count, last_error_code) = database_read(&state, move |database| {
+        database.family_session_diagnostics()
+    })
+    .await?;
+    Ok(steam::family_api::FamilySessionStatus {
+        linked,
+        last_sync_at,
+        last_app_count,
+        last_error_code,
+    })
+}
+
+/// Toma el testigo de la sesión abierta en el navegador integrado y lo guarda.
+///
+/// No sincroniza nada: vincular y traer el catálogo son dos decisiones, y
+/// juntarlas dejaría a quien sólo quiere vincular esperando una descarga larga.
+#[tauri::command]
+pub async fn link_steam_family_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<steam::family_api::FamilySessionStatus> {
+    let token = steam::family_session::read_session_token(&app).await?;
+    steam::secrets::save_session_token(token.as_str())?;
+    steam_family_session_status(state).await
+}
+
+/// Olvida el testigo. El catálogo ya importado se queda: es un dato válido que
+/// se obtuvo legítimamente, y borrarlo al desvincular castigaría por cerrar
+/// sesión.
+#[tauri::command]
+pub async fn unlink_steam_family_session(
+    state: State<'_, AppState>,
+) -> AppResult<steam::family_api::FamilySessionStatus> {
+    steam::secrets::delete_session_token()?;
+    steam_family_session_status(state).await
+}
+
+/// Trae el catálogo completo de la Familia con el testigo guardado.
+///
+/// Esta es la vía que ve **todo** el catálogo. La que había —preguntar por cada
+/// miembro con la Web API Key— sólo devolvía lo de quien tuviera la biblioteca
+/// pública, y por eso faltaban miles de juegos que el cliente de Steam sí
+/// enseña. Aquella vía se conserva dentro de la sincronización normal: lo que
+/// aporte, aporta.
+#[tauri::command]
+pub async fn sync_steam_family_catalog(
+    state: State<'_, AppState>,
+) -> AppResult<steam::family_api::FamilySyncReport> {
+    let Some(raw_token) = steam::secrets::load_session_token()? else {
+        return Err(AppError::new(
+            "steam_family_not_linked",
+            "Vindexa no tiene una sesión de Steam vinculada. Vincúlala en Ajustes y vuelve a intentarlo.",
+        ));
+    };
+    let account = database_read(&state, move |database| database.get_steam_account()).await?;
+    let Some(account) = account else {
+        return Err(AppError::new(
+            "steam_family_no_account",
+            "Todavía no has vinculado una cuenta de Steam, así que no se sabe de quién es la Familia.",
+        ));
+    };
+
+    // El testigo se reconstruye desde su validador para no fabricar uno a mano:
+    // lo guardado ya pasó por él, pero el tipo sólo se puede crear así.
+    let token = steam::family_session::parse_token_payload(&format!(
+        r#"{{"data":{{"webapi_token":"{raw_token}"}}}}"#
+    ))?;
+
+    let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    let anotar_fallo = |estado: &State<'_, AppState>, error: &AppError| {
+        let code = error.code.clone();
+        let database = estado.database.clone();
+        // El diagnóstico se anota aunque falle: perderlo dejaría la pantalla
+        // diciendo que la última sincronización fue bien.
+        let _ = database.record_family_session_failure(&code);
+    };
+
+    let group = match steam::family_api::fetch_family_group(&token, &account.steam_id).await {
+        Ok(group) => group,
+        Err(error) => {
+            anotar_fallo(&state, &error);
+            if error.code == "steam_family_session_expired" {
+                // Un testigo caducado no sirve para nada: se borra para que la
+                // pantalla diga «vincula» y no «sincroniza» una y otra vez.
+                let _ = steam::secrets::delete_session_token();
+            }
+            return Err(error);
+        }
+    };
+
+    let group_id = match group {
+        steam::family_api::FamilyGroup::Member { group_id } => group_id,
+        steam::family_api::FamilyGroup::None => {
+            let moment = Utc::now().to_rfc3339();
+            database_read(&state, move |database| {
+                database.record_family_session_success(&moment, 0)
+            })
+            .await?;
+            return Ok(steam::family_api::FamilySyncReport {
+                no_family: true,
+                ..Default::default()
+            });
+        }
+    };
+
+    let library = match steam::family_api::fetch_shared_library(&token, &group_id).await {
+        Ok(library) => library,
+        Err(error) => {
+            anotar_fallo(&state, &error);
+            if error.code == "steam_family_session_expired" {
+                let _ = steam::secrets::delete_session_token();
+            }
+            return Err(error);
+        }
+    };
+
+    // Sin título no se puede presentar una ficha honesta, así que esas entradas
+    // se cuentan y no se guardan. Inventar el nombre a partir del AppID sería
+    // exactamente lo que este proyecto no hace.
+    let without_title = library
+        .apps
+        .iter()
+        .filter(|app| app.title.is_none())
+        .count() as u32;
+    let games: Vec<crate::db::ImportedFamilyCatalogGame> = library
+        .apps
+        .iter()
+        .filter_map(|app| {
+            app.title
+                .as_ref()
+                .map(|title| crate::db::ImportedFamilyCatalogGame {
+                    app_id: app.app_id,
+                    title: title.clone(),
+                    icon_url: None,
+                    cover_url: None,
+                    header_url: None,
+                    // Catálogo visible no es licencia: sólo la evidencia local
+                    // confirma que se puede jugar.
+                    availability: "unknown".to_string(),
+                })
+        })
+        .collect();
+
+    let imported = games.len() as u32;
+    let unusable = library.unusable as u32;
+    database_write(&state, move |database| {
+        // Es una instantánea completa: lo que ya no está en la Familia deja de
+        // estar en el catálogo.
+        database.save_family_catalog(&games, true)
+    })
+    .await?;
+
+    let moment = Utc::now().to_rfc3339();
+    database_read(&state, move |database| {
+        database.record_family_session_success(&moment, imported)
+    })
+    .await?;
+
+    Ok(steam::family_api::FamilySyncReport {
+        imported,
+        unusable,
+        without_title,
+        no_family: false,
+    })
+}
+
 // --- Vistas guardadas de biblioteca ------------------------------------------
 
 #[tauri::command]

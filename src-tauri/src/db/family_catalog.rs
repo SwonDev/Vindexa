@@ -45,7 +45,12 @@ pub struct PagedFamilyCatalogGames {
     pub offset: u32,
 }
 
-#[cfg(test)]
+/// Guarda el catálogo en su propia transacción.
+///
+/// La sincronización general de Steam usa [`save_in_transaction`], porque
+/// escribe el catálogo junto al resto de la importación. La sincronización de
+/// Familia por sesión no tiene con qué compartir transacción, así que entra por
+/// aquí.
 pub fn save(
     connection: &mut Connection,
     games: &[ImportedFamilyCatalogGame],

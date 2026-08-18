@@ -1418,3 +1418,32 @@ export interface ArchiveReport {
   inPlanner: number;
   archivedTotal: number;
 }
+
+/**
+ * Vínculo con la sesión de Steam que autoriza los servicios de Familia.
+ *
+ * `linked` sólo dice que hay un testigo guardado, no que siga sirviendo: eso
+ * únicamente lo sabe Steam y comprobarlo costaría una petición. La caducidad
+ * aparece al usarlo, y entonces llega en `lastErrorCode`.
+ */
+export interface FamilySessionStatus {
+  linked: boolean;
+  /** Cuándo terminó bien la última sincronización. */
+  lastSyncAt?: string;
+  /** Cuántos juegos trajo esa sincronización. */
+  lastAppCount?: number;
+  /** Código del último fallo, si el último intento falló. */
+  lastErrorCode?: string;
+}
+
+/** Lo que deja una sincronización del catálogo de Familia. */
+export interface FamilySyncReport {
+  /** Juegos del catálogo compartido que se han guardado. */
+  imported: number;
+  /** Entradas que Steam devolvió sin AppID utilizable. */
+  unusable: number;
+  /** Entradas sin título publicado: sin nombre no hay ficha honesta. */
+  withoutTitle: number;
+  /** La cuenta no pertenece a ninguna Familia. No es un fallo. */
+  noFamily: boolean;
+}

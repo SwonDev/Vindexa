@@ -90,10 +90,12 @@ pub async fn fetch_saved_account(steam_id: &str) -> AppResult<SteamLibrarySnapsh
     fetch(&api_key, steam_id).await
 }
 
-pub async fn fetch(api_key: &str, steam_id: &str) -> AppResult<SteamLibrarySnapshot> {
-    secrets::validate_api_key(api_key)?;
-    validate_steam_id(steam_id)?;
-    let client = Client::builder()
+/// Cliente HTTP para la Steam Web API.
+///
+/// Sin redirecciones a propósito: una redirección llevaría la credencial a otro
+/// destino, y eso no se hace ni aunque Steam lo pida.
+pub(crate) fn build_client() -> AppResult<Client> {
+    Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .redirect(Policy::none())
@@ -104,7 +106,13 @@ pub async fn fetch(api_key: &str, steam_id: &str) -> AppResult<SteamLibrarySnaps
                 "steam_http_client",
                 "No se pudo preparar la conexión segura con Steam.",
             )
-        })?;
+        })
+}
+
+pub async fn fetch(api_key: &str, steam_id: &str) -> AppResult<SteamLibrarySnapshot> {
+    secrets::validate_api_key(api_key)?;
+    validate_steam_id(steam_id)?;
+    let client = build_client()?;
 
     let owned_params = [
         ("key", api_key),
@@ -269,7 +277,13 @@ pub fn mark_sync_failed(database: &Database, steam_id: &str, error: &AppError) -
     Ok(())
 }
 
-async fn get_json<T: for<'de> Deserialize<'de>>(
+/// Pide JSON a Steam con todas las salvaguardas: redirección, autorización,
+/// límite de peticiones, estado, tipo de contenido y tamaño máximo.
+///
+/// Es `pub(crate)` porque los servicios de Familia hablan con la misma API y
+/// necesitan exactamente las mismas comprobaciones; duplicarlas garantizaba que
+/// una de las dos se quedase atrás.
+pub(crate) async fn get_json<T: for<'de> Deserialize<'de>>(
     client: &Client,
     endpoint: &str,
     query: &[(&str, &str)],

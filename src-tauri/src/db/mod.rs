@@ -754,6 +754,83 @@ impl Database {
         )
     }
 
+    /// Reemplaza el catálogo de Familia con lo que se acaba de traer.
+    ///
+    /// `complete_snapshot` distingue una lectura completa —la que borra lo que
+    /// ya no está— de una parcial, que sólo añade. Presentar una parcial como
+    /// completa dejaría fuera juegos que sí siguen prestados.
+    pub fn save_family_catalog(
+        &self,
+        games: &[ImportedFamilyCatalogGame],
+        complete_snapshot: bool,
+    ) -> AppResult<()> {
+        family_catalog::save(&mut self.open()?, games, complete_snapshot)
+    }
+
+    // --- Sesión de Steam para Familia ---------------------------------------
+
+    /// Resultado de la última sincronización del catálogo de Familia.
+    ///
+    /// Vive en `app_settings` y no en una tabla propia porque son tres valores
+    /// sueltos de diagnóstico, no una entidad. El testigo **no** está aquí: ese
+    /// vive en el llavero del sistema y en ningún otro sitio.
+    pub fn family_session_diagnostics(
+        &self,
+    ) -> AppResult<(Option<String>, Option<u32>, Option<String>)> {
+        let connection = self.open()?;
+        let leer = |clave: &str| -> AppResult<Option<String>> {
+            Ok(connection
+                .query_row(
+                    "SELECT value FROM app_settings WHERE key = ?1",
+                    [clave],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?)
+        };
+        let momento = leer("steam_family_last_sync_at")?;
+        let cuenta = leer("steam_family_last_app_count")?.and_then(|valor| valor.parse().ok());
+        let error = leer("steam_family_last_error_code")?;
+        Ok((momento, cuenta, error))
+    }
+
+    /// Anota que la sincronización terminó bien, y borra el fallo anterior.
+    pub fn record_family_session_success(&self, moment: &str, app_count: u32) -> AppResult<()> {
+        let mut connection = self.open()?;
+        let transaction = connection.transaction()?;
+        for (clave, valor) in [
+            ("steam_family_last_sync_at", moment.to_string()),
+            ("steam_family_last_app_count", app_count.to_string()),
+        ] {
+            transaction.execute(
+                "INSERT INTO app_settings(key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+                params![clave, valor],
+            )?;
+        }
+        transaction.execute(
+            "DELETE FROM app_settings WHERE key = 'steam_family_last_error_code'",
+            [],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Anota el fallo del último intento **sin** borrar lo que trajo el anterior:
+    /// un catálogo de ayer sigue siendo mejor que ninguno, y quien lo mira tiene
+    /// que poder ver las dos cosas.
+    pub fn record_family_session_failure(&self, error_code: &str) -> AppResult<()> {
+        self.open()?.execute(
+            "INSERT INTO app_settings(key, value) VALUES ('steam_family_last_error_code', ?1)
+             ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            params![error_code],
+        )?;
+        Ok(())
+    }
+
     // --- Avisos y bandeja de eventos ----------------------------------------
 
     pub fn list_notification_rules(
