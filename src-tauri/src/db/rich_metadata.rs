@@ -24,12 +24,6 @@
 //! valor anterior. Los medios sí se reemplazan como conjunto, pero solo cuando
 //! la respuesta declara explícitamente su lista (`Some`).
 
-// El cableado a `db::mod` y `commands` llega en el mismo commit de integración
-// descrito en el informe de esta tarea; hasta entonces el análisis de código
-// muerto no ve a los consumidores de esta API. **Retira este `allow` al añadir
-// los `pub use` de `db/mod.rs` y los comandos correspondientes.**
-#![allow(dead_code)]
-
 use crate::error::{AppError, AppResult};
 pub use crate::models::{
     DescriptionBlock, DrmAssessment, DrmEvidence, DrmState, DrmStateCounts, GameMediaItem,
@@ -229,6 +223,10 @@ pub struct RichMetadataUpdate {
 }
 
 impl RichMetadataUpdate {
+    // La cola de metadatos guarda siempre lo que le devuelve la tienda, aunque
+    // venga vacío: un juego sin descripción es un hecho, no un motivo para no
+    // escribir. La comprobación queda para quien quiera evitar el viaje.
+    #[allow(dead_code, reason = "sin llamador: la cola persiste también lo vacío")]
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
     }
@@ -364,6 +362,12 @@ fn validate_media(media: &[GameMediaItem]) -> AppResult<()> {
 }
 
 /// Guarda los metadatos enriquecidos de un juego en una sola transacción.
+///
+/// En producción se usa siempre la variante `_in_transaction`, porque estos
+/// metadatos se escriben junto al resto de la ficha. Esta abre la suya, que es
+/// lo que necesitan las pruebas de este módulo para trabajar sin montar el
+/// resto de la importación.
+#[allow(dead_code, reason = "sin llamador en producción; la usan las pruebas")]
 pub fn save(
     connection: &mut Connection,
     app_id: u32,
@@ -461,6 +465,7 @@ pub fn save_in_transaction(
 
 /// Reemplaza el conjunto de medios de un juego: inserta o actualiza los que
 /// llegan (conservando su `position`) y borra los que ya no vienen.
+#[allow(dead_code, reason = "sin llamador en producción; la usan las pruebas")]
 pub fn replace_media(
     connection: &mut Connection,
     app_id: u32,

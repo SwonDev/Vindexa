@@ -82,7 +82,10 @@ impl RejectionReason {
     }
 
     /// Código estable para trazas locales y pruebas.
-    #[allow(dead_code)]
+    // El motivo del rechazo se enseña con su frase, no con su código. El
+    // código existe para que las pruebas puedan afirmar cuál fue sin depender
+    // de la redacción.
+    #[allow(dead_code, reason = "identidad estable del motivo para las pruebas")]
     pub fn code(&self) -> &'static str {
         match self {
             Self::DangerousScheme => "scheme_blocked",
@@ -152,7 +155,10 @@ impl NavigationVerdict {
     ///
     /// Solo `Bootstrap` y `Allowed` dejan continuar la carga. Las órdenes de
     /// control se cancelan a propósito: se ejecutan en Rust, no en la red.
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        reason = "atajo legible sobre el veredicto, usado en pruebas"
+    )]
     pub fn should_continue(&self) -> bool {
         matches!(self, Self::Bootstrap | Self::Allowed(_))
     }

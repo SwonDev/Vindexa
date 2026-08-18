@@ -83,13 +83,15 @@ impl History {
     }
 
     /// Número de entradas conservadas.
-    #[allow(dead_code)]
+    // El historial se presenta por sus extremos —si se puede ir atrás o
+    // adelante—, no por su tamaño. Estas dos lo describen para las pruebas.
+    #[allow(dead_code, reason = "descripción del historial usada en pruebas")]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Siempre hay al menos la entrada inicial.
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "descripción del historial usada en pruebas")]
     pub fn is_empty(&self) -> bool {
         false
     }

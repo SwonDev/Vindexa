@@ -58,7 +58,9 @@ pub struct DrmSignals<'a> {
     /// entregue el conjunto completo de señales y para que el test
     /// `being_free_to_play_never_changes_the_classification` pueda demostrar
     /// que el precio nunca entra en la decisión.
-    #[allow(dead_code)]
+    // La gratuidad ya viaja en los campos de biblioteca; aquí se conserva
+    // porque forma parte de lo que la tienda respondió sobre la protección.
+    #[allow(dead_code, reason = "parte de la respuesta de la tienda")]
     pub is_free: bool,
     /// `true` solo si la tienda respondió `success` con datos. La ausencia de
     /// avisos únicamente es evidencia cuando la respuesta estaba completa.

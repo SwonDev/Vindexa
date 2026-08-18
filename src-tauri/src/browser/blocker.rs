@@ -30,8 +30,10 @@ use tauri::Url;
 /// Dominio de red bloqueado, con el motivo documentado.
 // El campo documenta la regla y lo consumen las pruebas y el informe de
 // seguridad; no lo lee el código de producción.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
+// `reason` no lo lee nadie: está para que quien añada o quite un dominio sepa
+// por qué está en la lista sin tener que buscarlo fuera.
+#[allow(dead_code, reason = "documenta cada dominio de la lista")]
 pub struct BlockedDomain {
     /// Dominio registrable o subdominio concreto; incluye sus subdominios.
     pub domain: &'static str,
@@ -42,8 +44,8 @@ pub struct BlockedDomain {
 /// Dominio que jamás puede bloquearse, con la función que cumple.
 // El campo documenta la regla y lo consumen las pruebas y el informe de
 // seguridad; no lo lee el código de producción.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code, reason = "documenta cada dominio de la lista")]
 pub struct AllowedDomain {
     /// Dominio registrable o subdominio concreto; incluye sus subdominios.
     pub domain: &'static str,
@@ -486,7 +488,12 @@ pub const ALLOWED_DOMAINS: &[AllowedDomain] = &[
 ];
 
 /// ¿Coincide `host` con `domain` o con uno de sus subdominios?
-#[allow(dead_code)]
+// Las tres funciones que siguen no corren en producción: el bloqueo real lo
+// aplica la lista de contenido dentro del motor web. Aquí sirven de contraste
+// de los datos —que un dominio de tienda no quede tapado por la lista de
+// bloqueo, que la coincidencia respete los límites de dominio— y esa
+// comprobación se perdería al borrarlas.
+#[allow(dead_code, reason = "contraste de los datos de la lista en pruebas")]
 fn domain_matches(host: &str, domain: &str) -> bool {
     match host.strip_suffix(domain) {
         None => false,
@@ -496,7 +503,7 @@ fn domain_matches(host: &str, domain: &str) -> bool {
 }
 
 /// ¿Está este dominio en la lista de permitidos?
-#[allow(dead_code)]
+#[allow(dead_code, reason = "contraste de los datos de la lista en pruebas")]
 pub fn is_allowed_asset_host(host: &str) -> bool {
     ALLOWED_DOMAINS
         .iter()
@@ -507,7 +514,7 @@ pub fn is_allowed_asset_host(host: &str) -> bool {
 ///
 /// Existe para poder probar la lista con un corpus de URLs sin arrancar un
 /// webview. Refleja el mismo orden: bloqueo, después lista de permitidos.
-#[allow(dead_code)]
+#[allow(dead_code, reason = "contraste de los datos de la lista en pruebas")]
 pub fn is_blocked_request(url: &Url) -> bool {
     if !matches!(url.scheme(), "http" | "https") {
         return false;
@@ -831,8 +838,8 @@ mod lista_de_contenido {
     /// Regla cosmética: oculta elementos en los documentos de ciertos dominios.
     // El campo documenta la regla y lo consumen las pruebas y el informe de
     // seguridad; no lo lee el código de producción.
-    #[allow(dead_code)]
     #[derive(Debug, Clone, Copy)]
+    #[allow(dead_code, reason = "documenta cada regla cosmética")]
     pub struct CosmeticRule {
         /// Dominios de documento a los que aplica (se les añade `*` para subdominios).
         pub domains: &'static [&'static str],
@@ -971,8 +978,8 @@ mod lista_de_contenido {
     }
 
     /// Número total de reglas generadas. Útil para vigilar el tamaño de la lista.
-    #[allow(dead_code)]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[allow(dead_code, reason = "contraste del recuento de reglas en pruebas")]
     pub fn rule_count() -> usize {
         BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len()
     }

@@ -62,7 +62,11 @@ impl ZoomPreferences {
     }
 
     /// ¿Hay alguna preferencia guardada?
-    #[allow(dead_code)]
+    ///
+    /// Sin llamador en producción: el zoom por tienda se lee siempre con su
+    /// valor por defecto, así que da igual si el mapa está vacío. Las pruebas la
+    /// usan para comprobar que una preferencia borrada no deja rastro.
+    #[allow(dead_code, reason = "sin llamador en producción; la usan las pruebas")]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

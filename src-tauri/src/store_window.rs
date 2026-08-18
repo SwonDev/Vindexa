@@ -53,7 +53,6 @@ pub async fn open<R: Runtime>(app: &AppHandle<R>, app_id: u32) -> AppResult<()> 
 ///
 /// Pendiente de exponerse como comando: el diff para `commands.rs` y `lib.rs`
 /// viaja en el informe, porque esos archivos pertenecen a otro agente.
-#[allow(dead_code)]
 pub async fn open_store_home<R: Runtime>(app: &AppHandle<R>, store_id: &str) -> AppResult<()> {
     let store = stores::store_by_id(store_id).ok_or_else(|| {
         AppError::validation("Esa tienda no está disponible en el navegador integrado.")
@@ -745,7 +744,10 @@ pub fn store_url(app_id: u32) -> AppResult<Url> {
 ///
 /// Se conserva como atajo legible sobre [`policy::evaluate`] y como red de
 /// seguridad de las pruebas heredadas de la versión anterior.
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "atajo legible sobre policy::evaluate, usado en pruebas"
+)]
 pub fn is_allowed_store_navigation(url: &Url) -> bool {
     matches!(
         policy::evaluate(stores::default_store(), url),

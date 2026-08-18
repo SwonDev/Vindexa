@@ -66,11 +66,6 @@
 //! devuelve se valida una tercera vez —incluida la URL que dice haber leído—
 //! antes de tocar la base de datos.
 
-// Nada de este módulo tiene todavía quien lo llame: el comando que lo expone y
-// el botón de la barra del navegador viven en archivos de otro agente y viajan
-// como diff en el informe. Mismo criterio que `store_window::open_store_home`.
-#![allow(dead_code)]
-
 use crate::browser::{session, stores};
 use crate::db::ImportedWishlistGame;
 use crate::error::{AppError, AppResult};

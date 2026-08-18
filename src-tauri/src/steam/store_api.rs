@@ -119,7 +119,7 @@ pub struct StoreMetadataBundle {
     pub rich: RichMetadataUpdate,
     /// Descriptores de contenido publicados por Steam. Todavía no hay columna
     /// para persistirlos, así que viajan aparte en vez de forzar el esquema.
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "sin columna donde persistirlos todavía")]
     pub content_descriptors: StoreContentDescriptors,
     /// Precio observado en esta misma respuesta. `None` cuando la ficha no
     /// trae `price_overview` —gratuito, sin publicar o retirado—, que no es lo

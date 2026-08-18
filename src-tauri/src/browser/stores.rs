@@ -226,7 +226,12 @@ pub fn store_for_url(url: &Url) -> Option<&'static StoreProfile> {
 }
 
 /// ¿Hay alguna tienda que admita esta URL?
-#[allow(dead_code)]
+// La navegación real la decide `policy::evaluate`, que además distingue el
+// motivo del rechazo. Esta se queda como atajo legible para las pruebas.
+#[allow(
+    dead_code,
+    reason = "atajo legible sobre store_for_url, usado en pruebas"
+)]
 pub fn is_allowed_store_url(url: &Url) -> bool {
     store_for_url(url).is_some()
 }
