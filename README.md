@@ -123,6 +123,8 @@ total que no existe.
 | **Navegador integrado** | Las tiendas oficiales en una ventana aislada, sin acceso a la aplicación. En macOS y Linux, además, con bloqueo nativo de publicidad y rastreo. |
 | **Deshacer de verdad** | Una sola pila para arrastres, reordenaciones y ediciones. `⌘Z` y vuelve. |
 
+<img src="./docs/media/modo-sofa.webp" alt="Modo sofá con el foco sobre un juego, su panel de detalle y la guía de botones del mando" width="100%">
+
 <div align="center">
 
 <video src="https://github.com/SwonDev/Vindexa/raw/main/docs/media/paleta-comandos.mp4" poster="./docs/media/paleta-comandos-cartel.webp" width="100%" controls muted loop playsinline>

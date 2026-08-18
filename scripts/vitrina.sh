@@ -44,6 +44,7 @@ PUBLICABLES=(
   "avisos-1440x900.png                      avisos.webp"
   "paleta-busqueda-1440x900.png             paleta-comandos.webp"
   "ajustes-familia-1440x900.png             ajustes-familia.webp"
+  "modo-sofa-foco-1920x1080.png             modo-sofa.webp"
 )
 
 # Vídeos que se publican. La clave es el fragmento del directorio que Playwright

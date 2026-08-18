@@ -235,3 +235,32 @@ test("vitrina · ajustes de Steam y Familia", async ({ app, page }) => {
 
   await expect(dialogo.getByText("Catálogo de Steam Family")).toBeVisible();
 });
+
+test("vitrina · modo sofá", async ({ app, page }) => {
+  // A 1920 hay que resolver el arte dos veces —la biblioteca y el carril del
+  // modo sofá— y eso no cabe en el tiempo por defecto de la batería.
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await app.goto();
+  await app.waitForShell();
+  await settleArtwork(page);
+
+  // Se entra por el botón del mando de la barra superior, que es la vía directa;
+  // la paleta también lleva, con el mismo atajo que anuncia.
+  await page
+    .getByRole("button", { name: /sof[áa]/i })
+    .first()
+    .click();
+  await page.waitForTimeout(900);
+  await settleArtwork(page);
+  await page.screenshot({ path: join(OUT, "modo-sofa-1920x1080.png") });
+
+  // El foco se mueve con el mando o con las flechas; interesa ver el selector
+  // sobre una carátula que no sea la primera, porque el recorte se notaba en los
+  // bordes del carril.
+  for (let paso = 0; paso < 3; paso += 1) {
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(200);
+  }
+  await page.screenshot({ path: join(OUT, "modo-sofa-foco-1920x1080.png") });
+});
