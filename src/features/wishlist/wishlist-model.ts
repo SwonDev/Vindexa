@@ -441,9 +441,7 @@ export function collectOffers(
   return ofertas.sort(
     (izquierda, derecha) =>
       derecha.discountPercent - izquierda.discountPercent ||
-      derecha.initialCents -
-        derecha.finalCents -
-        (izquierda.initialCents - izquierda.finalCents) ||
+      derecha.initialCents - derecha.finalCents - (izquierda.initialCents - izquierda.finalCents) ||
       izquierda.title.localeCompare(derecha.title, "es"),
   );
 }

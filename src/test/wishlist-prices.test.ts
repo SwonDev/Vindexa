@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describePrice, observedLabel, summarizePrices } from "@/features/wishlist/wishlist-model";
+import {
+  collectOffers,
+  describePrice,
+  observedLabel,
+  summarizePrices,
+} from "@/features/wishlist/wishlist-model";
 import type { GamePrice, GameSummary, WishlistEntry, WishlistPriceStatus } from "@/lib/types";
 
 /**
@@ -252,5 +257,103 @@ describe("cobertura de precios de la lista", () => {
       status({ appId: 2, price: price({ appId: 2, currency: "USD" }), comparable: false }),
     ]);
     expect(resumen.meetingTarget).toBe(1);
+  });
+});
+
+describe("ofertas vigentes de la lista", () => {
+  it("recoge solo lo rebajado y lo ordena por descuento", () => {
+    const entradas = [
+      entry({ game: game(10, "Rebaja pequeña") }),
+      entry({ game: game(20, "Rebaja grande") }),
+      entry({ game: game(30, "Sin rebaja") }),
+      entry({ game: game(40, "Sin precio") }),
+    ];
+    const estados = [
+      status({ appId: 10, price: price({ appId: 10, discountPercent: 20, finalCents: 4799 }) }),
+      status({ appId: 20, price: price({ appId: 20, discountPercent: 75, finalCents: 1499 }) }),
+      status({ appId: 30, price: price({ appId: 30, discountPercent: 0, finalCents: 5999 }) }),
+      status({ appId: 40 }),
+    ];
+
+    const ofertas = collectOffers(entradas, estados);
+
+    expect(ofertas.map((oferta) => oferta.appId)).toEqual([20, 10]);
+    expect(ofertas[0]?.title).toBe("Rebaja grande");
+    expect(ofertas[0]?.discountPercent).toBe(75);
+  });
+
+  it("con el mismo descuento desempata por ahorro y después por título", () => {
+    // Sin desempate estable, dos juegos al mismo porcentaje bailarían de sitio
+    // entre recargas y la tira dejaría de ser fiable de un vistazo.
+    const entradas = [
+      entry({ game: game(10, "Zelda") }),
+      entry({ game: game(20, "Ahorro mayor") }),
+      entry({ game: game(30, "Ábaco") }),
+    ];
+    const estados = [
+      status({
+        appId: 10,
+        price: price({ appId: 10, discountPercent: 50, initialCents: 2000, finalCents: 1000 }),
+      }),
+      status({
+        appId: 20,
+        price: price({ appId: 20, discountPercent: 50, initialCents: 8000, finalCents: 4000 }),
+      }),
+      status({
+        appId: 30,
+        price: price({ appId: 30, discountPercent: 50, initialCents: 2000, finalCents: 1000 }),
+      }),
+    ];
+
+    const ofertas = collectOffers(entradas, estados);
+
+    expect(ofertas.map((oferta) => oferta.appId)).toEqual([20, 30, 10]);
+  });
+
+  it("marca las que cumplen el objetivo y las de precio caducado", () => {
+    const entradas = [entry({ game: game(10, "Cumple") }), entry({ game: game(20, "Caducada") })];
+    const estados = [
+      status({
+        appId: 10,
+        targetCents: 3000,
+        targetCurrency: "EUR",
+        comparable: true,
+        meetsTarget: true,
+        differenceCents: -500,
+        price: price({ appId: 10, finalCents: 2500 }),
+      }),
+      status({
+        appId: 20,
+        price: price({ appId: 20, freshness: "stale" }),
+      }),
+    ];
+
+    const ofertas = collectOffers(entradas, estados);
+
+    expect(ofertas.find((oferta) => oferta.appId === 10)?.meetsTarget).toBe(true);
+    expect(ofertas.find((oferta) => oferta.appId === 10)?.differenceCents).toBe(-500);
+    expect(ofertas.find((oferta) => oferta.appId === 20)?.stale).toBe(true);
+    expect(ofertas.find((oferta) => oferta.appId === 20)?.meetsTarget).toBe(false);
+  });
+
+  it("cuenta las ofertas en el resumen sin tocar el resto de la cifra", () => {
+    const estados = [
+      status({ appId: 10, price: price({ appId: 10, discountPercent: 30 }) }),
+      status({ appId: 20, price: price({ appId: 20, discountPercent: 0 }) }),
+      status({ appId: 30 }),
+    ];
+
+    const resumen = summarizePrices(estados);
+
+    expect(resumen.onSale).toBe(1);
+    expect(resumen.withPrice).toBe(2);
+    expect(resumen.total).toBe(3);
+    expect(resumen.headline).toBe("2 de 3 con precio");
+    expect(resumen.caveat).toContain("1 juego sin precio consultado");
+  });
+
+  it("una lista sin precios no produce ninguna oferta", () => {
+    expect(collectOffers([entry()], [])).toEqual([]);
+    expect(summarizePrices([]).onSale).toBe(0);
   });
 });

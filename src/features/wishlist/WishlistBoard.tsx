@@ -25,11 +25,13 @@ import {
   IconArrowBackUp,
   IconArrowDown,
   IconArrowUp,
+  IconChevronRight,
   IconCoin,
   IconLoader2,
   IconNote,
   IconPlus,
   IconRefresh,
+  IconTag,
   IconTrash,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +60,7 @@ import { GameVideoPanel } from "@/features/wishlist/GameVideoPanel";
 import {
   applyBoardMove,
   bucketMeta,
+  collectOffers,
   describePrice,
   findEntry,
   findEntryBucket,
@@ -71,6 +74,7 @@ import {
   priceInputValue,
   summarizePrices,
   WISHLIST_BUCKETS,
+  type WishlistOffer,
   wishlistBucketDropId,
   wishlistDragId,
 } from "@/features/wishlist/wishlist-model";
@@ -83,6 +87,9 @@ import type {
   WishlistOverview,
   WishlistPriceStatus,
 } from "@/lib/types";
+
+/** Ofertas que se enseñan antes de tener que desplegar la tira. */
+const VISIBLE_OFFERS = 6;
 
 const PRIORITY_OPTIONS = [0, 1, 2, 3, 4, 5].map((value) => ({
   value: String(value),
@@ -208,6 +215,7 @@ export function WishlistBoard({
     [prices.data],
   );
   const coverage = useMemo(() => summarizePrices(prices.data ?? []), [prices.data]);
+  const offers = useMemo(() => collectOffers(entries, prices.data ?? []), [entries, prices.data]);
 
   const refreshPrices = useMutation({
     mutationFn: () => api.refreshWishlistPrices(),
@@ -440,6 +448,14 @@ export function WishlistBoard({
         </div>
       )}
 
+      {offers.length > 0 && (
+        <OffersStrip
+          offers={offers}
+          onSelect={(appId) => setSelectedAppId(appId)}
+          {...(selected ? { selectedAppId: selected.game.appId } : {})}
+        />
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -513,6 +529,86 @@ export function WishlistBoard({
 }
 
 /* --- Carril -------------------------------------------------------------- */
+
+/* --- Ofertas vigentes ---------------------------------------------------- */
+
+/**
+ * Las rebajas de la lista, de mayor descuento a menor.
+ *
+ * Con la lista repartida en cuatro carriles, una rebaja no se encuentra
+ * mirando: hay que recorrer las tarjetas una a una. Esta tira es la razón de
+ * tener precios guardados, así que va arriba y no dentro de un panel que haya
+ * que abrir. Empieza plegada cuando hay muchas para no empujar el tablero fuera
+ * de la pantalla.
+ */
+function OffersStrip({
+  offers,
+  selectedAppId,
+  onSelect,
+}: {
+  offers: readonly WishlistOffer[];
+  selectedAppId?: number;
+  onSelect: (appId: number) => void;
+}) {
+  const listId = useId();
+  const [open, setOpen] = useState(() => offers.length <= VISIBLE_OFFERS);
+  const visible = open ? offers : offers.slice(0, VISIBLE_OFFERS);
+  const hidden = offers.length - visible.length;
+  const cumplen = offers.filter((offer) => offer.meetsTarget).length;
+
+  return (
+    <section className="wishlist-offers" aria-label="Ofertas vigentes en tu lista">
+      <div className="wishlist-offers__head">
+        <IconTag aria-hidden="true" />
+        <b className="wishlist-offers__figure">
+          {offers.length === 1 ? "1 juego en oferta" : `${offers.length} juegos en oferta`}
+        </b>
+        {cumplen > 0 && (
+          <span className="wishlist-offers__target">
+            {cumplen === 1 ? "1 ya cumple tu objetivo" : `${cumplen} ya cumplen tu objetivo`}
+          </span>
+        )}
+        {hidden > 0 && (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={() => setOpen(true)}
+          >
+            Ver las {offers.length}
+          </Button>
+        )}
+      </div>
+      <ul className="wishlist-offers__list" id={listId}>
+        {visible.map((offer) => (
+          <li key={offer.appId}>
+            <button
+              type="button"
+              className="wishlist-offers__item"
+              data-selected={offer.appId === selectedAppId}
+              data-meets-target={offer.meetsTarget}
+              onClick={() => onSelect(offer.appId)}
+            >
+              <span className="wishlist-offers__discount">-{offer.discountPercent} %</span>
+              <span className="wishlist-offers__title">{offer.title}</span>
+              <span className="wishlist-offers__amount">
+                {formatCents(offer.finalCents, offer.currency)}
+              </span>
+              {/* El precio anterior va tachado y detrás del vigente: lo que se
+                  paga es lo primero que hay que poder leer. */}
+              <s className="wishlist-offers__before">
+                {formatCents(offer.initialCents, offer.currency)}
+              </s>
+              {offer.stale && <span className="wishlist-offers__stale">precio caducado</span>}
+              <IconChevronRight aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function WishlistLane({
   lane,

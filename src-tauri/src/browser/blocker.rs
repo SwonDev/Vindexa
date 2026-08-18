@@ -25,19 +25,7 @@
 //! las tiendas pueda quedar bloqueado por una regla previa.
 
 use crate::browser::stores::normalized_host;
-use serde_json::{Value, json};
 use tauri::Url;
-
-/// Identificador versionado de la lista compilada.
-///
-/// Cambiarlo obliga a WebKit a recompilar la lista en lugar de reutilizar una
-/// versión anterior almacenada en caché.
-// El bloqueador nativo sólo existe donde el motor web sabe instalar una
-// lista de contenido: WKWebView en macOS y WebKitGTK en Linux. WebView2 no
-// ofrece nada equivalente todavía, así que en Windows estas reglas no
-// tendrían quién las aplicase y el módulo no las compila.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub const BLOCKER_ID: &str = "io.vindexa.browser-protection.v2";
 
 /// Dominio de red bloqueado, con el motivo documentado.
 // El campo documenta la regla y lo consumen las pruebas y el informe de
@@ -60,20 +48,6 @@ pub struct AllowedDomain {
     /// Dominio registrable o subdominio concreto; incluye sus subdominios.
     pub domain: &'static str,
     /// Qué se rompería si se bloquease.
-    pub purpose: &'static str,
-}
-
-/// Regla cosmética: oculta elementos en los documentos de ciertos dominios.
-// El campo documenta la regla y lo consumen las pruebas y el informe de
-// seguridad; no lo lee el código de producción.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub struct CosmeticRule {
-    /// Dominios de documento a los que aplica (se les añade `*` para subdominios).
-    pub domains: &'static [&'static str],
-    /// Selector CSS, en una sola cadena separada por comas.
-    pub selector: &'static str,
-    /// Qué oculta, para poder auditarla.
     pub purpose: &'static str,
 }
 
@@ -511,79 +485,6 @@ pub const ALLOWED_DOMAINS: &[AllowedDomain] = &[
     },
 ];
 
-/// Dominios de documento de cada tienda para las reglas cosméticas.
-const STEAM_DOCUMENTS: &[&str] = &[
-    "store.steampowered.com",
-    "steamcommunity.com",
-    "checkout.steampowered.com",
-    "help.steampowered.com",
-];
-const GOG_DOCUMENTS: &[&str] = &["gog.com"];
-const EPIC_DOCUMENTS: &[&str] = &["epicgames.com"];
-const ITCH_DOCUMENTS: &[&str] = &["itch.io"];
-const ALL_STORE_DOCUMENTS: &[&str] = &[
-    "store.steampowered.com",
-    "steamcommunity.com",
-    "checkout.steampowered.com",
-    "help.steampowered.com",
-    "gog.com",
-    "epicgames.com",
-    "itch.io",
-];
-
-/// Reglas cosméticas.
-///
-/// Deliberadamente **no** se oculta la verja de edad de Steam: Steam sirve un
-/// documento distinto para el contenido adulto, así que ocultarla con CSS
-/// dejaría una página en blanco en lugar de la ficha. Eso incumpliría la regla
-/// de no romper funcionalidad legítima.
-pub const COSMETIC_RULES: &[CosmeticRule] = &[
-    CosmeticRule {
-        domains: ALL_STORE_DOCUMENTS,
-        selector: "#onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter, #CybotCookiebotDialog, #CybotCookiebotDialogBodyUnderlay, #didomi-host, .qc-cmp2-container, #qc-cmp2-container, #truste-consent-track, .truste_overlay, .osano-cm-window, #usercentrics-root",
-        purpose: "plataformas de consentimiento de terceros (OneTrust, Cookiebot, Didomi, Quantcast, TrustArc, Osano, Usercentrics)",
-    },
-    CosmeticRule {
-        domains: STEAM_DOCUMENTS,
-        selector: "#cookiePrefPopup, .cookiepreferences_popup, .cookiepreferences_popup_overlay, .responsive_optin_banner, #responsive_optin_banner",
-        purpose: "aviso de cookies de Steam y banner que empuja a la app móvil",
-    },
-    CosmeticRule {
-        domains: GOG_DOCUMENTS,
-        selector: ".cookie-banner, .newsletter-popup, .promo-banner--sticky",
-        purpose: "aviso de cookies, superposición de suscripción y franja promocional fija de GOG",
-    },
-    CosmeticRule {
-        domains: EPIC_DOCUMENTS,
-        selector: "[data-testid='cookie-banner'], .cookie-consent-banner, [class*='NewsletterSignup']",
-        purpose: "aviso de cookies y superposición de boletín de Epic",
-    },
-    CosmeticRule {
-        domains: ITCH_DOCUMENTS,
-        selector: ".cookie_banner, #cookie_banner, .newsletter_signup_widget",
-        purpose: "aviso de cookies y captación de boletín de itch.io",
-    },
-];
-
-/// Escapa un dominio para insertarlo en un `url-filter`.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn escaped_domain(domain: &str) -> String {
-    domain.replace('.', r"\.")
-}
-
-/// Patrón `url-filter` que cubre un dominio y todos sus subdominios.
-///
-/// Anclado al principio de la URL y cerrado por un delimitador, de modo que
-/// `doubleclick\.net` no coincide con `evildoubleclick.net` ni con
-/// `doubleclick.net.attacker.tld`.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub fn host_url_filter(domain: &str) -> String {
-    format!(
-        r"^https?://([a-z0-9_.-]+\.)?{}([/:?&#].*)?$",
-        escaped_domain(domain)
-    )
-}
-
 /// ¿Coincide `host` con `domain` o con uno de sus subdominios?
 #[allow(dead_code)]
 fn domain_matches(host: &str, domain: &str) -> bool {
@@ -622,70 +523,17 @@ pub fn is_blocked_request(url: &Url) -> bool {
         .any(|blocked| domain_matches(&host, blocked.domain))
 }
 
-/// Construye la lista de reglas en el orden exigido por WebKit.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn rules() -> Vec<Value> {
-    let mut rules =
-        Vec::with_capacity(BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len());
-
-    for blocked in BLOCKED_DOMAINS {
-        rules.push(json!({
-            "trigger": {
-                "url-filter": host_url_filter(blocked.domain),
-                "url-filter-is-case-sensitive": false
-            },
-            "action": { "type": "block" }
-        }));
-    }
-
-    for allowed in ALLOWED_DOMAINS {
-        rules.push(json!({
-            "trigger": {
-                "url-filter": host_url_filter(allowed.domain),
-                "url-filter-is-case-sensitive": false
-            },
-            "action": { "type": "ignore-previous-rules" }
-        }));
-    }
-
-    for cosmetic in COSMETIC_RULES {
-        let domains: Vec<String> = cosmetic
-            .domains
-            .iter()
-            .map(|domain| format!("*{domain}"))
-            .collect();
-        rules.push(json!({
-            "trigger": {
-                "url-filter": ".*",
-                "if-domain": domains
-            },
-            "action": {
-                "type": "css-display-none",
-                "selector": cosmetic.selector
-            }
-        }));
-    }
-
-    rules
-}
-
-/// Lista de contenido compilable, en JSON.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub fn content_rule_list_json() -> String {
-    serde_json::to_string(&Value::Array(rules()))
-        .expect("las reglas del bloqueador siempre serializan")
-}
-
-/// Número total de reglas generadas. Útil para vigilar el tamaño de la lista.
-#[allow(dead_code)]
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-pub fn rule_count() -> usize {
-    BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    // La lista de contenido vive en su propio módulo y sólo existe en las
+    // plataformas que saben instalarla; sus pruebas llevan el mismo `cfg`.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    use super::lista_de_contenido::{
+        content_rule_list_json, escaped_domain, host_url_filter, rule_count, rules,
+    };
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    use serde_json::Value;
 
     fn url(raw: &str) -> Url {
         Url::parse(raw).expect("URL de prueba válida")
@@ -948,3 +796,187 @@ mod tests {
         assert!(!is_blocked_request(&url("vindexa-browser://abc/back")));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Lista de contenido nativa
+// ---------------------------------------------------------------------------
+
+/// Reglas en el formato de lista de contenido de WebKit.
+///
+/// Vive en un módulo aparte porque **sólo se compila donde hay un motor web que
+/// sepa instalarla**: WKWebView en macOS y WebKitGTK en Linux. WebView2 no
+/// ofrece nada equivalente todavía, así que en Windows estas reglas no tendrían
+/// quién las aplicase.
+///
+/// Están todas juntas a propósito. Cuando estaban repartidas por el módulo, cada
+/// intento de excluirlas de Windows dejaba fuera una constante que sólo usaba
+/// otra de ellas, y el siguiente aviso aparecía en la compilación siguiente. Un
+/// solo `cfg` sobre el conjunto cierra esa cadena.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod lista_de_contenido {
+    use super::{ALLOWED_DOMAINS, BLOCKED_DOMAINS};
+    use serde_json::{Value, json};
+
+    /// Identificador versionado de la lista compilada.
+    ///
+    /// Cambiarlo obliga a WebKit a recompilar la lista en lugar de reutilizar una
+    /// versión anterior almacenada en caché.
+    // El bloqueador nativo sólo existe donde el motor web sabe instalar una
+    // lista de contenido: WKWebView en macOS y WebKitGTK en Linux. WebView2 no
+    // ofrece nada equivalente todavía, así que en Windows estas reglas no
+    // tendrían quién las aplicase y el módulo no las compila.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub const BLOCKER_ID: &str = "io.vindexa.browser-protection.v2";
+
+    /// Regla cosmética: oculta elementos en los documentos de ciertos dominios.
+    // El campo documenta la regla y lo consumen las pruebas y el informe de
+    // seguridad; no lo lee el código de producción.
+    #[allow(dead_code)]
+    #[derive(Debug, Clone, Copy)]
+    pub struct CosmeticRule {
+        /// Dominios de documento a los que aplica (se les añade `*` para subdominios).
+        pub domains: &'static [&'static str],
+        /// Selector CSS, en una sola cadena separada por comas.
+        pub selector: &'static str,
+        /// Qué oculta, para poder auditarla.
+        pub purpose: &'static str,
+    }
+
+    /// Dominios de documento de cada tienda para las reglas cosméticas.
+    const STEAM_DOCUMENTS: &[&str] = &[
+        "store.steampowered.com",
+        "steamcommunity.com",
+        "checkout.steampowered.com",
+        "help.steampowered.com",
+    ];
+    const GOG_DOCUMENTS: &[&str] = &["gog.com"];
+    const EPIC_DOCUMENTS: &[&str] = &["epicgames.com"];
+    const ITCH_DOCUMENTS: &[&str] = &["itch.io"];
+    const ALL_STORE_DOCUMENTS: &[&str] = &[
+        "store.steampowered.com",
+        "steamcommunity.com",
+        "checkout.steampowered.com",
+        "help.steampowered.com",
+        "gog.com",
+        "epicgames.com",
+        "itch.io",
+    ];
+
+    /// Reglas cosméticas.
+    ///
+    /// Deliberadamente **no** se oculta la verja de edad de Steam: Steam sirve un
+    /// documento distinto para el contenido adulto, así que ocultarla con CSS
+    /// dejaría una página en blanco en lugar de la ficha. Eso incumpliría la regla
+    /// de no romper funcionalidad legítima.
+    pub const COSMETIC_RULES: &[CosmeticRule] = &[
+        CosmeticRule {
+            domains: ALL_STORE_DOCUMENTS,
+            selector: "#onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter, #CybotCookiebotDialog, #CybotCookiebotDialogBodyUnderlay, #didomi-host, .qc-cmp2-container, #qc-cmp2-container, #truste-consent-track, .truste_overlay, .osano-cm-window, #usercentrics-root",
+            purpose: "plataformas de consentimiento de terceros (OneTrust, Cookiebot, Didomi, Quantcast, TrustArc, Osano, Usercentrics)",
+        },
+        CosmeticRule {
+            domains: STEAM_DOCUMENTS,
+            selector: "#cookiePrefPopup, .cookiepreferences_popup, .cookiepreferences_popup_overlay, .responsive_optin_banner, #responsive_optin_banner",
+            purpose: "aviso de cookies de Steam y banner que empuja a la app móvil",
+        },
+        CosmeticRule {
+            domains: GOG_DOCUMENTS,
+            selector: ".cookie-banner, .newsletter-popup, .promo-banner--sticky",
+            purpose: "aviso de cookies, superposición de suscripción y franja promocional fija de GOG",
+        },
+        CosmeticRule {
+            domains: EPIC_DOCUMENTS,
+            selector: "[data-testid='cookie-banner'], .cookie-consent-banner, [class*='NewsletterSignup']",
+            purpose: "aviso de cookies y superposición de boletín de Epic",
+        },
+        CosmeticRule {
+            domains: ITCH_DOCUMENTS,
+            selector: ".cookie_banner, #cookie_banner, .newsletter_signup_widget",
+            purpose: "aviso de cookies y captación de boletín de itch.io",
+        },
+    ];
+
+    /// Escapa un dominio para insertarlo en un `url-filter`.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) fn escaped_domain(domain: &str) -> String {
+        domain.replace('.', r"\.")
+    }
+
+    /// Patrón `url-filter` que cubre un dominio y todos sus subdominios.
+    ///
+    /// Anclado al principio de la URL y cerrado por un delimitador, de modo que
+    /// `doubleclick\.net` no coincide con `evildoubleclick.net` ni con
+    /// `doubleclick.net.attacker.tld`.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn host_url_filter(domain: &str) -> String {
+        format!(
+            r"^https?://([a-z0-9_.-]+\.)?{}([/:?&#].*)?$",
+            escaped_domain(domain)
+        )
+    }
+
+    /// Construye la lista de reglas en el orden exigido por WebKit.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) fn rules() -> Vec<Value> {
+        let mut rules = Vec::with_capacity(
+            BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len(),
+        );
+
+        for blocked in BLOCKED_DOMAINS {
+            rules.push(json!({
+                "trigger": {
+                    "url-filter": host_url_filter(blocked.domain),
+                    "url-filter-is-case-sensitive": false
+                },
+                "action": { "type": "block" }
+            }));
+        }
+
+        for allowed in ALLOWED_DOMAINS {
+            rules.push(json!({
+                "trigger": {
+                    "url-filter": host_url_filter(allowed.domain),
+                    "url-filter-is-case-sensitive": false
+                },
+                "action": { "type": "ignore-previous-rules" }
+            }));
+        }
+
+        for cosmetic in COSMETIC_RULES {
+            let domains: Vec<String> = cosmetic
+                .domains
+                .iter()
+                .map(|domain| format!("*{domain}"))
+                .collect();
+            rules.push(json!({
+                "trigger": {
+                    "url-filter": ".*",
+                    "if-domain": domains
+                },
+                "action": {
+                    "type": "css-display-none",
+                    "selector": cosmetic.selector
+                }
+            }));
+        }
+
+        rules
+    }
+
+    /// Lista de contenido compilable, en JSON.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn content_rule_list_json() -> String {
+        serde_json::to_string(&Value::Array(rules()))
+            .expect("las reglas del bloqueador siempre serializan")
+    }
+
+    /// Número total de reglas generadas. Útil para vigilar el tamaño de la lista.
+    #[allow(dead_code)]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn rule_count() -> usize {
+        BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len()
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use lista_de_contenido::{BLOCKER_ID, content_rule_list_json};

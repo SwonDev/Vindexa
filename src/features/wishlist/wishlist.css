@@ -1365,6 +1365,149 @@
   color: var(--v-subtle);
 }
 
+/* --- Ofertas vigentes -----------------------------------------------------
+   La tira comparte el lenguaje de la barra de precios —un píxel de borde, texto
+   pequeño, sin sombra— porque es información del mismo rango. El único color
+   propio es el del descuento, y va sobre el token de terciario, que en este
+   sistema significa exactamente eso: una decisión positiva concreta. */
+
+.wishlist-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px 7px;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.wishlist-offers__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.wishlist-offers__head > svg {
+  width: 13px;
+  height: 13px;
+  color: var(--v-lime);
+}
+
+.wishlist-offers__figure {
+  color: var(--foreground);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-offers__target {
+  color: var(--v-lime);
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-offers__head > [data-slot="button"] {
+  margin-inline-start: auto;
+}
+
+.wishlist-offers__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wishlist-offers__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  background: none;
+  color: var(--v-muted);
+  font: inherit;
+  font-size: 11px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.wishlist-offers__item:hover {
+  background: var(--card);
+}
+
+/* El foco y la selección se dibujan hacia dentro: un anillo exterior invadiría
+   la fila de al lado, que está a un píxel. */
+.wishlist-offers__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--v-cyan);
+}
+
+.wishlist-offers__item[data-selected="true"] {
+  background: var(--v-surface-selected);
+  color: var(--foreground);
+}
+
+.wishlist-offers__discount {
+  flex: 0 0 auto;
+  min-width: 5.5ch;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--v-lime) 38%, transparent);
+  background: color-mix(in srgb, var(--background) 88%, var(--v-lime));
+  color: var(--v-lime);
+  font-weight: 600;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.wishlist-offers__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wishlist-offers__amount {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-offers__before {
+  flex: 0 0 auto;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-offers__stale {
+  flex: 0 0 auto;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+/* Cumplir el objetivo es la señal que se busca al abrir esta pantalla, así que
+   se marca en el filo de la fila y no con otro color de texto: el texto ya
+   tiene contraste garantizado y no se toca. */
+.wishlist-offers__item[data-meets-target="true"] {
+  box-shadow: inset 2px 0 0 var(--v-lime);
+}
+
+.wishlist-offers__item > svg:last-child {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--v-subtle);
+}
+
+/* --- Precio observado en la tarjeta ------------------------------------ */
+
 .wishlist-card__observed {
   display: flex;
   flex-wrap: wrap;
