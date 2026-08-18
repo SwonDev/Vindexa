@@ -224,6 +224,7 @@ export const api = {
   markNotificationRead: (id: string) => invoke<void>("mark_notification_read", { id }),
   markAllNotificationsRead: () => invoke<number>("mark_all_notifications_read"),
   dismissNotification: (id: string) => invoke<void>("dismiss_notification", { id }),
+  dismissAllNotifications: () => invoke<number>("dismiss_all_notifications"),
   refreshNotificationEvents: () => invoke<NotificationRefreshReport>("refresh_notification_events"),
   recomputePriorities: () => invoke<PriorityRecomputeReport>("recompute_priorities"),
   explainPriority: (appId: number) => invoke<PriorityExplanation>("explain_priority", { appId }),

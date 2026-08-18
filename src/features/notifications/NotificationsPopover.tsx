@@ -1,6 +1,7 @@
 import {
   IconAlarm,
   IconAlertTriangle,
+  IconArchive,
   IconBell,
   IconBellPlus,
   IconCheck,
@@ -79,6 +80,10 @@ export function NotificationsPopover() {
     mutationFn: api.markAllNotificationsRead,
     onSuccess: () => void invalidate(),
   });
+  const dismissAll = useMutation({
+    mutationFn: () => api.dismissAllNotifications(),
+    onSuccess: () => void invalidate(),
+  });
   const dismiss = useMutation({
     mutationFn: (id: string) => api.dismissNotification(id),
     onSuccess: () => void invalidate(),
@@ -101,6 +106,9 @@ export function NotificationsPopover() {
     .sort()[0];
 
   const pendingCount = unread?.total ?? 0;
+  // Descartar vacía los que siguen en la vista, estén leídos o no; marcar como
+  // leído sólo afecta a los no leídos. Por eso son dos cuentas distintas.
+  const activeCount = events.filter((event) => !event.dismissedAt).length;
   const urgent = (unread?.critical ?? 0) + (unread?.warning ?? 0) > 0;
 
   return (
@@ -172,6 +180,18 @@ export function NotificationsPopover() {
                 disabled={markAllRead.isPending || pendingCount === 0}
               >
                 <IconChecks />
+              </Button>
+              {/* Descartar no es lo mismo que marcar leído: lo primero saca el
+                  aviso de la vista de pendientes, lo segundo sólo le quita el
+                  resalte. Quien vuelve tras una semana quiere lo primero. */}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Descartar todos los avisos"
+                onClick={() => dismissAll.mutate()}
+                disabled={dismissAll.isPending || activeCount === 0}
+              >
+                {dismissAll.isPending ? <IconLoader2 className="is-spinning" /> : <IconArchive />}
               </Button>
             </div>
           </header>

@@ -57,6 +57,11 @@ static PRICE_REFRESH_LOCK: Mutex<()> = Mutex::const_new(());
 /// su límite de peticiones, así que se reutiliza el intervalo que Vindexa ya
 /// considera prudente en lugar de inventar uno nuevo.
 const PRICE_REQUEST_INTERVAL: Duration = Duration::from_millis(750);
+/// Días que se conserva un aviso ya descartado.
+///
+/// Tres meses: lo bastante para que alguien pueda revisar qué pasó el trimestre
+/// pasado, y lo bastante poco para que la tabla no crezca sin fin.
+const NOTIFICATION_RETENTION_DAYS: u32 = 90;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -228,6 +233,19 @@ pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<
         database.bootstrap(steam, app_version)
     })
     .await?;
+
+    // Poda de avisos ya descartados, una vez por arranque. Sin ella la tabla
+    // crece durante toda la vida de la instalación. Un fallo aquí no puede
+    // impedir que la aplicación abra: es limpieza, no un requisito.
+    let ahora = Utc::now();
+    if let Err(error) = database_read(&state, move |database| {
+        database.prune_notification_events(ahora, NOTIFICATION_RETENTION_DAYS)
+    })
+    .await
+    {
+        eprintln!("Vindexa no pudo podar los avisos antiguos: {}", error.code);
+    }
+
     steam::metadata_enrichment::start_worker(
         state.database.clone(),
         state.metadata_enrichment.clone(),
@@ -1028,6 +1046,20 @@ pub async fn mark_all_notifications_read(state: State<'_, AppState>) -> AppResul
     let now = Utc::now();
     database_read(&state, move |database| {
         database.mark_all_notifications_read(now)
+    })
+    .await
+}
+
+/// Descarta todos los avisos pendientes de una vez. Devuelve cuántos cambiaron.
+///
+/// «Marcar todo como leído» y «descartar todos» son cosas distintas: lo primero
+/// deja el aviso en la bandeja sin resaltar, lo segundo lo saca de la vista de
+/// pendientes. Quien vuelve tras una semana quiere lo segundo.
+#[tauri::command]
+pub async fn dismiss_all_notifications(state: State<'_, AppState>) -> AppResult<u32> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.dismiss_all_notifications(now)
     })
     .await
 }

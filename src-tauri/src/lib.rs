@@ -122,6 +122,7 @@ pub fn run() {
             commands::mark_notification_read,
             commands::mark_all_notifications_read,
             commands::dismiss_notification,
+            commands::dismiss_all_notifications,
             commands::refresh_notification_events,
             commands::recompute_priorities,
             commands::explain_priority,

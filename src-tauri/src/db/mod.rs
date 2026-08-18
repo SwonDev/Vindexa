@@ -875,6 +875,22 @@ impl Database {
         notifications::mark_all_read(&mut self.open()?, now)
     }
 
+    /// Borra los avisos descartados hace más de `retention_days` días.
+    ///
+    /// Nunca toca uno pendiente. Sin esto, `notification_events` crece sin tope
+    /// durante toda la vida de la instalación.
+    pub fn prune_notification_events(
+        &self,
+        now: DateTime<Utc>,
+        retention_days: u32,
+    ) -> AppResult<u32> {
+        notifications::prune_events(&self.open()?, now, retention_days)
+    }
+
+    pub fn dismiss_all_notifications(&self, now: DateTime<Utc>) -> AppResult<u32> {
+        notifications::dismiss_all(&mut self.open()?, now)
+    }
+
     pub fn dismiss_notification(&self, event_id: &str, now: DateTime<Utc>) -> AppResult<()> {
         notifications::dismiss_event(&self.open()?, event_id, now)
     }

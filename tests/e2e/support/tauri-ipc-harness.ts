@@ -1214,9 +1214,12 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       };
     }
     if (
-      ["mark_notification_read", "mark_all_notifications_read", "dismiss_notification"].includes(
-        command,
-      )
+      [
+        "mark_notification_read",
+        "mark_all_notifications_read",
+        "dismiss_notification",
+        "dismiss_all_notifications",
+      ].includes(command)
     ) {
       return 0;
     }
