@@ -100,6 +100,10 @@ const LOAD_POLL: Duration = Duration::from_millis(250);
 const FRESH_LOAD_GRACE: Duration = Duration::from_secs(5);
 
 /// Margen para que el webview conteste a la evaluación del guion.
+///
+/// Sólo lo usa el evaluador de WKWebView; fuera de macOS no hay a quién
+/// esperar, porque no hay evaluador.
+#[cfg(target_os = "macos")]
 const EVAL_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Fecha de alta más antigua que se acepta de la página.
@@ -861,6 +865,9 @@ pub(crate) async fn evaluate_json<R: Runtime>(
     ))
 }
 
+/// Fallo del evaluador. Igual que el margen de espera, sólo existe donde existe
+/// el evaluador.
+#[cfg(target_os = "macos")]
 fn evaluation_error() -> AppError {
     AppError::new(
         "wishlist_browser_eval",
