@@ -84,6 +84,16 @@ pub fn is_token_page(url: &Url) -> bool {
 pub struct SessionToken(String);
 
 impl SessionToken {
+    /// Construye un testigo a partir de un valor guardado, validando su forma.
+    ///
+    /// Existe para que quien lo recupera del llavero no tenga que fabricar una
+    /// respuesta de Steam falsa sólo para volver a pasar por el análisis.
+    pub fn parse(raw: &str) -> AppResult<Self> {
+        let raw = raw.trim();
+        validate_token(raw)?;
+        Ok(Self(raw.to_owned()))
+    }
+
     /// El testigo en claro, para construir la petición. No se registra ni se
     /// enseña: quien lo obtiene lo usa y lo suelta.
     pub fn as_str(&self) -> &str {
@@ -121,8 +131,7 @@ pub fn parse_token_payload(raw: &str) -> AppResult<SessionToken> {
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .ok_or_else(not_signed_in)?;
-    validate_token(token)?;
-    Ok(SessionToken(token.to_owned()))
+    SessionToken::parse(token)
 }
 
 /// Comprueba la forma del testigo antes de guardarlo o usarlo.
@@ -239,6 +248,13 @@ mod tests {
             );
         }
         assert!(validate_token(TESTIGO).is_ok());
+    }
+
+    #[test]
+    fn el_constructor_valida_y_recorta_los_espacios() {
+        let token = super::SessionToken::parse(&format!("  {TESTIGO}  ")).expect("construir");
+        assert_eq!(token.as_str(), TESTIGO);
+        assert!(super::SessionToken::parse("no.es").is_err());
     }
 
     #[test]

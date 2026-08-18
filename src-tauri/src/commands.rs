@@ -1437,6 +1437,24 @@ pub async fn unlink_steam_family_session(
     steam_family_session_status(state).await
 }
 
+/// Anota el fallo de una sincronización de Familia y devuelve el error tal cual.
+///
+/// Se anota aunque la operación termine mal: perder el diagnóstico dejaría la
+/// pantalla diciendo que la última sincronización fue bien. Y un testigo
+/// caducado se borra, para que la pantalla pida vincular en lugar de ofrecer
+/// una sincronización que va a volver a fallar.
+async fn anotar_fallo_de_familia(state: &State<'_, AppState>, error: AppError) -> AppError {
+    let code = error.code.clone();
+    let _ = database_read(state, move |database| {
+        database.record_family_session_failure(&code)
+    })
+    .await;
+    if error.code == "steam_family_session_expired" {
+        let _ = steam::secrets::delete_session_token();
+    }
+    error
+}
+
 /// Trae el catálogo completo de la Familia con el testigo guardado.
 ///
 /// Esta es la vía que ve **todo** el catálogo. La que había —preguntar por cada
@@ -1462,32 +1480,15 @@ pub async fn sync_steam_family_catalog(
         ));
     };
 
-    // El testigo se reconstruye desde su validador para no fabricar uno a mano:
-    // lo guardado ya pasó por él, pero el tipo sólo se puede crear así.
-    let token = steam::family_session::parse_token_payload(&format!(
-        r#"{{"data":{{"webapi_token":"{raw_token}"}}}}"#
-    ))?;
+    // Se vuelve a validar lo guardado en vez de confiar en que sigue bien: el
+    // llavero es un almacén compartido y una entrada puede haberse tocado fuera.
+    let token = steam::family_session::SessionToken::parse(&raw_token)?;
 
     let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
-    let anotar_fallo = |estado: &State<'_, AppState>, error: &AppError| {
-        let code = error.code.clone();
-        let database = estado.database.clone();
-        // El diagnóstico se anota aunque falle: perderlo dejaría la pantalla
-        // diciendo que la última sincronización fue bien.
-        let _ = database.record_family_session_failure(&code);
-    };
 
     let group = match steam::family_api::fetch_family_group(&token, &account.steam_id).await {
         Ok(group) => group,
-        Err(error) => {
-            anotar_fallo(&state, &error);
-            if error.code == "steam_family_session_expired" {
-                // Un testigo caducado no sirve para nada: se borra para que la
-                // pantalla diga «vincula» y no «sincroniza» una y otra vez.
-                let _ = steam::secrets::delete_session_token();
-            }
-            return Err(error);
-        }
+        Err(error) => return Err(anotar_fallo_de_familia(&state, error).await),
     };
 
     let group_id = match group {
@@ -1507,13 +1508,7 @@ pub async fn sync_steam_family_catalog(
 
     let library = match steam::family_api::fetch_shared_library(&token, &group_id).await {
         Ok(library) => library,
-        Err(error) => {
-            anotar_fallo(&state, &error);
-            if error.code == "steam_family_session_expired" {
-                let _ = steam::secrets::delete_session_token();
-            }
-            return Err(error);
-        }
+        Err(error) => return Err(anotar_fallo_de_familia(&state, error).await),
     };
 
     // Sin título no se puede presentar una ficha honesta, así que esas entradas
