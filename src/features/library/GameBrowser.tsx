@@ -1,5 +1,4 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import {
   IconAlertCircle,
   IconBrandSteam,
@@ -631,7 +630,6 @@ const GameCard = memo(function GameCard({
     listeners,
     setNodeRef: setDragNodeRef,
     setActivatorNodeRef,
-    transform,
     isDragging,
   } = useDraggable({
     id: `game:${game.appId}`,
@@ -667,7 +665,6 @@ const GameCard = memo(function GameCard({
         data-library-dragging={isDragging}
         data-position-drop={Boolean(positionCollectionId || manualPositioning)}
         data-position-over={isOver}
-        style={{ transform: CSS.Translate.toString(transform) }}
       >
         <button
           ref={setActivatorNodeRef}
@@ -772,7 +769,6 @@ const GameRow = memo(function GameRow({
     listeners,
     setNodeRef: setDragNodeRef,
     setActivatorNodeRef,
-    transform,
     isDragging,
   } = useDraggable({
     id: `game:${game.appId}`,
@@ -809,10 +805,10 @@ const GameRow = memo(function GameRow({
         data-position-drop={Boolean(positionCollectionId || manualPositioning)}
         data-position-over={isOver}
         data-compact={compact}
-        style={{
-          ...style,
-          transform: `${String(style.transform ?? "")} ${CSS.Translate.toString(transform) ?? ""}`,
-        }}
+        // Sólo la traslación del virtualizador. La del arrastre la lleva el
+        // acompañante del cursor; sumarlas movía la fila dos veces y el
+        // resultado temblaba contra la posición que el virtualizador recalcula.
+        style={style}
       >
         <button
           ref={setActivatorNodeRef}

@@ -977,6 +977,18 @@ kbd {
   background: var(--background);
   box-shadow: inset 0 1px 4px rgb(0 0 0 / 30%);
 }
+/* WebKit dibuja su propia aspa de borrar dentro de `input[type="search"]`, así
+   que junto a la nuestra salían dos. Se quita la del motor y se conserva la del
+   proyecto, que es la que tiene el tamaño, el color y el rótulo accesible del
+   resto de la interfaz. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .search-field > button {
   position: absolute;
   right: 5px;
