@@ -118,11 +118,11 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     COALESCE(SUM(CASE WHEN p.tracking = 1 THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(g.playtime_minutes), 0),
                     (SELECT COUNT(*) FROM game_archive),
-                    -- El catálogo entero, que es lo que se encuentra al entrar
-                    -- en «Steam Family». Contar sólo los que no se poseen daría
-                    -- una cifra distinta de la que enseña esa pantalla, y un
-                    -- número que no coincide con lo que hay dentro es un fallo.
-                    (SELECT COUNT(*) FROM family_catalog_games)
+                    -- Lo mismo que enseña el ámbito de Steam Family: los juegos
+                    -- prestados que están en la biblioteca. Un recuento que no
+                    -- coincide con lo que hay dentro es un fallo.
+                    (SELECT COUNT(*) FROM games f
+                      WHERE f.ownership_source = 'family_shared')
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
@@ -366,10 +366,19 @@ pub fn list_games(
     validate_filter_request(request)?;
     let limit = request.limit.unwrap_or(120).clamp(1, 500);
     let offset = request.offset.unwrap_or(0);
-    let mut clauses: Vec<String> = vec![
-        "NOT (g.ownership_source = 'family_shared' AND g.family_availability <> 'confirmed')"
-            .to_string(),
-    ];
+    // Los juegos prestados sin confirmar se esconden de la biblioteca: tenerlos
+    // a la vista no es tenerlos, y mezclarlos con los propios diría que sí. La
+    // excepción es pedirlos a propósito —el ámbito de Steam Family—, donde son
+    // justo lo que se busca.
+    let familia_pedida = request.ownership_source.as_deref() == Some("family_shared");
+    let mut clauses: Vec<String> = if familia_pedida {
+        Vec::new()
+    } else {
+        vec![
+            "NOT (g.ownership_source = 'family_shared' AND g.family_availability <> 'confirmed')"
+                .to_string(),
+        ]
+    };
     // Lo archivado se esconde salvo que se pida verlo: es el sentido de
     // archivar. Un ámbito desconocido es un error, no un `active` silencioso.
     let archive_scope = request.archive_scope.as_deref().unwrap_or("active");

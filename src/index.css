@@ -1390,6 +1390,15 @@ kbd {
   font-weight: 750;
   letter-spacing: 0.06em;
 }
+/* El préstamo familiar se distingue del «instalado» por color: lima significa
+   una decisión positiva —lo tienes en disco— y esto es otra cosa, un juego que
+   está a tu alcance pero cuya elegibilidad decide Steam al abrirlo. */
+.installed-marker[data-family="true"] {
+  border-color: color-mix(in srgb, var(--v-cyan) 38%, transparent);
+  background: color-mix(in srgb, var(--background) 86%, var(--v-cyan));
+  color: var(--v-cyan);
+}
+
 .game-menu {
   position: absolute;
   top: 5px;

@@ -2424,36 +2424,41 @@ mod pruebas_del_recuento_de_familia {
             .expect("insertar ficha personal");
     }
 
-    fn juego_de_familia(connection: &Connection, app_id: u32) {
+    /// Un juego que llega por el préstamo familiar: vive en la biblioteca como
+    /// `family_shared`, que es lo que le permite tener ficha personal.
+    fn juego_prestado(connection: &Connection, app_id: u32) {
         connection
             .execute(
-                "INSERT INTO family_catalog_games(app_id, title, availability)
-                 VALUES (?1, ?2, 'unknown')",
+                "INSERT INTO games(app_id, title, playtime_minutes, ownership_source,
+                                   family_availability)
+                 VALUES (?1, ?2, 0, 'family_shared', 'unknown')",
                 rusqlite::params![app_id, format!("Prestado {app_id}")],
             )
-            .expect("insertar juego de familia");
+            .expect("insertar juego prestado");
+        connection
+            .execute(
+                "INSERT INTO game_personal(app_id, status_id) VALUES (?1, 'unclassified')",
+                [app_id],
+            )
+            .expect("insertar ficha personal");
     }
 
     #[test]
-    fn el_catalogo_de_familia_se_cuenta_entero_y_aparte_de_lo_propio() {
+    fn los_prestados_se_cuentan_aparte_de_los_propios() {
         // La cifra tiene que ser la misma que se encuentra al entrar en «Steam
-        // Family», incluidos los que además se poseen: un recuento que no
-        // coincide con lo que hay dentro es un fallo. Y no se suma a los
-        // propios, porque tener un juego a la vista no es tenerlo.
+        // Family»: un recuento que no coincide con lo que hay dentro es un
+        // fallo. Y no se suma a los propios, porque tener un juego prestado a la
+        // vista no es tenerlo.
         let connection = base();
         juego_propio(&connection, 10);
         juego_propio(&connection, 20);
-        juego_de_familia(&connection, 20); // propio **y** en el catálogo
-        juego_de_familia(&connection, 30);
-        juego_de_familia(&connection, 40);
+        juego_prestado(&connection, 30);
+        juego_prestado(&connection, 40);
 
         let stats = library::library_stats(&connection).expect("estadísticas");
 
         assert_eq!(stats.total_games, 2, "los propios son dos");
-        assert_eq!(
-            stats.family_catalog_games, 3,
-            "el catálogo entero, como lo enseña su pantalla"
-        );
+        assert_eq!(stats.family_catalog_games, 2, "los prestados son otros dos");
     }
 
     #[test]

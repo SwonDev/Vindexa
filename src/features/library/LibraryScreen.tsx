@@ -41,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FamilyCatalogBrowser } from "@/features/library/FamilyCatalogBrowser";
 import { GameBrowser, type GameOrganizationHandlers } from "@/features/library/GameBrowser";
 import { type LibraryScope, LibrarySidebar } from "@/features/library/LibrarySidebar";
 import { type ExtraFilters, LibraryToolbar } from "@/features/library/LibraryToolbar";
@@ -94,8 +93,6 @@ import type {
   AppBootstrap,
   ArchiveScope,
   ExternalStoreId,
-  FamilyCatalogAvailability,
-  FamilyCatalogSort,
   GameListRequest,
   GameSort,
   GameSummary,
@@ -151,10 +148,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   const [randomSeed, setRandomSeed] = useState(session.randomSeed);
   const [view, setView] = useState<LibraryView>(session.view);
   const [grouping, setGrouping] = useState<LibraryGrouping>(session.grouping);
-  const [familyAvailability, setFamilyAvailability] = useState<FamilyCatalogAvailability>(
-    session.familyAvailability,
-  );
-  const [familySort, setFamilySort] = useState<FamilyCatalogSort>(session.familySort);
   const [filters, setFilters] = useState<ExtraFilters>(session.filters);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detailId, setDetailId] = useState<number>();
@@ -195,11 +188,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       randomSeed,
       view,
       grouping,
-      familyAvailability,
-      familySort,
+      familyAvailability: session.familyAvailability,
+      familySort: session.familySort,
       filters,
     });
-  }, [familyAvailability, familySort, filters, grouping, query, randomSeed, scope, sort, view]);
+  }, [filters, grouping, query, randomSeed, scope, session, sort, view]);
   useEffect(() => {
     if (bootstrap && awaitingInitialPreferences.current) {
       awaitingInitialPreferences.current = false;
@@ -260,6 +253,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         : installed !== undefined
           ? { installed }
           : {}),
+      // Los juegos del préstamo familiar viven en la biblioteca como
+      // `family_shared` y se esconden de ella salvo que se pidan aquí. Pedirlos
+      // por este camino es lo que les da estados, colecciones, prioridad, notas
+      // y ficha: exactamente lo mismo que a los propios.
+      ...(scope.kind === "family" ? { ownershipSource: "family_shared" as const } : {}),
       ...(archiveScope === "active" ? {} : { archiveScope }),
       sort,
       ...(sort === "random" ? { sortSeed: randomSeed } : {}),
@@ -272,7 +270,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     initialPageParam: 0,
     getNextPageParam: (last) =>
       last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
-    enabled: scope.kind !== "family",
   });
   const storeQuery = useInfiniteQuery({
     queryKey: ["store-catalog", scope.kind === "store" ? scope.id : undefined, debouncedQuery],
@@ -287,21 +284,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     getNextPageParam: (last) =>
       last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
     enabled: scope.kind === "store",
-  });
-  const familyQuery = useInfiniteQuery({
-    queryKey: ["family-catalog", debouncedQuery, familyAvailability, familySort],
-    queryFn: ({ pageParam }) =>
-      api.listFamilyCatalog({
-        ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
-        ...(familyAvailability === "all" ? {} : { availability: familyAvailability }),
-        sort: familySort,
-        limit: 240,
-        offset: pageParam,
-      }),
-    initialPageParam: 0,
-    getNextPageParam: (last) =>
-      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
-    enabled: scope.kind === "family",
   });
   const games = useMemo(
     () => gamesQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -320,22 +302,15 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       });
   }, [metadataPriorityIds, queryClient, scope.kind]);
   const total = gamesQuery.data?.pages[0]?.total ?? 0;
-  const familyGames = useMemo(
-    () => familyQuery.data?.pages.flatMap((page) => page.items) ?? [],
-    [familyQuery.data],
-  );
-  const familyTotal = familyQuery.data?.pages[0]?.total ?? 0;
   const storeGames = useMemo(
     () => storeQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [storeQuery.data],
   );
   const storeTotal = storeQuery.data?.pages[0]?.total ?? 0;
-  const visibleTotal =
-    scope.kind === "family" ? familyTotal : scope.kind === "store" ? storeTotal : total;
-  const activeFilters =
-    scope.kind === "family"
-      ? Boolean(debouncedQuery || familyAvailability !== "all")
-      : Boolean(debouncedQuery || activeLibraryFilterCount(filters) || scope.kind !== "all");
+  const visibleTotal = scope.kind === "store" ? storeTotal : total;
+  const activeFilters = Boolean(
+    debouncedQuery || activeLibraryFilterCount(filters) || scope.kind !== "all",
+  );
 
   useEffect(() => {
     const focusSearch = () => {
@@ -1135,7 +1110,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         />
         <section className="library-main">
           <LibraryToolbar
-            mode={scope.kind === "family" ? "family" : "library"}
             title={scope.label}
             query={query}
             onQueryChange={setQuery}
@@ -1150,10 +1124,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             statuses={[]}
             collections={[]}
             filterOptions={filterOptionsQuery.data}
-            familyAvailability={familyAvailability}
-            onFamilyAvailabilityChange={setFamilyAvailability}
-            familySort={familySort}
-            onFamilySortChange={setFamilySort}
           />
           <LibrarySkeleton />
         </section>
@@ -1217,7 +1187,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         />
         <section className="library-main">
           <LibraryToolbar
-            mode={scope.kind === "family" ? "family" : "library"}
             title={scope.label}
             total={visibleTotal}
             query={query}
@@ -1233,10 +1202,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             statuses={bootstrap?.statuses ?? []}
             collections={bootstrap?.collections ?? []}
             filterOptions={filterOptionsQuery.data}
-            familyAvailability={familyAvailability}
-            onFamilyAvailabilityChange={setFamilyAvailability}
-            familySort={familySort}
-            onFamilySortChange={setFamilySort}
             onSaveView={scope.kind === "family" ? undefined : () => setNamingView(true)}
             saveViewLabel={
               activeViewIds.length > 1 ? "Guardar la combinación" : "Guardar esta vista"
@@ -1312,18 +1277,16 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               ))}
             </fieldset>
           )}
-          {(scope.kind === "family" ? familyQuery.isPending : gamesQuery.isPending) ? (
+          {(scope.kind === "store" ? storeQuery.isPending : gamesQuery.isPending) ? (
             <LibrarySkeleton />
-          ) : (scope.kind === "family" ? familyQuery.isError : gamesQuery.isError) ? (
+          ) : (scope.kind === "store" ? storeQuery.isError : gamesQuery.isError) ? (
             <div className="screen-error">
               <IconRefresh />
               <h2>No se pudieron cargar los juegos</h2>
-              <p>
-                {getErrorMessage(scope.kind === "family" ? familyQuery.error : gamesQuery.error)}
-              </p>
+              <p>{getErrorMessage(scope.kind === "store" ? storeQuery.error : gamesQuery.error)}</p>
               <Button
                 onClick={() =>
-                  scope.kind === "family" ? familyQuery.refetch() : gamesQuery.refetch()
+                  scope.kind === "store" ? storeQuery.refetch() : gamesQuery.refetch()
                 }
               >
                 Reintentar
@@ -1357,12 +1320,8 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 <Button
                   onClick={() => {
                     setQuery("");
-                    if (scope.kind === "family") {
-                      setFamilyAvailability("all");
-                    } else {
-                      setFilters({});
-                      setScope({ kind: "all", label: "Todos los juegos" });
-                    }
+                    setFilters({});
+                    setScope({ kind: "all", label: "Todos los juegos" });
                   }}
                 >
                   <IconX /> Limpiar búsqueda y filtros
@@ -1405,30 +1364,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               onScrollOffsetChange={(offset) => writeLibraryScroll(scope, offset)}
               onLoadMore={() => storeQuery.fetchNextPage()}
               onOpenMatched={setDetailId}
-            />
-          ) : scope.kind === "family" ? (
-            <FamilyCatalogBrowser
-              games={familyGames}
-              total={familyTotal}
-              view={view}
-              availability={familyAvailability}
-              sort={familySort}
-              queryKey={debouncedQuery.trim()}
-              hasMore={Boolean(familyQuery.hasNextPage)}
-              loadingMore={familyQuery.isFetchingNextPage}
-              initialScrollOffset={readLibraryScroll(scope)}
-              onScrollOffsetChange={(offset) => writeLibraryScroll(scope, offset)}
-              onAvailabilityChange={(availability) => {
-                writeLibraryScroll(scope, 0);
-                setFamilyAvailability(availability);
-              }}
-              onSortChange={(nextSort) => {
-                writeLibraryScroll(scope, 0);
-                setFamilySort(nextSort);
-              }}
-              onViewChange={setView}
-              onLoadMore={() => familyQuery.fetchNextPage()}
-              onOpenConfirmed={setDetailId}
             />
           ) : (
             <GameBrowser

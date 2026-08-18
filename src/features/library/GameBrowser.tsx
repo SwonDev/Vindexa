@@ -10,6 +10,7 @@ import {
   IconLoader2,
   IconPlayerPlay,
   IconStarFilled,
+  IconUsersGroup,
   IconX,
 } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -690,11 +691,18 @@ const GameCard = memo(function GameCard({
         >
           <div className="game-card__cover">
             <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
-            {game.installed && (
+            {game.installed ? (
               <span className="installed-marker" title="Instalado">
                 <IconDownload size={12} /> INSTALADO
               </span>
-            )}
+            ) : game.ownershipSource === "family_shared" ? (
+              // Un juego prestado se distingue de uno propio, porque Steam decide
+              // la elegibilidad al abrirlo y puede no dejarte jugarlo. Se marca
+              // igual que «instalado»: sobre la portada y sólo la excepción.
+              <span className="installed-marker" data-family="true" title="Del préstamo familiar">
+                <IconUsersGroup size={12} /> FAMILY
+              </span>
+            ) : null}
           </div>
           <div className="game-card__body">
             <div className="game-card__title-row">

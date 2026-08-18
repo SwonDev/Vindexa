@@ -106,6 +106,47 @@ pub(crate) fn save_in_transaction(
             ])?;
         }
     }
+    // Y a la biblioteca, para que se puedan organizar. `game_personal` cuelga de
+    // `games`, así que sin esta fila un juego prestado no tendría dónde guardar
+    // su estado, su colección ni su nota. No es una promoción a «tuyo»: entra
+    // como `family_shared` y `list_games` lo esconde de la biblioteca propia
+    // salvo que se pida el ámbito de Family a propósito.
+    {
+        let mut upsert_biblioteca = transaction.prepare_cached(
+            "INSERT INTO games(
+                app_id, title, icon_url, cover_url, header_url,
+                playtime_minutes, playtime_recent_minutes,
+                ownership_source, family_availability
+             ) VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 'family_shared', ?6)
+             ON CONFLICT(app_id) DO UPDATE SET
+                title = excluded.title,
+                icon_url = COALESCE(excluded.icon_url, games.icon_url),
+                cover_url = COALESCE(excluded.cover_url, games.cover_url),
+                header_url = COALESCE(excluded.header_url, games.header_url),
+                -- Un juego que además se posee no pasa a prestado: la propiedad
+                -- manda sobre el préstamo.
+                family_availability = CASE
+                    WHEN games.ownership_source = 'owned' THEN games.family_availability
+                    ELSE excluded.family_availability
+                END,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+        )?;
+        let mut ficha_personal = transaction.prepare_cached(
+            "INSERT OR IGNORE INTO game_personal(app_id, status_id) VALUES (?1, 'unclassified')",
+        )?;
+        for game in games {
+            upsert_biblioteca.execute(params![
+                game.app_id,
+                game.title.trim(),
+                game.icon_url,
+                game.cover_url,
+                game.header_url,
+                game.availability,
+            ])?;
+            ficha_personal.execute([game.app_id])?;
+        }
+    }
+
     if complete_snapshot {
         // La evidencia de Steam Family es efímera: que un juego estuviese en la
         // caché local en una sincronización anterior no demuestra que siga
@@ -256,6 +297,7 @@ mod tests {
     fn replaces_complete_snapshots_and_expires_stale_confirmation() {
         let mut connection = Connection::open_in_memory().expect("abrir SQLite");
         migrations::migrate(&mut connection).expect("migrar");
+        crate::db::seed_defaults(&mut connection).expect("sembrar estados");
         save(
             &mut connection,
             &[game(10, "confirmed"), game(20, "unknown")],
@@ -279,6 +321,7 @@ mod tests {
     fn complete_snapshot_expires_confirmation_in_the_personal_index() {
         let mut connection = Connection::open_in_memory().expect("abrir SQLite");
         migrations::migrate(&mut connection).expect("migrar");
+        crate::db::seed_defaults(&mut connection).expect("sembrar estados");
         connection
             .execute(
                 "INSERT INTO games(
@@ -304,6 +347,7 @@ mod tests {
     fn filters_and_sorts_the_family_catalog_with_stable_sql_pagination() {
         let mut connection = Connection::open_in_memory().expect("abrir SQLite");
         migrations::migrate(&mut connection).expect("migrar");
+        crate::db::seed_defaults(&mut connection).expect("sembrar estados");
         save(
             &mut connection,
             &[

@@ -26,12 +26,7 @@ import type {
   LibraryFilters,
 } from "@/features/library/library-filters";
 import { LIBRARY_GROUPINGS, type LibraryGrouping } from "@/features/library/library-grouping";
-import type {
-  FamilyCatalogAvailability,
-  FamilyCatalogSort,
-  GameSort,
-  LibraryView,
-} from "@/lib/types";
+import type { GameSort, LibraryView } from "@/lib/types";
 
 export type ExtraFilters = LibraryFilters;
 
@@ -56,14 +51,6 @@ interface LibraryToolbarProps {
   onSaveView?: (() => void) | undefined;
   /** Rótulo del botón: cambia al apilar varias vistas. */
   saveViewLabel?: string | undefined;
-  /* --- Catálogo de Steam Family ------------------------------------------
-     El catálogo filtra y ordena por cosas distintas —no tiene estados ni
-     colecciones— pero lo hace desde esta misma barra. Cuando tenía la suya, la
-     sección gastaba tres filas de encabezado donde la biblioteca gasta una. */
-  familyAvailability?: FamilyCatalogAvailability | undefined;
-  onFamilyAvailabilityChange?: ((value: FamilyCatalogAvailability) => void) | undefined;
-  familySort?: FamilyCatalogSort | undefined;
-  onFamilySortChange?: ((value: FamilyCatalogSort) => void) | undefined;
 }
 
 const sortGroups = [
@@ -155,7 +142,7 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             </button>
           )}
         </label>
-        {!familyMode && (
+        {
           <LibraryFiltersPopover
             filters={props.filters}
             onChange={props.onFiltersChange}
@@ -163,8 +150,8 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             collections={props.collections ?? []}
             options={props.filterOptions}
           />
-        )}
-        {!familyMode && (
+        }
+        {
           <Select
             value={props.sort}
             onValueChange={(value) => props.onSortChange(value as GameSort)}
@@ -186,57 +173,11 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
               ))}
             </SelectContent>
           </Select>
-        )}
-        {familyMode && props.onFamilyAvailabilityChange && (
-          <Select
-            value={props.familyAvailability ?? "all"}
-            onValueChange={(value) =>
-              value && props.onFamilyAvailabilityChange?.(value as FamilyCatalogAvailability)
-            }
-          >
-            <SelectTrigger className="sort-select" aria-label="Filtrar el catálogo de Steam Family">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="library-sort-menu">
-              <SelectGroup>
-                <SelectLabel>DISPONIBILIDAD</SelectLabel>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="confirmed" title="Vindexa ha visto este juego en tu equipo">
-                  Comprobados
-                </SelectItem>
-                <SelectItem value="unknown" title="Steam decidirá al abrirlos">
-                  Sin comprobar
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        )}
-        {familyMode && props.onFamilySortChange && (
-          <Select
-            value={props.familySort ?? "availability"}
-            onValueChange={(value) =>
-              value && props.onFamilySortChange?.(value as FamilyCatalogSort)
-            }
-          >
-            <SelectTrigger className="sort-select" aria-label="Ordenar el catálogo de Steam Family">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="library-sort-menu">
-              <SelectGroup>
-                <SelectLabel>ORDENAR POR</SelectLabel>
-                <SelectItem value="availability">Comprobados primero</SelectItem>
-                <SelectItem value="alphabetical">Título: A–Z</SelectItem>
-                <SelectItem value="alphabeticalDesc">Título: Z–A</SelectItem>
-                <SelectItem value="updatedDesc">Actualizados recientemente</SelectItem>
-                <SelectItem value="discoveredDesc">Descubiertos recientemente</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        )}
+        }
         {/* El encabezado ocupa una fila entera del lienzo y el grupo siguiente
             arranca en la columna cero, así que la rejilla admite los mismos
             cortes que las listas sin romper ninguna fila. */}
-        {!familyMode && props.onGroupingChange && (
+        {props.onGroupingChange && (
           <Select
             value={props.grouping ?? "none"}
             onValueChange={(value) => props.onGroupingChange?.(value as LibraryGrouping)}
@@ -256,7 +197,7 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             </SelectContent>
           </Select>
         )}
-        {!familyMode && props.onSaveView && (
+        {props.onSaveView && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
