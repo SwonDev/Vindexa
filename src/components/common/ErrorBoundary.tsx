@@ -1,5 +1,6 @@
 import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Eyebrow } from "@/components/common/Eyebrow";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -25,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="fatal-state__panel">
           <IconAlertTriangle aria-hidden="true" size={30} />
           <div>
-            <p className="eyebrow">Recuperación segura</p>
+            <Eyebrow>Recuperación segura</Eyebrow>
             <h1>La interfaz no pudo continuar</h1>
             <p>
               Tus datos siguen en la base local. Reinicia solo la interfaz para volver a intentarlo.

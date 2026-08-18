@@ -16,8 +16,11 @@ describe("invalidación de datos derivados de Steam", () => {
       ["game"],
       ["metadata-enrichment"],
       ["discovery"],
+      ["upcoming-releases"],
+      ["notification-rules"],
       ["planner-overview"],
       ["planner-add"],
+      ["sync-runs"],
     ]);
   });
 });

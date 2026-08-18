@@ -20,6 +20,14 @@ vi.mock("@/lib/tauri", () => ({
     launchGame: vi.fn(),
     openStore: vi.fn(),
     cacheGameArt: vi.fn(),
+    upcomingReleases: vi.fn(),
+    dismissUpcomingRelease: vi.fn(),
+    scoreUpcomingReleases: vi.fn(),
+    recordTasteFeedback: vi.fn(),
+    learnTaste: vi.fn(),
+    listNotificationRules: vi.fn(),
+    saveNotificationRule: vi.fn(),
+    deleteNotificationRule: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "No se pudo completar la operación.",
@@ -164,6 +172,8 @@ describe("seguimiento y descubrimiento", () => {
       note: "Retomar Olvidado",
     });
     mockedApi.dismissRecommendation.mockResolvedValue(undefined);
+    mockedApi.upcomingReleases.mockResolvedValue([]);
+    mockedApi.listNotificationRules.mockResolvedValue([]);
   });
 
   it("expone publicaciones y relaciones con su procedencia verificable", async () => {

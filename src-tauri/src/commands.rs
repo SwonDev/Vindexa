@@ -1,10 +1,24 @@
+use crate::agent::{
+    self, AgentAuditEntry, AgentClientSummary, AgentOutcome, AgentRequest, IssuedAgentClient,
+    NewAgentClient, Requester,
+};
 use crate::art_cache::{self, ArtVariant, CachedArt};
 use crate::db::recovery::StartupRecovery;
 use crate::db::{
-    CachedNewsInput, Database, DiscoverySnapshot, FamilyCatalogGame, FamilyCatalogRequest,
+    ArchiveReport, CachedNewsInput, Database, DiscoverySnapshot, DlcFilter, DlcRefreshReport,
+    DlcSummary, GamePrice, PagedArchivedGames, PriceHistory, PriceRefreshReport,
+    WishlistPriceStatus,
+    FamilyCatalogGame, FamilyCatalogRequest, GameDlc, ImportedDlc,
     GameReminder, LibraryDropInput, LibraryDropReceipt, LibraryDropResult, NewsRefreshReport,
     PagedFamilyCatalogGames, SavePersonalDatesInput, SaveReminderInput, SaveSessionInput,
-    SaveTagInput, SteamProfileWrite, TagDefinition,
+    AddCuratedGameInput, CuratedList, CuratedListDetail, DrmStateCounts, GameVideo, GameVideoRef,
+    NotificationInbox, NotificationInboxFilter, NotificationRefreshReport, NotificationRule,
+    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, RichGameMetadata,
+    SaveCuratedListInput, SaveGameVideoInput, SaveNotificationRuleInput, SaveTagInput,
+    ImportedWishlistGame, SaveViewInput, SavedView,
+    SaveWishlistEntryInput, SteamProfileWrite, SteamWishlistImportResult, TagDefinition,
+    TasteReport,
+    UpcomingRelease, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -13,10 +27,19 @@ use crate::models::{
     LocalSteamImportResult, MetadataEnrichmentStatus, MovePlannerItemInput, PagedGameSessions,
     PagedGames, PlannerColumn, PlannerOverview, PlannerSettings, Recommendation,
     RecommendationRequest, SaveCollectionInput, SavePlannerItemInput, SmartRule, StatusDefinition,
-    SteamConfiguration, SteamSyncResult, UpdateCheckResult, UpdateGameInput,
+    SteamConfiguration, SteamSyncResult, SyncRun, UpdateCheckResult, UpdateGameInput,
 };
 use crate::steam::{self, GameAction};
 use crate::store_window;
+use crate::stores::{
+    self, ExternalStore, StoreDetection,
+    db::{
+        ExternalGame, ExternalGameRequest, ExternalStoreAccount, ExternalStoreScanReport,
+        PagedExternalGames,
+    },
+    launch::ExternalGameAction,
+    online::{ExternalStoreSession, SignOutReport as StoreSignOutReport, StoreLoginPrompt},
+};
 use chrono::Utc;
 use std::future::Future;
 use std::path::PathBuf;
@@ -30,6 +53,11 @@ use tokio::time::{Duration, sleep};
 
 static NEWS_REFRESH_LOCK: Mutex<()> = Mutex::const_new(());
 const NEWS_REFRESH_BATCH: usize = 4;
+static PRICE_REFRESH_LOCK: Mutex<()> = Mutex::const_new(());
+/// Mismo ritmo que el enriquecimiento de fichas. `appdetails` no documenta
+/// su límite de peticiones, así que se reutiliza el intervalo que Vindexa ya
+/// considera prudente en lugar de inventar uno nuevo.
+const PRICE_REQUEST_INTERVAL: Duration = Duration::from_millis(750);
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -425,11 +453,12 @@ pub async fn refresh_game_metadata(
         return blocking(move || database.game_detail(app_id)).await;
     }
 
-    match state.metadata_enrichment.fetch(app_id).await {
-        Ok(steam::store_api::StoreMetadataOutcome::Found(metadata)) => {
-            blocking(move || database.save_store_metadata(app_id, &metadata)).await
+    match state.metadata_enrichment.fetch_bundle(app_id).await {
+        Ok(steam::store_api::StoreBundleOutcome::Found(bundle)) => {
+            blocking(move || database.save_store_bundle(app_id, &bundle.metadata, &bundle.rich))
+                .await
         }
-        Ok(steam::store_api::StoreMetadataOutcome::Unavailable) => {
+        Ok(steam::store_api::StoreBundleOutcome::Unavailable) => {
             blocking(move || database.mark_store_metadata_attempt(app_id, "unavailable")).await
         }
         Err(_) => blocking(move || database.mark_store_metadata_attempt(app_id, "failed")).await,
@@ -585,18 +614,6 @@ pub async fn reorder_collections(state: State<'_, AppState>, ids: Vec<String>) -
 }
 
 #[tauri::command]
-pub async fn set_collection_games(
-    state: State<'_, AppState>,
-    collection_id: String,
-    app_ids: Vec<u32>,
-) -> AppResult<()> {
-    database_read(&state, move |database| {
-        database.set_collection_games(&collection_id, &app_ids)
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn set_game_collections(
     state: State<'_, AppState>,
     app_id: u32,
@@ -726,10 +743,62 @@ pub async fn reorder_planner_columns(
 }
 
 #[tauri::command]
+pub async fn list_sync_runs(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> AppResult<Vec<SyncRun>> {
+    database_read(&state, move |database| {
+        database.list_sync_runs(limit.unwrap_or(8).min(50))
+    })
+    .await
+}
+
+/// Contrasta el arte de la biblioteca con el índice oficial de recursos de la
+/// tienda de Steam y corrige las columnas que estén mal.
+///
+/// Existe como acción explícita además del refresco automático porque la
+/// sincronización vuelve a sembrar `cover_url` y `header_url` con la URL
+/// derivada por convención, que no existe para buena parte del catálogo
+/// moderno: quien vea una carátula rota puede forzar la corrección sin esperar.
+#[tauri::command]
+pub async fn refresh_steam_art(
+    state: State<'_, AppState>,
+) -> AppResult<steam::store_assets::ArtIndexReport> {
+    steam::store_assets::refresh_library_art(&state.database).await
+}
+
+/// Lanza en segundo plano la corrección del arte contra el índice de la tienda.
+///
+/// No se espera al resultado: la importación ya ha terminado y el arte es
+/// accesorio. Un fallo de red deja la biblioteca con lo que tenía.
+fn schedule_steam_art_refresh(database: &Database) {
+    let database = database.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = steam::store_assets::refresh_library_art(&database).await {
+            eprintln!(
+                "Vindexa no pudo contrastar el arte con la tienda de Steam: {}",
+                error.code
+            );
+        }
+    });
+}
+
+#[tauri::command]
 pub async fn import_local_steam(state: State<'_, AppState>) -> AppResult<LocalSteamImportResult> {
-    database_write(&state, move |database| {
+    let started_at = Utc::now().to_rfc3339();
+    let result = database_write(&state, move |database| {
         let scan = steam::scan_local_library()?;
         let (imported_games, updated_games) = database.upsert_imported_games(&scan.games, true)?;
+        // El historial nunca puede tumbar la importación: se registra a fuego lento.
+        let _ = database.record_sync_run(
+            "local",
+            "success",
+            &started_at,
+            &Utc::now().to_rfc3339(),
+            imported_games,
+            updated_games,
+            None,
+        );
         Ok(LocalSteamImportResult {
             steam_path: scan.steam_path,
             libraries_scanned: scan.libraries_scanned,
@@ -737,7 +806,11 @@ pub async fn import_local_steam(state: State<'_, AppState>) -> AppResult<LocalSt
             updated_games,
         })
     })
-    .await
+    .await;
+    if result.is_ok() {
+        schedule_steam_art_refresh(&state.database);
+    }
+    result
 }
 
 #[tauri::command]
@@ -783,6 +856,7 @@ pub async fn verify_saved_steam_api_key(state: State<'_, AppState>) -> AppResult
 #[tauri::command]
 pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSyncResult> {
     let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    let started_at = Utc::now().to_rfc3339();
     let (account, generation) = database_read(&state, move |database| {
         let generation = database.generation();
         let account = database.get_steam_account()?.ok_or_else(|| {
@@ -808,6 +882,20 @@ pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSy
                 error.clone(),
             )
             .await;
+            let message = error.message.clone();
+            let started = started_at.clone();
+            let _ = database_read(&state, move |database| {
+                database.record_sync_run(
+                    "steam",
+                    "error",
+                    &started,
+                    &Utc::now().to_rfc3339(),
+                    0,
+                    0,
+                    Some(&message),
+                )
+            })
+            .await;
             return Err(error);
         }
     };
@@ -827,6 +915,15 @@ pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSy
             &snapshot.family_catalog,
             snapshot.family_catalog_complete,
         )?;
+        let _ = database.record_sync_run(
+            "steam",
+            "success",
+            &started_at,
+            &Utc::now().to_rfc3339(),
+            imported_games,
+            updated_games,
+            None,
+        );
         Ok(SteamSyncResult {
             steam_id: snapshot.steam_id,
             imported_games,
@@ -842,6 +939,12 @@ pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSy
     .await;
     if let Err(error) = &result {
         persist_steam_sync_failure_if_current(&state, generation, steam_id, error.clone()).await;
+    } else {
+        // `persist_steam_sync` vuelve a escribir `cover_url` y `header_url` con
+        // la URL derivada por convención, que devuelve 404 para buena parte del
+        // catálogo moderno. El índice de la tienda tiene el nombre real de cada
+        // archivo: se contrasta en segundo plano para no retrasar el resultado.
+        schedule_steam_art_refresh(&state.database);
     }
     result
 }
@@ -855,6 +958,824 @@ pub async fn list_family_catalog(
         database.list_family_catalog(&request)
     })
     .await
+}
+
+/// Presupuesto de fichas individuales que una actualización explícita pide de
+/// una sentada. Lo que no entre queda en la cola con estado `pending`.
+const DLC_DETAIL_BUDGET: usize = 40;
+
+// ---------------------------------------------------------------------------
+// Avisos y bandeja de eventos
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn list_notification_rules(
+    state: State<'_, AppState>,
+    app_id: Option<u32>,
+) -> AppResult<Vec<NotificationRule>> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.list_notification_rules(app_id, now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_notification_rule(
+    state: State<'_, AppState>,
+    input: SaveNotificationRuleInput,
+) -> AppResult<NotificationRule> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.save_notification_rule(&input, now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_notification_rule(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.delete_notification_rule(&id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_notification_inbox(
+    state: State<'_, AppState>,
+    filter: Option<NotificationInboxFilter>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> AppResult<NotificationInbox> {
+    let filter = filter.unwrap_or_default();
+    database_read(&state, move |database| {
+        database.notification_inbox(&filter, limit.unwrap_or(0), offset.unwrap_or(0))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn mark_notification_read(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.mark_notification_read(&id, now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn mark_all_notifications_read(state: State<'_, AppState>) -> AppResult<u32> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.mark_all_notifications_read(now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dismiss_notification(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    let now = Utc::now();
+    database_read(&state, move |database| database.dismiss_notification(&id, now)).await
+}
+
+#[tauri::command]
+pub async fn refresh_notification_events(
+    state: State<'_, AppState>,
+) -> AppResult<NotificationRefreshReport> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.refresh_notification_events(now)
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// Prioridad dinámica y modelo de gustos
+// ---------------------------------------------------------------------------
+
+/// Recalcular reescribe `priority_signals` entera, así que toma exclusión de
+/// mantenimiento; el resto son operaciones fila a fila y no la necesitan.
+#[tauri::command]
+pub async fn recompute_priorities(
+    state: State<'_, AppState>,
+) -> AppResult<PriorityRecomputeReport> {
+    database_write(&state, move |database| database.recompute_priorities()).await
+}
+
+#[tauri::command]
+pub async fn explain_priority(
+    state: State<'_, AppState>,
+    app_id: u32,
+) -> AppResult<PriorityExplanation> {
+    database_read(&state, move |database| database.explain_priority(app_id)).await
+}
+
+#[tauri::command]
+pub async fn set_priority_lock(
+    state: State<'_, AppState>,
+    app_id: u32,
+    locked: bool,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.set_priority_lock(app_id, locked)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_priority_ranking(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> AppResult<Vec<PriorityRanking>> {
+    database_read(&state, move |database| {
+        database.list_priority_ranking(limit.unwrap_or(60))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn learn_taste(state: State<'_, AppState>) -> AppResult<TasteReport> {
+    database_write(&state, move |database| database.learn_taste()).await
+}
+
+#[tauri::command]
+pub async fn record_taste_feedback(
+    state: State<'_, AppState>,
+    app_id: u32,
+    verdict: String,
+    surface: String,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.record_taste_feedback(app_id, &verdict, &surface)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn score_upcoming_releases(state: State<'_, AppState>) -> AppResult<usize> {
+    database_write(&state, move |database| database.score_upcoming_releases()).await
+}
+
+#[tauri::command]
+pub async fn list_upcoming_releases(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> AppResult<Vec<UpcomingRelease>> {
+    database_read(&state, move |database| {
+        database.list_upcoming_releases(limit.unwrap_or(40))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dismiss_upcoming_release(state: State<'_, AppState>, app_id: u32) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.dismiss_upcoming_release(app_id)
+    })
+    .await
+}
+
+// --- Precio observado ---------------------------------------------------------
+
+#[tauri::command]
+pub async fn list_wishlist_prices(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<WishlistPriceStatus>> {
+    let now = Utc::now();
+    database_read(&state, move |database| {
+        database.wishlist_price_statuses(now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_game_prices(state: State<'_, AppState>, app_id: u32) -> AppResult<Vec<GamePrice>> {
+    let now = Utc::now();
+    database_read(&state, move |database| database.game_prices(app_id, now)).await
+}
+
+#[tauri::command]
+pub async fn get_game_price_history(
+    state: State<'_, AppState>,
+    app_id: u32,
+    currency: String,
+    limit: Option<u32>,
+) -> AppResult<PriceHistory> {
+    database_read(&state, move |database| {
+        database.game_price_history(app_id, &currency, limit.unwrap_or(0))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn forget_game_prices(state: State<'_, AppState>, app_id: u32) -> AppResult<()> {
+    database_read(&state, move |database| database.forget_game_prices(app_id)).await
+}
+
+/// Vuelve a preguntar el precio de los deseados cuya observación ha caducado.
+///
+/// Es la única puerta que habla con la tienda. El ritmo y el respeto al
+/// `Retry-After` viven aquí; `db::pricing` sólo persiste lo que se le entrega,
+/// que es lo que permite probar el modelo entero sin red.
+#[tauri::command]
+pub async fn refresh_wishlist_prices(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> AppResult<PriceRefreshReport> {
+    let _guard = PRICE_REFRESH_LOCK.lock().await;
+    let requested = limit.unwrap_or(0);
+    let now = Utc::now();
+    let candidates = database_read(&state, move |database| {
+        database.stale_wishlist_price_targets(now, requested)
+    })
+    .await?;
+
+    let mut report = PriceRefreshReport::default();
+    for (index, app_id) in candidates.into_iter().enumerate() {
+        if index > 0 {
+            sleep(PRICE_REQUEST_INTERVAL).await;
+        }
+        match steam::store_api::fetch_bundle_with_retry_hint(app_id).await {
+            Ok(steam::store_api::StoreBundleOutcome::Found(bundle)) => match bundle.price {
+                Some(observation) => {
+                    let observed_at = Utc::now();
+                    let recorded = database_read(&state, move |database| {
+                        database.record_price_observation(&observation, observed_at)
+                    })
+                    .await?;
+                    report.observed = report.observed.saturating_add(1);
+                    if recorded.changed {
+                        report.changed = report.changed.saturating_add(1);
+                    }
+                    if recorded.alert.is_some_and(|alert| alert.created) {
+                        report.alerts = report.alerts.saturating_add(1);
+                    }
+                }
+                // Ficha sin bloque de precio: gratuito, sin publicar o
+                // retirado. No se sabe el precio, y así se cuenta.
+                None => report.without_price = report.without_price.saturating_add(1),
+            },
+            Ok(steam::store_api::StoreBundleOutcome::Unavailable) => {
+                report.without_price = report.without_price.saturating_add(1);
+            }
+            Err(failure) => {
+                report.failed = report.failed.saturating_add(1);
+                // Steam ha pedido esperar: se espera. Insistir sólo empeora el
+                // límite para el resto del lote.
+                if let Some(delay) = failure.retry_after {
+                    sleep(delay).await;
+                }
+            }
+        }
+    }
+    Ok(report)
+}
+
+// --- Archivado de biblioteca --------------------------------------------------
+
+#[tauri::command]
+pub async fn archive_games(
+    state: State<'_, AppState>,
+    app_ids: Vec<u32>,
+    reason: Option<String>,
+) -> AppResult<ArchiveReport> {
+    let now = Utc::now();
+    let reason = reason.unwrap_or_default();
+    database_read(&state, move |database| {
+        database.archive_games(&app_ids, &reason, now)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn unarchive_games(
+    state: State<'_, AppState>,
+    app_ids: Vec<u32>,
+) -> AppResult<ArchiveReport> {
+    database_read(&state, move |database| database.unarchive_games(&app_ids)).await
+}
+
+#[tauri::command]
+pub async fn list_archived_games(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> AppResult<PagedArchivedGames> {
+    database_read(&state, move |database| {
+        database.archived_games(limit.unwrap_or(0), offset.unwrap_or(0))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn count_archived_games(state: State<'_, AppState>) -> AppResult<i64> {
+    database_read(&state, move |database| database.archived_game_count()).await
+}
+
+#[tauri::command]
+pub async fn is_game_archived(state: State<'_, AppState>, app_id: u32) -> AppResult<bool> {
+    database_read(&state, move |database| database.is_game_archived(app_id)).await
+}
+
+/// Importa la lista de deseados de Steam a la de Vindexa.
+///
+/// Comparte el cerrojo de sincronización con la biblioteca porque comparte el
+/// límite de peticiones de Steam. No necesita la clave Web API: el endpoint de
+/// deseados sólo pide el SteamID64.
+#[tauri::command]
+pub async fn import_steam_wishlist(
+    state: State<'_, AppState>,
+) -> AppResult<SteamWishlistImportResult> {
+    let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    let account = database_read(&state, move |database| {
+        database.get_steam_account()?.ok_or_else(|| {
+            AppError::new(
+                "steam_not_linked",
+                "Vincula tu cuenta de Steam antes de importar la lista de deseados.",
+            )
+        })
+    })
+    .await?;
+
+    // La red queda fuera del cerrojo de mantenimiento, igual que en la
+    // sincronización de biblioteca.
+    let snapshot =
+        await_steam_network(steam::wishlist::fetch(&account.steam_id, account.visibility)).await?;
+    let titles_unresolved = snapshot.titles_unresolved;
+    let visibility_unknown = snapshot.visibility_unknown;
+    let games = snapshot
+        .items
+        .into_iter()
+        .map(|item| ImportedWishlistGame {
+            app_id: item.app_id,
+            title: item.title,
+            added_at: item.added_at,
+        })
+        .collect::<Vec<_>>();
+
+    let report = database_write(&state, move |database| {
+        database.import_steam_wishlist(&games)
+    })
+    .await?;
+
+    Ok(SteamWishlistImportResult {
+        report,
+        titles_unresolved,
+        visibility_unknown,
+    })
+}
+
+/// Importa la lista de deseados leyéndola de la sesión abierta en el navegador.
+///
+/// Es la salida cuando el perfil de Steam no es público: `import_steam_wishlist`
+/// pregunta desde fuera y Steam calla. Aquí no se pregunta desde fuera, se abre
+/// la lista dentro del navegador integrado —donde Steam ya se la ha renderizado
+/// a quien ha iniciado sesión— y se lee lo que hay en esa página.
+///
+/// El cerrojo de sincronización se toma **después** de leer la página. Lo que
+/// protege es el límite de peticiones a Steam, y la única red de este comando
+/// —resolver los nombres— llega al final; tomarlo antes dejaría la biblioteca
+/// bloqueada durante todo el rato que alguien tarde en iniciar sesión.
+#[tauri::command]
+pub async fn import_steam_wishlist_from_browser(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<steam::wishlist_session::BrowserWishlistImportResult> {
+    let linked = database_read(&state, move |database| database.get_steam_account()).await?;
+    let mut snapshot = steam::wishlist_session::read_wishlist(&app).await?;
+    steam::wishlist_session::ensure_same_account(
+        linked.as_ref().map(|account| account.steam_id.as_str()),
+        &snapshot.steam_id,
+    )?;
+
+    let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    await_steam_network(steam::wishlist::resolve_store_titles(&mut snapshot.items)).await?;
+
+    let titles_unresolved = snapshot
+        .items
+        .iter()
+        .filter(|item| item.title.is_none())
+        .count();
+    let steam_id = snapshot.steam_id.clone();
+    let hidden_by_filters = snapshot.hidden_by_filters;
+    let games = steam::wishlist_session::to_imported_games(&snapshot.items);
+
+    let report =
+        database_write(&state, move |database| database.import_steam_wishlist(&games)).await?;
+
+    Ok(steam::wishlist_session::BrowserWishlistImportResult {
+        report,
+        steam_id,
+        titles_unresolved,
+        hidden_by_filters,
+    })
+}
+
+// --- Vistas guardadas de biblioteca ------------------------------------------
+
+#[tauri::command]
+pub async fn list_saved_views(state: State<'_, AppState>) -> AppResult<Vec<SavedView>> {
+    database_read(&state, move |database| database.list_saved_views()).await
+}
+
+#[tauri::command]
+pub async fn save_saved_view(
+    state: State<'_, AppState>,
+    input: SaveViewInput,
+) -> AppResult<SavedView> {
+    database_read(&state, move |database| database.save_saved_view(&input)).await
+}
+
+#[tauri::command]
+pub async fn delete_saved_view(state: State<'_, AppState>, view_id: String) -> AppResult<()> {
+    database_read(&state, move |database| database.delete_saved_view(&view_id)).await
+}
+
+#[tauri::command]
+pub async fn reorder_saved_views(
+    state: State<'_, AppState>,
+    ordered_ids: Vec<String>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.reorder_saved_views(&ordered_ids)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn mark_saved_view_used(
+    state: State<'_, AppState>,
+    view_id: String,
+) -> AppResult<SavedView> {
+    database_read(&state, move |database| {
+        database.mark_saved_view_used(&view_id)
+    })
+    .await
+}
+
+// --- Listas curadas ---------------------------------------------------------
+
+#[tauri::command]
+pub async fn list_curated_lists(state: State<'_, AppState>) -> AppResult<Vec<CuratedList>> {
+    database_read(&state, move |database| database.list_curated_lists()).await
+}
+
+#[tauri::command]
+pub async fn save_curated_list(
+    state: State<'_, AppState>,
+    input: SaveCuratedListInput,
+) -> AppResult<CuratedList> {
+    database_read(&state, move |database| database.save_curated_list(&input)).await
+}
+
+#[tauri::command]
+pub async fn delete_curated_list(state: State<'_, AppState>, list_id: String) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.delete_curated_list(&list_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reorder_curated_lists(
+    state: State<'_, AppState>,
+    ordered_ids: Vec<String>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.reorder_curated_lists(&ordered_ids)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_curated_list_detail(
+    state: State<'_, AppState>,
+    list_id: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> AppResult<CuratedListDetail> {
+    database_read(&state, move |database| {
+        database.curated_list_detail(&list_id, limit, offset)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn add_curated_game(
+    state: State<'_, AppState>,
+    input: AddCuratedGameInput,
+) -> AppResult<()> {
+    database_read(&state, move |database| database.add_curated_game(&input)).await
+}
+
+#[tauri::command]
+pub async fn update_curated_item(
+    state: State<'_, AppState>,
+    input: UpdateCuratedItemInput,
+) -> AppResult<()> {
+    database_read(&state, move |database| database.update_curated_item(&input)).await
+}
+
+#[tauri::command]
+pub async fn remove_curated_game(
+    state: State<'_, AppState>,
+    list_id: String,
+    app_id: u32,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.remove_curated_game(&list_id, app_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn move_curated_item(
+    state: State<'_, AppState>,
+    list_id: String,
+    app_id: u32,
+    before_app_id: Option<u32>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.move_curated_item(&list_id, app_id, before_app_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reorder_curated_items(
+    state: State<'_, AppState>,
+    list_id: String,
+    ordered_app_ids: Vec<u32>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.reorder_curated_items(&list_id, &ordered_app_ids)
+    })
+    .await
+}
+
+// --- Deseados y vídeos ------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_wishlist_overview(state: State<'_, AppState>) -> AppResult<WishlistOverview> {
+    database_read(&state, move |database| database.wishlist_overview()).await
+}
+
+#[tauri::command]
+pub async fn save_wishlist_entry(
+    state: State<'_, AppState>,
+    input: SaveWishlistEntryInput,
+) -> AppResult<WishlistEntry> {
+    database_read(&state, move |database| database.save_wishlist_entry(&input)).await
+}
+
+#[tauri::command]
+pub async fn remove_wishlist_entry(state: State<'_, AppState>, app_id: u32) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.remove_wishlist_entry(app_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn move_wishlist_entry(
+    state: State<'_, AppState>,
+    app_id: u32,
+    bucket: String,
+    before_app_id: Option<u32>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.move_wishlist_entry(app_id, &bucket, before_app_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reorder_wishlist_bucket(
+    state: State<'_, AppState>,
+    bucket: String,
+    ordered_app_ids: Vec<u32>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.reorder_wishlist_bucket(&bucket, &ordered_app_ids)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_game_videos(
+    state: State<'_, AppState>,
+    app_id: u32,
+    kind: Option<String>,
+) -> AppResult<Vec<GameVideo>> {
+    database_read(&state, move |database| {
+        database.list_game_videos(app_id, kind.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_game_video(
+    state: State<'_, AppState>,
+    input: SaveGameVideoInput,
+) -> AppResult<GameVideo> {
+    database_read(&state, move |database| database.save_game_video(&input)).await
+}
+
+#[tauri::command]
+pub async fn delete_game_video(
+    state: State<'_, AppState>,
+    app_id: u32,
+    provider: String,
+    video_id: String,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.delete_game_video(app_id, &provider, &video_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reorder_game_videos(
+    state: State<'_, AppState>,
+    app_id: u32,
+    kind: String,
+    ordered: Vec<GameVideoRef>,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.reorder_game_videos(app_id, &kind, &ordered)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn maintain_art_cache(state: State<'_, AppState>) -> AppResult<art_cache::MaintenanceReport> {
+    let cache_dir = state.cache_dir.clone();
+    database_read(&state, move |database| {
+        art_cache::maintain(&database, &cache_dir, &[])
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_rich_game_metadata(
+    state: State<'_, AppState>,
+    app_id: u32,
+) -> AppResult<RichGameMetadata> {
+    database_read(&state, move |database| database.rich_game_metadata(app_id)).await
+}
+
+#[tauri::command]
+pub async fn get_drm_state_counts(state: State<'_, AppState>) -> AppResult<DrmStateCounts> {
+    database_read(&state, move |database| database.drm_state_counts()).await
+}
+
+#[tauri::command]
+pub async fn list_game_dlc(
+    state: State<'_, AppState>,
+    app_id: u32,
+    filter: Option<String>,
+) -> AppResult<Vec<GameDlc>> {
+    let filter = DlcFilter::parse(filter.as_deref())?;
+    database_read(&state, move |database| database.list_game_dlc(app_id, filter)).await
+}
+
+#[tauri::command]
+pub async fn get_dlc_summary(state: State<'_, AppState>, app_id: u32) -> AppResult<DlcSummary> {
+    database_read(&state, move |database| database.game_dlc_summary(app_id)).await
+}
+
+#[tauri::command]
+pub async fn set_dlc_owned(
+    state: State<'_, AppState>,
+    app_id: u32,
+    dlc_app_id: u32,
+    owned: bool,
+) -> AppResult<GameDlc> {
+    database_read(&state, move |database| {
+        database.set_game_dlc_owned(app_id, dlc_app_id, owned)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_dlc_hidden(
+    state: State<'_, AppState>,
+    app_id: u32,
+    dlc_app_id: u32,
+    hidden: bool,
+) -> AppResult<GameDlc> {
+    database_read(&state, move |database| {
+        database.set_game_dlc_hidden(app_id, dlc_app_id, hidden)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_dlc_installed(
+    state: State<'_, AppState>,
+    app_id: u32,
+    dlc_app_id: u32,
+    installed: bool,
+) -> AppResult<GameDlc> {
+    database_read(&state, move |database| {
+        database.set_game_dlc_installed(app_id, dlc_app_id, installed)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn refresh_game_dlc(
+    state: State<'_, AppState>,
+    app_id: u32,
+    detail_budget: Option<usize>,
+) -> AppResult<DlcRefreshReport> {
+    // El guardián se sostiene desde antes de la petición hasta después del
+    // último commit: una restauración nunca puede cruzarse con una respuesta
+    // antigua de la tienda.
+    let _maintenance = state.maintenance.read().await;
+    let database = state.database.clone();
+
+    let evidence = blocking(move || Ok(steam::dlc::scan_installed_dlc(app_id))).await?;
+    let catalog = steam::dlc::fetch_catalog(app_id)
+        .await
+        .map_err(|failure| failure.error)?;
+    let mut items = catalog.items;
+    steam::dlc::apply_local_evidence(&mut items, &evidence);
+
+    let imported = {
+        let database = database.clone();
+        blocking(move || database.save_game_dlc(app_id, &items)).await?
+    };
+
+    let budget = detail_budget
+        .unwrap_or(DLC_DETAIL_BUDGET)
+        .min(DLC_DETAIL_BUDGET);
+    let mut fetched_details = 0_usize;
+    let mut unavailable_details = 0_usize;
+    let mut failed_details = 0_usize;
+    if budget > 0 {
+        let candidates = {
+            let database = database.clone();
+            blocking(move || database.claim_game_dlc_refresh(app_id, budget)).await?
+        };
+        for candidate in candidates {
+            match steam::dlc::fetch_detail(app_id, candidate.dlc_app_id, candidate.position).await {
+                Ok(steam::dlc::DlcDetailOutcome::Found(detail)) => {
+                    let mut detail = vec![*detail];
+                    steam::dlc::apply_local_evidence(&mut detail, &evidence);
+                    let database = database.clone();
+                    blocking(move || database.save_game_dlc(app_id, &detail)).await?;
+                    fetched_details += 1;
+                }
+                Ok(steam::dlc::DlcDetailOutcome::Unavailable) => {
+                    let missing =
+                        vec![ImportedDlc::unavailable(candidate.dlc_app_id, candidate.position)];
+                    let database = database.clone();
+                    blocking(move || database.save_game_dlc(app_id, &missing)).await?;
+                    unavailable_details += 1;
+                }
+                Err(failure) => {
+                    // Un fallo transitorio se deja arrendado: la cola lo reintenta
+                    // sola al vencer. Uno de contrato se marca como fallido.
+                    if steam::dlc::retry_delay_seconds(&failure.error.code, 1, failure.retry_after)
+                        .is_none()
+                    {
+                        let database = database.clone();
+                        let dlc_app_id = candidate.dlc_app_id;
+                        blocking(move || database.mark_game_dlc_failed(app_id, dlc_app_id)).await?;
+                    }
+                    failed_details += 1;
+                }
+            }
+        }
+    }
+
+    let summary = {
+        let database = database.clone();
+        blocking(move || database.game_dlc_summary(app_id)).await?
+    };
+    let pending_details = blocking(move || {
+        Ok(database
+            .list_game_dlc(app_id, DlcFilter::All)?
+            .iter()
+            .filter(|dlc| dlc.metadata_status != "success")
+            .count())
+    })
+    .await?;
+
+    Ok(DlcRefreshReport {
+        app_id,
+        declared: catalog.declared,
+        truncated: catalog.truncated,
+        fetched_details,
+        unavailable_details,
+        failed_details,
+        pending_details,
+        ownership_evidence_gap: evidence.gap_code().map(str::to_owned),
+        ownership_evidence_explanation: evidence.gap_explanation().map(str::to_owned),
+        imported,
+        summary,
+    })
 }
 
 #[tauri::command]
@@ -1179,7 +2100,10 @@ pub async fn cache_game_art(
     variant: String,
     source_url: Option<String>,
 ) -> AppResult<CachedArt> {
-    let _maintenance = state.maintenance.read().await;
+    // Sin maintenance: sólo lee games/family y escribe en image_cache, ambas
+    // operaciones pequeñas y serializadas por SQLite (WAL + busy_timeout).
+    // Bloquearla durante una sincronización dejaba todas las carátulas en
+    // espera hasta que el sync terminaba.
     let variant = ArtVariant::parse(&variant)?;
     art_cache::cache(
         &state.database,
@@ -1220,6 +2144,396 @@ pub fn check_for_updates(app: AppHandle) -> UpdateCheckResult {
         available_version: None,
         message: "Este build no tiene todavía un endpoint de versiones ni una clave pública de firma configurados. Vindexa no descargará ni instalará nada automáticamente.".into(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Puente para agentes externos
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn agent_dispatch(
+    state: State<'_, AppState>,
+    request: AgentRequest,
+) -> AppResult<AgentOutcome> {
+    database_read(&state, move |database| {
+        agent::bridge::dispatch(&mut database.open()?, agent::ratelimit::shared(), &request)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_confirm(
+    state: State<'_, AppState>,
+    audit_id: String,
+    approve: bool,
+) -> AppResult<AgentOutcome> {
+    database_read(&state, move |database| {
+        agent::bridge::confirm(&mut database.open()?, &audit_id, approve)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_undo(state: State<'_, AppState>, undo_token: String) -> AppResult<AgentOutcome> {
+    database_read(&state, move |database| {
+        agent::bridge::undo(&mut database.open()?, &undo_token, &Requester::Human)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_undo_as_client(
+    state: State<'_, AppState>,
+    token: String,
+    undo_token: String,
+) -> AppResult<AgentOutcome> {
+    database_read(&state, move |database| {
+        agent::bridge::undo_as_client(
+            &mut database.open()?,
+            agent::ratelimit::shared(),
+            &token,
+            &undo_token,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn issue_agent_client(
+    state: State<'_, AppState>,
+    input: NewAgentClient,
+) -> AppResult<IssuedAgentClient> {
+    database_read(&state, move |database| {
+        agent::clients::issue(&mut database.open()?, &input, agent::TokenPolicy::default())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn rotate_agent_token(
+    state: State<'_, AppState>,
+    client_id: String,
+) -> AppResult<IssuedAgentClient> {
+    database_read(&state, move |database| {
+        agent::clients::rotate(&mut database.open()?, &client_id, agent::TokenPolicy::default())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_agent_client_scopes(
+    state: State<'_, AppState>,
+    client_id: String,
+    scopes: Vec<String>,
+) -> AppResult<AgentClientSummary> {
+    database_read(&state, move |database| {
+        agent::clients::set_scopes(&mut database.open()?, &client_id, &scopes)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_agent_client_enabled(
+    state: State<'_, AppState>,
+    client_id: String,
+    enabled: bool,
+) -> AppResult<AgentClientSummary> {
+    database_read(&state, move |database| {
+        agent::clients::set_enabled(&mut database.open()?, &client_id, enabled)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn revoke_agent_client(state: State<'_, AppState>, client_id: String) -> AppResult<()> {
+    database_read(&state, move |database| {
+        agent::clients::revoke(&mut database.open()?, &client_id)?;
+        agent::ratelimit::shared().forget(&client_id);
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_agent_clients(state: State<'_, AppState>) -> AppResult<Vec<AgentClientSummary>> {
+    database_read(&state, move |database| agent::clients::list(&database.open()?)).await
+}
+
+#[tauri::command]
+pub async fn list_agent_audit(
+    state: State<'_, AppState>,
+    limit: u32,
+) -> AppResult<Vec<AgentAuditEntry>> {
+    database_read(&state, move |database| agent::audit::list(&database.open()?, limit)).await
+}
+
+// --- Tiendas externas (Epic Games Store y GOG) ------------------------------
+
+#[tauri::command]
+pub async fn detect_external_stores() -> AppResult<Vec<StoreDetection>> {
+    // Sólo mira el disco local: no necesita la base ni el cerrojo de
+    // mantenimiento, pero sí salir del hilo de la interfaz.
+    blocking(|| Ok(stores::detect_all())).await
+}
+
+#[tauri::command]
+pub async fn list_external_store_accounts(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<ExternalStoreAccount>> {
+    database_read(&state, move |database| {
+        stores::db::list_accounts(&database.open()?)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn scan_external_store(
+    state: State<'_, AppState>,
+    store: String,
+) -> AppResult<ExternalStoreScanReport> {
+    let store = ExternalStore::parse(&store)?;
+    database_read(&state, move |database| {
+        stores::scan_and_persist(&mut database.open()?, store)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn scan_external_stores(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<ExternalStoreScanReport>> {
+    database_read(&state, move |database| {
+        stores::scan_all(&mut database.open()?)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_external_games(
+    state: State<'_, AppState>,
+    request: ExternalGameRequest,
+) -> AppResult<PagedExternalGames> {
+    database_read(&state, move |database| {
+        stores::db::list(&database.open()?, &request)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_external_game_match(
+    state: State<'_, AppState>,
+    store: String,
+    external_id: String,
+    app_id: Option<u32>,
+) -> AppResult<ExternalGame> {
+    let store = ExternalStore::parse(&store)?;
+    database_read(&state, move |database| {
+        stores::db::set_manual_match(&database.open()?, store, &external_id, app_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn clear_external_game_match(
+    state: State<'_, AppState>,
+    store: String,
+    external_id: String,
+) -> AppResult<ExternalGame> {
+    let store = ExternalStore::parse(&store)?;
+    database_read(&state, move |database| {
+        stores::db::clear_manual_match(&database.open()?, store, &external_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn link_external_store(
+    state: State<'_, AppState>,
+    store: String,
+) -> AppResult<ExternalStoreAccount> {
+    let store = ExternalStore::parse(&store)?;
+    database_read(&state, move |database| {
+        stores::db::link(&database.open()?, store)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn unlink_external_store(state: State<'_, AppState>, store: String) -> AppResult<()> {
+    let store = ExternalStore::parse(&store)?;
+    database_read(&state, move |database| {
+        stores::db::unlink(&mut database.open()?, store)
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// itch.io
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn itch_session_state(
+    state: State<'_, AppState>,
+) -> AppResult<stores::itch::ItchSessionState> {
+    database_read(&state, move |database| {
+        stores::itch::session_state(&database.open()?)
+    })
+    .await
+}
+
+/// Comprueba la clave contra itch.io **antes** de guardarla, para que una
+/// equivocada no llegue nunca al llavero y el error salga al pegarla.
+#[tauri::command]
+pub async fn save_itch_api_key(key: String) -> AppResult<stores::itch::ItchAccountProfile> {
+    let profile = stores::itch::verify_key(&key).await?;
+    stores::itch::secrets::save_api_key(&key)?;
+    Ok(profile)
+}
+
+/// La red queda fuera del cerrojo de la base, igual que en la sincronización de
+/// Steam. Un fallo se anota en la cuenta para poder decir qué pasó.
+#[tauri::command]
+pub async fn import_itch_library(
+    state: State<'_, AppState>,
+) -> AppResult<stores::itch::ItchImportReport> {
+    let fetch = match stores::itch::fetch_library().await {
+        Ok(fetch) => fetch,
+        Err(error) => {
+            let anotado = error.clone();
+            database_read(&state, move |database| {
+                stores::itch::record_failure(&mut database.open()?, &anotado)
+            })
+            .await?;
+            return Err(error);
+        }
+    };
+    database_read(&state, move |database| {
+        stores::itch::persist_library(&mut database.open()?, &fetch)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn sign_out_itch(state: State<'_, AppState>) -> AppResult<()> {
+    database_read(&state, move |database| {
+        stores::itch::sign_out(&mut database.open()?)
+    })
+    .await
+}
+
+/// Destructivo y explícito: la interfaz lo ofrece como acción aparte, nunca
+/// como efecto secundario de cerrar sesión.
+#[tauri::command]
+pub async fn forget_itch_library(state: State<'_, AppState>) -> AppResult<usize> {
+    database_read(&state, move |database| {
+        stores::itch::forget(&mut database.open()?)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn rematch_external_stores(state: State<'_, AppState>) -> AppResult<usize> {
+    database_read(&state, move |database| {
+        stores::rematch_all(&mut database.open()?)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn launch_external_game(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    store: String,
+    external_id: String,
+    action: String,
+) -> AppResult<()> {
+    let store = ExternalStore::parse(&store)?;
+    let action = ExternalGameAction::parse(&action)?;
+    let _maintenance = state.maintenance.read().await;
+    stores::open_game_action(&app, &state.database, store, &external_id, action)
+}
+
+// --- Sesión de cuenta de las tiendas externas ------------------------------
+
+/// Estado de la sesión de cada tienda. **No devuelve ningún secreto**: el
+/// testigo vive en el llavero y no cruza a la interfaz (ver `stores::online`).
+#[tauri::command]
+pub async fn list_external_store_sessions() -> AppResult<Vec<ExternalStoreSession>> {
+    // Leer el llavero es una llamada al sistema, no cálculo: fuera del hilo de
+    // la interfaz, como el resto de accesos a almacenamiento.
+    blocking(stores::online::list_sessions).await
+}
+
+/// Abre la página de inicio de sesión de la tienda en el navegador del sistema
+/// y devuelve qué hay que traerse de vuelta.
+///
+/// La abre Rust para que las credenciales se escriban en el navegador de
+/// siempre, con su gestor de contraseñas y su doble factor, y la ventana de
+/// Vindexa no llegue a ver el formulario.
+#[tauri::command]
+pub async fn begin_external_store_login(
+    app: AppHandle,
+    store: String,
+) -> AppResult<StoreLoginPrompt> {
+    let store = ExternalStore::parse(&store)?;
+    stores::online::open_login_page(&app, store)
+}
+
+/// Inicia sesión en la tienda dentro de Vindexa, de principio a fin.
+///
+/// Abre la página de la tienda en el navegador integrado y espera a que la
+/// persona se identifique; el código de autorización lo recoge Vindexa de la
+/// página de retorno. No hay nada que copiar ni ningún JSON que leer.
+///
+/// Tarda lo que tarde alguien en escribir su contraseña y su segundo factor, así
+/// que la interfaz la trata como una espera larga, cancelable cerrando la
+/// ventana.
+#[tauri::command]
+pub async fn sign_in_external_store(
+    app: AppHandle,
+    store: String,
+) -> AppResult<ExternalStoreSession> {
+    let store = ExternalStore::parse(&store)?;
+    stores::online::sign_in(&app, store).await
+}
+
+/// Canjea el código de autorización y guarda la sesión en el llavero.
+///
+/// `code` es material sensible de un solo uso: no se registra, no se devuelve y
+/// no aparece en ningún mensaje de error.
+#[tauri::command]
+pub async fn complete_external_store_login(
+    store: String,
+    code: String,
+) -> AppResult<ExternalStoreSession> {
+    let store = ExternalStore::parse(&store)?;
+    stores::online::complete_login(store, &code).await
+}
+
+/// Cierra la sesión: revoca en la tienda cuando se puede y borra el llavero
+/// siempre, devolviendo qué se ha podido comprobar.
+#[tauri::command]
+pub async fn sign_out_external_store(store: String) -> AppResult<StoreSignOutReport> {
+    let store = ExternalStore::parse(&store)?;
+    stores::online::sign_out(store).await
+}
+
+/// Lee la biblioteca completa de la cuenta y la persiste.
+///
+/// La red va primero y la escritura después, en dos pasos deliberados: la
+/// petición puede tardar y no debe retener el cerrojo de mantenimiento mientras
+/// alguien inicia sesión o mientras se pagina un catálogo grande.
+#[tauri::command]
+pub async fn sync_external_store_library(
+    state: State<'_, AppState>,
+    store: String,
+) -> AppResult<ExternalStoreScanReport> {
+    let store = ExternalStore::parse(&store)?;
+    let scan = stores::online::sync_library(store).await?;
+    database_read(&state, move |database| {
+        stores::db::persist_scan(&mut database.open()?, &scan)
+    })
+    .await
 }
 
 #[cfg(test)]

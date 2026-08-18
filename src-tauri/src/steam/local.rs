@@ -93,12 +93,30 @@ pub fn scan() -> AppResult<LocalLibraryScan> {
     })
 }
 
+/// Carátula vertical del juego, **derivada por convención**.
+///
+/// Es una semilla, no la verdad: el escaneo local es síncrono y no sale a la
+/// red, así que la única URL que puede componer aquí es la canónica. Acierta
+/// para el catálogo antiguo y falla con 404 para buena parte del moderno, que
+/// guarda cada archivo bajo un hash de contenido o con otro nombre. Quien tiene
+/// el nombre real es el índice de la tienda: [`super::store_assets`] reescribe
+/// esta columna en cuanto puede consultarlo, y la convención se queda como red
+/// de seguridad para cuando no hay red.
+///
+/// Se pide la variante `_2x` porque **`library_600x900.jpg` no mide 600×900:
+/// mide 300×450**, comprobado contra la CDN. En una pantalla de densidad doble
+/// una carátula de 208 px lógicos necesita 416 px reales, así que la de 300 se
+/// ampliaba y salía borrosa. Cuando un juego no publica la grande, la escalera
+/// de `art_cache` baja sola al siguiente peldaño.
 pub(crate) fn cover_url(app_id: u32) -> String {
     format!(
-        "https://shared.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900.jpg"
+        "https://shared.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900_2x.jpg"
     )
 }
 
+/// Cabecera apaisada por convención, con la misma reserva que [`cover_url`]:
+/// el nombre real puede llevar hash (`/apps/<id>/<sha1>/header.jpg`) o sufijo
+/// de idioma (`header_spanish.jpg`), y eso sólo lo dice el índice de la tienda.
 pub(crate) fn header_url(app_id: u32) -> String {
     format!("https://shared.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg")
 }
@@ -124,7 +142,7 @@ mod tests {
     fn generated_art_urls_are_https_and_app_scoped() {
         assert_eq!(
             cover_url(570),
-            "https://shared.steamstatic.com/store_item_assets/steam/apps/570/library_600x900.jpg"
+            "https://shared.steamstatic.com/store_item_assets/steam/apps/570/library_600x900_2x.jpg"
         );
         assert_eq!(
             header_url(570),

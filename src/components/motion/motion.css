@@ -1,0 +1,561 @@
+/*
+ * Microinteracciones de Vindexa.
+ *
+ * Todo lo que se anima aquí es `transform` u `opacity`, salvo la altura medida
+ * del desplegable, que es la única excepción justificada. Las curvas y los
+ * colores son los tokens de `src/index.css`: este archivo no introduce ninguno.
+ */
+
+/* --- Cifra animada ------------------------------------------------------- */
+
+.vx-animated-number {
+  position: relative;
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Doble oculto con el valor final: fija el ancho antes de contar. */
+.vx-animated-number__reserve {
+  visibility: hidden;
+}
+
+.vx-animated-number__value {
+  position: absolute;
+  inset: 0;
+  text-align: inherit;
+}
+
+/* --- Aparición al entrar en el viewport ---------------------------------- */
+
+.vx-reveal {
+  opacity: 0;
+  transform: translate3d(0, var(--vx-reveal-distance, 4px), 0);
+  transition:
+    opacity var(--vx-reveal-duration, 200ms) var(--ease-out),
+    transform var(--vx-reveal-duration, 200ms) var(--ease-out);
+  transition-delay: var(--vx-reveal-delay, 0ms);
+}
+
+.vx-reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- Superficie pulsable ------------------------------------------------- */
+
+.vx-pressable {
+  transition: transform 160ms var(--ease-out);
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.vx-pressable[data-motion="on"]:hover:not(:disabled) {
+  transform: translate3d(0, var(--vx-press-lift, -1px), 0) scale(var(--vx-press-hover-scale, 1.01));
+}
+
+.vx-pressable[data-motion="on"]:active:not(:disabled) {
+  transition-duration: 120ms;
+  transform: translate3d(0, 0, 0) scale(var(--vx-press-active-scale, 0.99));
+}
+
+.vx-pressable[data-motion="off"] {
+  transition: none;
+  transform: none;
+}
+
+/* --- Esqueleto de carga -------------------------------------------------- */
+
+.vx-skeleton-group {
+  display: grid;
+  align-content: start;
+}
+
+.vx-skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--v-surface-raised) 68%, var(--card));
+}
+
+.vx-skeleton-group[data-shimmer="true"] .vx-skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--v-cyan) 12%, transparent) 48%,
+    transparent 66%
+  );
+  content: "";
+  transform: translateX(-100%);
+  animation: vx-skeleton-sweep 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes vx-skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* --- Conmutador de segmentos --------------------------------------------- */
+
+.vx-segmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--card);
+}
+
+.vx-segmented__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 160ms var(--ease-out);
+}
+
+.vx-segmented[data-size="sm"] .vx-segmented__option {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.vx-segmented[data-size="md"] .vx-segmented__option {
+  height: 28px;
+}
+
+/* El radio nativo cubre toda la opción: aporta foco, teclado y estado marcado
+   sin imitarlos con ARIA, y queda invisible sobre el indicador. */
+.vx-segmented__input {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  appearance: none;
+  cursor: pointer;
+}
+
+.vx-segmented__input:disabled {
+  cursor: not-allowed;
+}
+
+.vx-segmented__option:has(.vx-segmented__input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.vx-segmented__option:hover:not([data-disabled="true"]) {
+  color: var(--foreground);
+}
+
+.vx-segmented__option[data-disabled="true"] {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.vx-segmented__option[data-selected="true"] {
+  color: var(--foreground);
+}
+
+.vx-segmented__indicator {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--v-surface-selected);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--v-cyan) 34%, transparent);
+}
+
+.vx-segmented__icon,
+.vx-segmented__label {
+  position: relative;
+  z-index: 1;
+}
+
+.vx-segmented__icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* --- Desplegable de altura medida ---------------------------------------- */
+
+.vx-expandable {
+  display: block;
+  min-width: 0;
+}
+
+.vx-expandable__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vx-expandable__trigger {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  transition: color 160ms var(--ease-out);
+}
+
+.vx-expandable__trigger:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+.vx-expandable__trigger:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.vx-expandable__chevron {
+  flex: 0 0 auto;
+  transition: transform 160ms var(--ease-out);
+  transform: rotate(-90deg);
+}
+
+.vx-expandable__chevron[data-open="true"] {
+  transform: rotate(0deg);
+}
+
+.vx-expandable__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vx-expandable__extra {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vx-expandable__panel {
+  overflow: hidden;
+}
+
+.vx-expandable__content {
+  padding-top: 4px;
+}
+
+/* --- Pila de avisos ------------------------------------------------------ */
+
+.vx-toast-stack {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(380px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+.vx-toast-stack[data-position="bottom-right"] {
+  right: 16px;
+  bottom: 48px;
+}
+
+.vx-toast-stack[data-position="bottom-left"] {
+  bottom: 48px;
+  left: 16px;
+}
+
+.vx-toast-stack[data-position="top-right"] {
+  top: 76px;
+  right: 16px;
+}
+
+.vx-toast-stack[data-position="top-left"] {
+  top: 76px;
+  left: 16px;
+}
+
+.vx-toast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--v-status-muted);
+  border-radius: 2px;
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 38%);
+  pointer-events: auto;
+}
+
+.vx-toast[data-kind="success"] {
+  border-left-color: var(--v-success);
+}
+
+.vx-toast[data-kind="warning"] {
+  border-left-color: var(--v-warning);
+}
+
+.vx-toast[data-kind="error"] {
+  border-left-color: var(--destructive);
+}
+
+.vx-toast[data-kind="info"] {
+  border-left-color: var(--v-cyan);
+}
+
+.vx-toast__icon {
+  margin-top: 1px;
+  color: var(--v-status-muted);
+}
+
+.vx-toast[data-kind="success"] .vx-toast__icon {
+  color: var(--v-success);
+}
+
+.vx-toast[data-kind="warning"] .vx-toast__icon {
+  color: var(--v-warning);
+}
+
+.vx-toast[data-kind="error"] .vx-toast__icon {
+  color: var(--v-error);
+}
+
+.vx-toast[data-kind="info"] .vx-toast__icon {
+  color: var(--v-cyan);
+}
+
+.vx-toast__body {
+  min-width: 0;
+}
+
+.vx-toast__message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.vx-toast__detail {
+  margin: 3px 0 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.vx-toast__action {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--v-cyan) 40%, transparent);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-cyan);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vx-toast__action:hover {
+  background: color-mix(in srgb, var(--v-cyan) 14%, transparent);
+}
+
+.vx-toast__close {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-status-muted);
+}
+
+.vx-toast__close:hover {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  color: var(--foreground);
+}
+
+/* --- Zona de destino de arrastre ----------------------------------------- */
+
+.vx-drop-surface {
+  position: relative;
+  transition:
+    background-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+
+.vx-drop-surface[data-drop-state="active"] {
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--v-cyan) 46%, transparent);
+}
+
+.vx-drop-surface[data-drop-state="over"] {
+  background: color-mix(in srgb, var(--v-lime) 16%, var(--v-surface-selected));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--v-lime) 58%, transparent),
+    0 5px 14px rgb(0 0 0 / 24%);
+}
+
+.vx-drop-surface[data-drop-state="over"][data-motion="on"] {
+  transform: scale(1.004);
+}
+
+.vx-drop-surface[data-drop-state="rejected"] {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 5px,
+    color-mix(in srgb, var(--destructive) 10%, transparent) 9px
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 52%, transparent);
+  cursor: not-allowed;
+}
+
+.vx-drop-surface__count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--v-cyan-strong);
+  color: var(--foreground);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.vx-drop-surface__hint {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* --- Cambio de icono ----------------------------------------------------- */
+
+.vx-icon-morph {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.vx-icon-morph__slot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.vx-icon-morph__slot svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Valor copiable ------------------------------------------------------ */
+
+.vx-copyable-wrap {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.vx-copyable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
+}
+
+.vx-copyable:hover {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+
+.vx-copyable[data-status="copied"] {
+  color: var(--v-lime);
+}
+
+.vx-copyable[data-status="error"] {
+  color: var(--v-error);
+}
+
+.vx-copyable__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Supresión total del movimiento -------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .vx-reveal {
+    opacity: 1;
+    transition: none;
+    transform: none;
+  }
+
+  .vx-pressable,
+  .vx-pressable:hover,
+  .vx-pressable:active,
+  .vx-drop-surface,
+  .vx-drop-surface[data-drop-state="over"] {
+    transition: none;
+    transform: none;
+  }
+
+  .vx-expandable__chevron {
+    transition: none;
+  }
+
+  .vx-skeleton-group[data-shimmer="true"] .vx-skeleton::after {
+    animation: none;
+    content: none;
+  }
+}

@@ -53,6 +53,7 @@ Comandos aislados útiles:
 | `pnpm test:rust` | Tests unitarios e integración Rust/SQLite. |
 | `pnpm test:e2e` | Playwright visual/funcional con IPC determinista, Axe y baselines. |
 | `pnpm test:e2e:native` | Smoke Tauri macOS aislado de proceso, ventana y SQLite temporal. |
+| `pnpm test:e2e:update` | Regenera las baselines visuales de `visual-and-motion.spec.ts`; revisa el diff de imágenes antes de aceptarlo. |
 | `pnpm lint` | Reglas y formato Biome sin escribir. |
 | `pnpm format` | Aplica formato/acciones de Biome; revisa el diff después. |
 | `pnpm build` | TypeScript estricto y bundle Vite. |
@@ -83,6 +84,9 @@ Las pruebas de `src/test/` usan Vitest, jsdom, Testing Library y `user-event`.
 | `app-shell.test.tsx`, `shortcuts.test.ts` | Navegación, sincronización, atajos configurables, colisiones y campos editables. |
 | `planner-screen.test.tsx`, `planner-views.test.tsx`, `planner-periods.test.ts` | Kanban, cola, semana/mes, objetivos y capacidad. |
 | `discovery-api.test.ts`, `discovery-screen.test.tsx` | Recordatorios, descartes y estados honestos de capacidades. |
+| `wishlist-screen.test.tsx`, `wishlist-model.test.tsx`, `wishlist-curated.test.tsx`, `wishlist-videos.test.tsx` | Cubos de intención, agregado que nunca suma monedas distintas, listas curadas y vídeos guardados. |
+| `collections-screen.test.tsx`, `collections-design-contract.test.ts` | Mosaicos reales, reglas legibles en la ficha, orden persistido y puerta de diseño sobre la hoja de estilo. |
+| `game-detail-priority.test.tsx`, `game-dlc-panel.test.tsx` | Una sola escala de prioridad con su aritmética comprobable, y contenido adicional que no afirma ausencias. |
 | `ui-primitives.test.tsx` | Nombre accesible, teclado, switch, diálogo, foco, Escape y tabs. |
 | `game-browser-scale.test.tsx` | Una colección de 5.000 juegos monta solo la ventana virtual visible. |
 | `artwork.test.tsx`, `density-geometry.test.ts` | Caché/fallback de arte y geometría de densidad. |
@@ -149,7 +153,7 @@ base personal del usuario para ejecutar este checklist.
 | Caso | Procedimiento | Resultado esperado |
 | --- | --- | --- |
 | Primera apertura | Iniciar sin base previa. | Ventana usable, estados/columnas creados y biblioteca vacía sin datos demo. |
-| Importación local | Ajustes → Steam → Explorar bibliotecas. | Cuenta real de bibliotecas/manifiestos; juegos instalados, procedencia y rutas coherentes. |
+| Importación local | Ajustes → Steam → Explorar bibliotecas locales. | Cuenta real de bibliotecas/manifiestos; juegos instalados, procedencia y rutas coherentes. |
 | Búsqueda | Escribir título, nota y checkpoint. | Debounce breve, total correcto y resultados sin bloqueo. |
 | Filtros/orden | Combinar rangos, tags, fechas y procedencia; recorrer las 17 órdenes. | Consulta estable, contador/chips coherentes y limpieza reversible. |
 | Vista | Cambiar cuadrícula/lista y desplazarse. | No hay salto de geometría; solo se monta una ventana virtual. |
@@ -161,13 +165,15 @@ base personal del usuario para ejecutar este checklist.
 | Vistas planner | Cola, semana y mes; cambiar objetivo/capacidad. | Orden/periodos/carga se conservan sin desbordamiento. |
 | Colección manual | Crear, editar identidad, reordenar y eliminar una colección. | Identidad/orden persisten; membresía, juegos y datos personales permanecen al editar o eliminar. |
 | Colección inteligente | Añadir/editar reglas, calcular preview y guardar; simular error al cargar reglas existentes. | Preview y contador coinciden; no se muta al previsualizar y el error bloquea guardar hasta reintentar. |
+| Deseados | `⌘5`; mover entradas entre los cuatro cubos, anotar precio objetivo en dos monedas y dejar una entrada sin precio. | Las monedas nunca se suman entre sí y la cifra se anuncia como «al menos»; la salvedad completa se lee al pasar el cursor por encima. |
+| Contenido adicional | Ficha → Contenido adicional; actualizar desde la tienda y corregir a mano propiedad, instalación y ocultación. | «Sin confirmar» jamás se escribe como ausente; el importe pendiente conserva su «al menos» y la marca manual gana a la comprobación. |
 | Organización | Editar/reordenar estados y borrar uno personal usado; reordenar/borrar una columna con juegos. | Built-in no se elimina; estado reasigna a Sin clasificar y columna al destino indicado sin perder datos. |
-| Descubrimiento | Recomendar, gestionar recordatorios, actualizar feed y revisar relaciones. | Feed/fecha visibles, caché y backoff persistentes; relaciones solo por empresa/fecha reales y criterio explícito. |
+| Descubrimiento | Recomendar, gestionar recordatorios, actualizar feed y revisar relaciones. | Feed/fecha visibles, caché y backoff persistentes; relaciones solo por empresa/fecha reales y criterio explícito, con la procedencia del método al pasar el cursor por el bloque. |
 | Steam Family | Sincronizar con grupo detectable y abrir catálogo. | Unknown/confirmed separados, sin identidad/tiempo de terceros. |
 | Steam | Abrir tienda, instalar y jugar. | Rust construye solo la ruta permitida; tienda sin IPC y host limitado. En macOS/Linux, un blocker fallido cierra antes de navegar. |
 | Desinstalación | Solicitar para instalado con confirmación activa/inactiva. | Solo abre Steam; juego no instalado se rechaza y UI no afirma borrado. |
 | Instalación | Revelar carpeta de un juego instalado. | Solo abre una carpeta existente bajo una biblioteca Steam detectada. |
-| Atajos | Reasignar, provocar colisión, restaurar y escribir en un input. | Persisten, colisión se rechaza y el input no dispara acciones. |
+| Atajos | Ajustes → Atajos: reasignar, provocar colisión, pulsar **Restablecer atajos** y escribir en un input. | Persisten, colisión se rechaza, `⌘,` queda reservado y el input no dispara acciones. |
 | Updates | Ajustes → Acerca de → Buscar actualizaciones. | `notConfigured`; ninguna red, descarga o instalación. |
 | Diagnóstico | Abrir Datos y copias. | Integridad `ok`, versión de esquema, tamaño, ruta y WAL visibles. |
 
@@ -285,6 +291,34 @@ test/debug y SQLite en memoria: 5.000 upserts en `480 ms` y el bloque de paginac
 filtros y búsqueda en `30 ms`. La medición prueba el contrato del repositorio en ese host;
 no predice por sí sola el rendimiento de WebKitGTK o del almacenamiento de una Bazzite real.
 
+### Escala de la interfaz
+
+`tests/e2e/scale.spec.ts` sirve una biblioteca de **1.500 juegos** al frontal a través del
+arnés IPC y comprueba lo único que una captura con cuarenta títulos no puede demostrar:
+
+- cuántas fichas monta el virtualizador (debe quedar por debajo de 60, no en 1.500);
+- que saltar al fondo de la lista no acumula nodos;
+- que agrupar por inicial sigue respondiendo;
+- que no aparece desbordamiento horizontal.
+
+```bash
+pnpm exec playwright test scale.spec.ts --reporter=line
+```
+
+Evidencia local del 18 de agosto de 2026, Mac de desarrollo, servidor de desarrollo de Vite
+(no compilación de release):
+
+| Medida | Resultado |
+| --- | --- |
+| Primera pantalla útil | 641 ms |
+| Fichas montadas al abrir | 30 |
+| Salto al fondo de 1.500 juegos | 334 ms |
+| Fichas montadas tras el salto | 48 |
+| Agrupar por inicial | 106 ms |
+
+Los presupuestos del test son deliberadamente amplios (4 s y 2 s): están para detectar una
+regresión de orden de magnitud, no para medir la máquina.
+
 ## Pruebas visuales y accesibilidad
 
 Valida la ventana Tauri, no solo el servidor Vite, en al menos:
@@ -296,15 +330,18 @@ Valida la ventana Tauri, no solo el servidor Vite, en al menos:
 | 1920 × 1080 | Uso eficiente sin tarjetas sobredimensionadas. |
 | Ultrapanorámico | Densidad estable y anchos de lectura controlados. |
 
-En cada tamaño captura Biblioteca vacía/cargada, ficha, Planificador, Colecciones,
+En cada tamaño captura Biblioteca vacía/cargada, ficha, Planificador, Deseados, Colecciones,
 Seguimiento y cada sección de Ajustes. Compara con `DESIGN.md` y la referencia del brief:
 densidad, jerarquía, tokens, foco, hover, selección, loading, error y vacío.
 
 Checklist de accesibilidad:
 
 - recorrer todas las acciones con `Tab`, `Shift+Tab`, Enter, Espacio y Escape;
-- búsqueda mediante `⌘K`/`Ctrl+K`, ajustes mediante `⌘,`/`Ctrl+,` y navegación mediante los
-  atajos configurados;
+- búsqueda mediante `⌘F`/`Ctrl+F`, paleta de comandos mediante `⌘K`/`Ctrl+K` y ajustes
+  mediante `⌘,`/`Ctrl+,`, que es la única combinación reservada;
+- navegación por secciones con `⌘1`–`⌘5` (Biblioteca, Planificador, Colecciones, Seguimiento
+  y Deseados) y con el resto de atajos configurados; una base heredada que todavía guarde
+  `Mod+K` como búsqueda debe migrarse sola a `⌘F` al leerla, o la paleta no abriría nunca;
 - foco visible sobre fondos oscuros;
 - nombre accesible para botones de icono, artwork y progreso;
 - diálogo con foco contenido y retorno al trigger;
@@ -317,8 +354,17 @@ Checklist de accesibilidad:
 baselines en `tests/e2e/__screenshots__/` para 960 × 700, 1440 × 900 y 1920 × 900. Cubre
 arranque, carga/error/recuperación, persistencia de interfaz, DnD con deshacer, reinicio,
 colecciones, catálogo Steam Family filtrado y ultracompacto a 960 × 700,
-`prefers-reduced-motion` y Axe sin incidencias `serious`/`critical`. La suite actual contiene
-15 escenarios deterministas sin reintentos. Este arnés protege la interfaz y su contrato IPC.
+`prefers-reduced-motion`, integridad de maquetación y Axe sin incidencias
+`serious`/`critical`. Sin reintentos: `retries: 0` y un único worker.
+
+`showcase.spec.ts` vive en el mismo directorio, así que `pnpm test:e2e` también lo arranca.
+No compara nada: escribe las capturas de `artifacts/showcase/` y **necesita red** para
+descargar el arte oficial, de modo que sin conexión falla sin que la regresión esté rota.
+Para ejecutar solo la regresión, `pnpm exec playwright test --grep-invert vitrina`.
+
+El número exacto de escenarios cambia con cada tanda, así que no se copia aquí: se cuenta
+con `pnpm exec playwright test --list` (y con `--grep-invert vitrina` para la regresión
+sola). En el momento de escribir esto eran 31 en total, 19 de regresión y 12 de vitrina.
 `pnpm test:e2e:native` añade en macOS un smoke aislado
 del binario Tauri: usa el identificador de pruebas `io.vindexa.desktop.e2e`, verifica proceso,
 ventana 960 × 700 y creación de SQLite bajo un `HOME` temporal, cierra el proceso y elimina

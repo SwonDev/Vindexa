@@ -22,6 +22,8 @@ vi.mock("@/lib/tauri", () => ({
 
 vi.mock("@/components/common/Artwork", () => ({
   Artwork: ({ title }: { title: string }) => <span aria-hidden="true">{title.slice(0, 1)}</span>,
+  // La precarga es una mejora de tiempos: en pruebas basta con que exista.
+  prefetchArtwork: () => undefined,
 }));
 
 const mockedApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;

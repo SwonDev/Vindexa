@@ -1,0 +1,377 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { GameDetailSheet } from "@/features/library/GameDetailSheet";
+import { api } from "@/lib/tauri";
+import type { DlcSummary, GameDetail, PriorityExplanation } from "@/lib/types";
+import "@/index.css";
+
+vi.mock("@/components/common/Artwork", () => ({
+  Artwork: ({ title, kind }: { title: string; kind: string }) => (
+    <div className="artwork" data-kind={kind} role="img" aria-label={`Arte de ${title}`} />
+  ),
+}));
+vi.mock("@/lib/tauri", () => ({
+  api: {
+    gameDetail: vi.fn(),
+    refreshGameMetadata: vi.fn(),
+    refreshGameAchievements: vi.fn(),
+    updateGame: vi.fn(),
+    setGameCollections: vi.fn(),
+    listTags: vi.fn(),
+    saveTag: vi.fn(),
+    deleteTag: vi.fn(),
+    setGameTags: vi.fn(),
+    listGameSessions: vi.fn(),
+    saveGameSession: vi.fn(),
+    deleteGameSession: vi.fn(),
+    savePersonalDates: vi.fn(),
+    launchGame: vi.fn(),
+    installGame: vi.fn(),
+    uninstallGame: vi.fn(),
+    revealInstallation: vi.fn(),
+    openStore: vi.fn(),
+    listGameDlc: vi.fn(),
+    refreshGameDlc: vi.fn(),
+    setDlcOwned: vi.fn(),
+    setDlcHidden: vi.fn(),
+    setDlcInstalled: vi.fn(),
+    dlcSummary: vi.fn(),
+    explainPriority: vi.fn(),
+    setPriorityLock: vi.fn(),
+    recomputePriorities: vi.fn(),
+  },
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : "Error inesperado",
+}));
+
+const mockedApi = api as unknown as Record<keyof typeof api, ReturnType<typeof vi.fn>>;
+
+const baseDetail = {
+  appId: 620,
+  title: "Portal 2",
+  coverUrl: "https://example.test/cover.jpg",
+  headerUrl: "https://example.test/header.jpg",
+  heroUrl: "https://example.test/hero.jpg",
+  playtimeMinutes: 800,
+  playtimeRecentMinutes: 20,
+  lastPlayedAt: "2026-08-14T10:00:00Z",
+  releaseDate: "2011-04-19",
+  isEarlyAccess: false,
+  steamDeckStatus: "Verificado",
+  achievementsUnlocked: undefined,
+  achievementsTotal: 51,
+  installed: false,
+  installPath: undefined,
+  sizeOnDisk: undefined,
+  statusId: "playing",
+  statusName: "Jugando",
+  statusColor: "#5CAAC1",
+  progress: 55,
+  priority: 4,
+  pinned: false,
+  tracking: false,
+  rating: undefined,
+  manualPosition: 0,
+  shortDescription: "Una aventura cooperativa entre portales.",
+  developer: "Valve",
+  publisher: undefined,
+  genres: ["Acción"],
+  categories: [],
+  metadataStatus: "success",
+  metadataFetchedAt: "2026-08-14T10:00:00Z",
+  achievementsStatus: "pending",
+  achievementsFetchedAt: undefined,
+  isFree: false,
+  ownershipSource: "owned",
+  familyAvailability: "not_applicable",
+  collectionIds: [],
+  tags: [],
+  sessions: [],
+  activity: [],
+} as GameDetail;
+
+/** Metadatos enriquecidos tal y como los serializa `db::rich_metadata`. */
+const enriched = {
+  ...baseDetail,
+  detailedDescription: {
+    blocks: [
+      { kind: "heading", level: 2, text: "Cooperativo" },
+      { kind: "paragraph", text: "Dos cámaras de pruebas simultáneas." },
+      {
+        kind: "list",
+        ordered: false,
+        items: ["Puzles con portales", "Gel de propulsión", "Editor de niveles"],
+      },
+      { kind: "paragraph", text: "<script>alert(1)</script> no debe ejecutarse." },
+    ],
+  },
+  supportedLanguages: "Español, Inglés*, Francés",
+  websiteUrl: "https://www.thinkwithportals.com/",
+  metacriticScore: 95,
+  metacriticUrl: "https://www.metacritic.com/game/portal-2",
+  requiredAge: 12,
+  controllerSupport: "full",
+  drmState: "drm_free",
+  drmNotice: "Este producto no incluye protección anticopia de terceros.",
+  drmEvidence: [{ source: "drmNotice", match: "sin DRM" }],
+  media: [
+    {
+      mediaId: "screenshot:1",
+      kind: "screenshot",
+      thumbnailUrl: "https://shared.steamstatic.com/apps/620/ss1.600x338.jpg",
+      fullUrl: "https://shared.steamstatic.com/apps/620/ss1.1920x1080.jpg",
+      position: 0,
+    },
+    {
+      mediaId: "movie:2",
+      kind: "movie",
+      thumbnailUrl: "https://shared.steamstatic.com/apps/620/movie2.jpg",
+      fullUrl: "https://media.steampowered.com/apps/620/movie2.mp4",
+      position: 0,
+    },
+  ],
+} as unknown as GameDetail;
+
+function renderSheet() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <GameDetailSheet
+          appId={620}
+          open
+          onOpenChange={vi.fn()}
+          statuses={[
+            {
+              id: "playing",
+              name: "Jugando",
+              color: "#5CAAC1",
+              position: 0,
+              builtIn: true,
+              gameCount: 1,
+            },
+          ]}
+          collections={[]}
+        />
+      </TooltipProvider>
+    </QueryClientProvider>,
+  );
+}
+
+/** Los paneles nuevos de la ficha piden estos datos nada más abrirse. */
+const emptyDlcSummary = {
+  appId: 620,
+  total: 0,
+  owned: 0,
+  installed: 0,
+  hidden: 0,
+  free: 0,
+  pending: 0,
+  pendingCounted: 0,
+  pendingUnknownPrice: 0,
+  pendingOtherCurrency: 0,
+} as DlcSummary;
+
+const neutralPriority = {
+  appId: 620,
+  title: "Portal 2",
+  score: 40,
+  effectiveScore: 40,
+  derivedPriority: 2,
+  manualPriority: 2,
+  locked: false,
+  reason: "Sin señales que lo muevan por ahora.",
+  computedAt: "2026-08-18T09:00:00Z",
+  manualOverride: null,
+  signals: [],
+} as PriorityExplanation;
+
+function serveDetail(value: GameDetail) {
+  mockedApi.gameDetail.mockResolvedValue(value);
+  mockedApi.refreshGameMetadata.mockResolvedValue(value);
+}
+
+describe("estructura de la descripción de la ficha", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    serveDetail(enriched);
+    mockedApi.listTags.mockResolvedValue([]);
+    mockedApi.listGameSessions.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    mockedApi.updateGame.mockResolvedValue(enriched);
+    mockedApi.openStore.mockResolvedValue(undefined);
+    mockedApi.dlcSummary.mockResolvedValue(emptyDlcSummary);
+    mockedApi.listGameDlc.mockResolvedValue([]);
+    mockedApi.explainPriority.mockResolvedValue(neutralPriority);
+    mockedApi.setPriorityLock.mockResolvedValue(undefined);
+  });
+
+  it("jerarquiza resumen destacado, descripción larga, especificaciones y medios en ese orden", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const about = document.querySelector(".detail-about") as HTMLElement;
+    const specs = document.querySelector(".detail-specs") as HTMLElement;
+    const media = document.querySelector(".detail-media") as HTMLElement;
+    expect(about).toBeTruthy();
+    expect(specs).toBeTruthy();
+    expect(media).toBeTruthy();
+
+    const lead = document.querySelector(".detail-about__lead") as HTMLElement;
+    expect(lead).toHaveTextContent("Una aventura cooperativa entre portales.");
+    expect(about.compareDocumentPosition(specs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(specs.compareDocumentPosition(media) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("maqueta los bloques seguros como encabezados, párrafos y listas reales sin inyectar HTML", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const prose = document.getElementById("detail-description") as HTMLElement;
+    expect(within(prose).getByRole("heading", { name: "Cooperativo", level: 4 })).toBeVisible();
+    expect(prose.querySelectorAll("ul li")).toHaveLength(3);
+    expect(within(prose).getByText("Gel de propulsión")).toBeVisible();
+    // El texto peligroso llega como contenido, nunca como marcado ejecutable.
+    expect(prose.querySelector("script")).toBeNull();
+    expect(prose.textContent).toContain("<script>alert(1)</script> no debe ejecutarse.");
+  });
+
+  it("pliega la prosa larga con un control accesible y sin reservar espacio cuando es corta", async () => {
+    const user = userEvent.setup();
+    const longDetail = {
+      ...enriched,
+      detailedDescription: {
+        blocks: Array.from({ length: 12 }, (_, index) => ({
+          kind: "paragraph",
+          text: `Bloque ${index} con texto suficientemente extenso para desbordar. `.repeat(4),
+        })),
+      },
+    } as unknown as GameDetail;
+    serveDetail(longDetail);
+    renderSheet();
+
+    const toggle = await screen.findByRole("button", { name: "Mostrar más" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "detail-description");
+    expect(document.getElementById("detail-description")).toHaveAttribute("data-collapsed", "true");
+
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Mostrar menos" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(document.getElementById("detail-description")).not.toHaveAttribute("data-collapsed");
+  });
+
+  it("no dibuja el plegado ni la sección de medios cuando no hay contenido que plegar", async () => {
+    serveDetail({ ...baseDetail } as GameDetail);
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    expect(screen.queryByRole("button", { name: "Mostrar más" })).not.toBeInTheDocument();
+    expect(document.querySelector(".detail-media")).toBeNull();
+    expect(document.querySelector(".detail-specs")).toBeNull();
+  });
+
+  it("muestra idiomas, edad, mando y Metacritic sólo cuando la tienda los publica", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const specs = document.querySelector(".detail-specs") as HTMLElement;
+    expect(within(specs).getByText("Idiomas")).toBeVisible();
+    expect(within(specs).getByText("Español")).toBeVisible();
+    expect(within(specs).getByText("Inglés")).toBeVisible();
+    expect(within(specs).getByText("12+")).toBeVisible();
+    expect(within(specs).getByText("Compatible completo")).toBeVisible();
+    expect(within(specs).getByText("95")).toBeVisible();
+    expect(within(specs).getByText("thinkwithportals.com")).toBeVisible();
+  });
+
+  it("omite Metacritic, edad y mando cuando la tienda no los declara", async () => {
+    serveDetail({
+      ...enriched,
+      metacriticScore: undefined,
+      requiredAge: 0,
+      controllerSupport: undefined,
+    } as unknown as GameDetail);
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const specs = await screen.findByText("Idiomas");
+    const list = specs.closest(".detail-specs") as HTMLElement;
+    expect(within(list).queryByText("Metacritic")).not.toBeInTheDocument();
+    expect(within(list).queryByText("Edad recomendada")).not.toBeInTheDocument();
+    expect(within(list).queryByText("Mando")).not.toBeInTheDocument();
+    // La protección y el sitio oficial siguen presentes: sólo desaparece lo ausente.
+    expect(within(list).getByText("Protección")).toBeVisible();
+  });
+
+  it("coloca la marca sin DRM en la ficha y nunca sobre la carátula", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const badge = screen.getByRole("button", { name: /Sin DRM/ });
+    expect(badge).toHaveAttribute("data-state", "drm_free");
+    expect(badge.closest(".detail-specs")).toBeTruthy();
+    expect(badge.closest(".detail-hero")).toBeNull();
+
+    const hero = document.querySelector(".detail-hero") as HTMLElement;
+    expect(hero.textContent).not.toMatch(/DRM/i);
+    const artwork = document.querySelector(".detail-hero__media .artwork") as HTMLElement;
+    expect(artwork.textContent).not.toMatch(/DRM/i);
+  });
+
+  it("publica capturas con texto alternativo y deriva el vídeo a la tienda integrada", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    expect(screen.getByAltText("Captura 1 de Portal 2")).toBeVisible();
+    const video = screen.getByRole("button", { name: /Vídeo 2 de Portal 2/ });
+    await user.click(video);
+    await waitFor(() => expect(mockedApi.openStore).toHaveBeenCalledWith(620));
+  });
+
+  it("omite las filas de información sin dato en lugar de rellenarlas con un guion", async () => {
+    const user = userEvent.setup();
+    serveDetail({ ...baseDetail } as GameDetail);
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    await user.click(screen.getByRole("tab", { name: "Información" }));
+
+    const info = document.querySelector(".detail-info") as HTMLElement;
+    expect(within(info).getByText("Desarrollador")).toBeVisible();
+    expect(within(info).queryByText("Editor")).not.toBeInTheDocument();
+    expect(within(info).queryByText("Instalación")).not.toBeInTheDocument();
+    expect(within(info).queryByText("Categorías")).not.toBeInTheDocument();
+    expect(info.textContent).not.toContain("—");
+  });
+});
+
+describe("tratamiento del banner", () => {
+  const css = readFileSync(resolve(process.cwd(), "src/features/library/game-detail.css"), "utf8");
+
+  it("cierra el degradado sobre el color de la barra y no contra var(--card) opaco", () => {
+    const scrim = css.slice(css.indexOf(".detail-hero .detail-hero__scrim"));
+    const rule = scrim.slice(0, scrim.indexOf("}"));
+    expect(rule).toContain("var(--v-surface-raised) 100%");
+    // El corte duro contra `var(--card)` era el origen de la banda visible y de
+    // la mitad inferior del banner completamente borrada.
+    expect(rule).not.toContain("var(--card)");
+    // El degradado sólo empieza a actuar en el tercio inferior.
+    expect(rule).toContain("rgb(10 14 19 / 0%) 44%");
+  });
+
+  it("realza el color del arte en vez de desaturarlo", () => {
+    const media = css.slice(css.indexOf(".detail-hero .detail-hero__media .artwork"));
+    const rule = media.slice(0, media.indexOf("}"));
+    expect(rule).toContain("saturate(1.04)");
+    expect(rule).not.toMatch(/grayscale|saturate\(0/);
+  });
+});

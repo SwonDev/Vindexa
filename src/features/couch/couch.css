@@ -1,0 +1,489 @@
+/* ---------------------------------------------------------------------------
+   Modo sofá.
+
+   La pantalla se ve a dos metros, así que aquí no valen los tamaños del resto
+   de la aplicación: ninguna cifra baja de 15 px, las carátulas no bajan de
+   240 px y el foco se marca con un anillo de 3 px más un realce de la propia
+   carátula, porque a esa distancia un borde de 1 px no existe.
+
+   Resuelve su altura contra `.app-content` igual que las demás pantallas: sin
+   `height: 100%` la fila `minmax(0, 1fr)` no queda acotada y la rejilla deja de
+   poder desplazarse.
+   --------------------------------------------------------------------------- */
+
+.couch {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background);
+  font-size: 15px;
+}
+
+/* Cabecera ----------------------------------------------------------------- */
+
+.couch[data-platform="macos"] {
+  --window-controls-safe-inline-start: calc(env(safe-area-inset-left, 0px) + 82px);
+}
+
+/* El modo sofá ocupa la ventana entera, así que la cabecera comparte franja con
+   los botones del sistema: hay que dejarles su hueco igual que hace la barra
+   superior del escritorio. Sin la variable —otra plataforma, o la ventana sin
+   decoración— el relleno vuelve al normal y no se pierde espacio. */
+.couch__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  padding-inline-start: var(--window-controls-safe-inline-start, 24px);
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.couch__identity {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  color: var(--v-cyan);
+}
+
+.couch__identity h1 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.couch__identity p {
+  margin: 2px 0 0;
+  color: var(--v-muted);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.couch__header-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Aviso del mando ---------------------------------------------------------- */
+
+/* El aviso del mando informa, no manda: una franja de 40 px permanente le quita
+   a las carátulas el sitio que necesitan para leerse a dos metros. */
+.couch__controller {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border);
+  color: var(--v-subtle);
+  font-size: 13px;
+}
+
+.couch__controller[data-warning="true"] {
+  color: var(--v-warning);
+}
+
+/* Cuerpo: rejilla y ficha -------------------------------------------------- */
+
+.couch__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 30%);
+  gap: 24px;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
+  overflow: hidden;
+}
+
+/* Los estados de carga, error y vacío ocupan el cuerpo entero: no hay ficha
+   que enseñar mientras no hay juegos. */
+
+.couch__body:has(> .loading-state),
+.couch__body:has(> .empty-state),
+.couch__body:has(> .couch__error) {
+  grid-template-columns: minmax(0, 1fr);
+  place-content: center;
+}
+
+.couch__error {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  align-content: center;
+  max-width: 560px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.couch__error h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.couch__error p {
+  margin: 0;
+  color: var(--v-error);
+  font-size: 15px;
+}
+
+/* Rejilla ------------------------------------------------------------------ */
+
+.couch__grid {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  margin: 0;
+  padding: 4px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden auto;
+  list-style: none;
+  scrollbar-gutter: stable;
+  /* `layout` y `paint` aíslan la rejilla sin tocar el tamaño: el containment de
+     tamaño rompe el desplazamiento en WebKit, que es el motor de la aplicación
+     instalada. */
+  contain: layout paint;
+  scroll-behavior: smooth;
+}
+
+.couch__grid > li {
+  min-width: 0;
+}
+
+.couch-tile {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--foreground);
+  text-align: left;
+  transition:
+    transform 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
+}
+
+.couch-tile__art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  /* No todos los juegos publican portada vertical; los que sólo tienen cabecera
+     apaisada quedaban recortados por el centro y se leía «NSWO» en vez del
+     título. Con `contain` se ve la imagen entera: una portada 2:3 llena la caja
+     igual que antes y una cabecera deja banda, que a dos metros es preferible a
+     un recorte ilegible. */
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--v-surface-raised);
+}
+
+.couch-tile__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  /* Alto reservado para dos líneas aunque el título ocupe una: si no, las
+     carátulas de una misma fila acaban a distinta altura. */
+  min-height: calc(2em * 1.25);
+  /* Dos líneas: a esta distancia un título cortado a una línea es un título
+     que hay que adivinar. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.couch-tile__meta {
+  color: var(--v-muted);
+  font-size: 14px;
+}
+
+/* El anillo se dibuja **hacia dentro**. Un `outline` con desplazamiento sale del
+   borde de la carátula, y la rejilla lo recorta contra su propio borde y contra
+   el contenido contiguo: a dos metros eso se lee como una tarjeta rota. Por
+   dentro el anillo se ve entero por los cuatro lados. */
+.couch-tile:focus-visible,
+.couch-tile[aria-current="true"] {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--ring);
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+  transform: scale(1.02);
+}
+
+/* Ficha -------------------------------------------------------------------- */
+
+.couch__detail {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px;
+  overflow: hidden auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  scrollbar-gutter: stable;
+}
+
+.couch__detail-art {
+  width: 100%;
+  /* `.artwork` trae `height: 100%`, y dentro de una fila automática de rejilla
+     WebKit lo resuelve contra el alto del panel: la imagen se comía la ficha
+     entera y el texto quedaba encima de la portada. El alto lo tiene que
+     deducir la proporción, no el contenedor. */
+  height: auto;
+  aspect-ratio: 460 / 215;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--v-surface-raised);
+}
+
+.couch__detail h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.couch__detail-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 15px;
+}
+
+.couch__detail-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+}
+
+.couch__detail-progress {
+  font-size: 15px;
+  /* A dos metros la barra necesita grosor y la cifra su propio carril: con la
+     tipografía del sofá el porcentaje se montaba sobre el final de la barra. */
+  gap: 12px;
+}
+
+/* `Progress` de la interfaz base es el hijo que dibuja la banda. */
+.couch__detail-progress [data-slot="progress"] {
+  height: 5px;
+}
+
+.couch__detail-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.couch__detail-facts > div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.couch__detail-facts dt {
+  color: var(--v-muted);
+  font-size: 14px;
+}
+
+.couch__detail-facts dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.couch__detail-summary {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 15px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+
+.couch__detail-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* Acciones ----------------------------------------------------------------- */
+
+.couch-action {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 600;
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+
+.couch-action--primary {
+  border-color: transparent;
+  background: var(--primary);
+}
+
+.couch-action[data-active="true"] {
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+}
+
+/* La ficha recorta su contenido al desplazarse, así que aquí el anillo también
+   va por dentro: fuera se cortaría contra el borde del panel. */
+.couch-action:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--ring);
+}
+
+/* Leyenda de botones ------------------------------------------------------- */
+
+.couch__hints {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.couch__hints ul {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.couch__hints li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.couch__hint-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--v-cyan);
+  border-radius: 9999px;
+  color: var(--v-cyan);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.couch__hint-key {
+  color: var(--v-muted);
+  font-size: 14px;
+}
+
+.couch__hint-label {
+  color: var(--foreground);
+}
+
+.couch__announcement {
+  margin: 0;
+  min-height: 22px;
+  color: var(--v-muted);
+  font-size: 15px;
+}
+
+.couch__announcement[data-failed="true"] {
+  color: var(--v-error);
+}
+
+/* Ventanas estrechas ------------------------------------------------------- */
+
+@media (width <= 1100px) {
+  .couch__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .couch__detail {
+    max-height: 40vh;
+  }
+}
+
+/* Realce sólo con puntero fino, nunca en táctil. */
+
+@media (hover: hover) and (pointer: fine) {
+  .couch-tile:hover {
+    border-color: var(--v-cyan);
+  }
+
+  .couch-action:hover {
+    background: var(--v-surface-selected);
+  }
+}
+
+/* Movimiento reducido ------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .couch,
+  .couch * {
+    scroll-behavior: auto;
+    transition-duration: 1ms;
+  }
+
+  .couch-tile:focus-visible,
+  .couch-tile[aria-current="true"] {
+    transform: none;
+  }
+}
+
+/* Aviso de incompatibilidad. Va antes de las acciones porque explica por qué
+   falta el botón de instalar: si apareciera después, se leería como una nota al
+   pie de una decisión que ya se tomó sin decir el motivo. */
+.couch__detail-incompatible {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--v-warning);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--v-warning) 12%, transparent);
+  color: var(--v-warning);
+  font-size: 15px;
+  line-height: 1.4;
+}

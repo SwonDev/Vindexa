@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "store-browser",
+  "description": "Ventanas del navegador integrado de tiendas (etiquetas 'vindexa-store-*'). No conceden NINGÚN permiso: la lista de permisos está vacía a propósito. Esta capability existe para declarar el aislamiento de forma revisable y verificada en tiempo de compilación: si alguien concede algo a estas ventanas, aparecerá aquí en el diff. El contenido remoto tampoco puede alcanzar los comandos de la aplicación, porque no se declara ningún origen en 'remote' y Tauri rechaza toda invocación de origen no local sin capability explícita.",
+  "windows": ["vindexa-store-*"],
+  "local": true,
+  "permissions": []
+}

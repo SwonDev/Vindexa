@@ -1,0 +1,709 @@
+/* Bandeja de avisos de la barra superior. */
+
+.notifications-trigger {
+  position: relative;
+}
+
+.notifications-badge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--v-cyan-strong);
+  color: #f2f8fa;
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.notifications-trigger[data-urgent="true"] .notifications-badge {
+  background: var(--v-warning);
+  color: #1a1207;
+}
+
+.notifications-panel {
+  display: grid;
+  /* Cabecera, filtros, lista desplazable y pie de reglas. */
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 0;
+  width: min(400px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 120px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--popover);
+}
+
+.notifications-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notifications-panel__title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notifications-panel__meta {
+  margin: 2px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notifications-panel__tools {
+  display: flex;
+  gap: 2px;
+}
+
+.notifications-scopes {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notifications-scopes button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-weight: 550;
+  transition:
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+
+.notifications-scopes button:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+}
+
+.notifications-scopes button[data-active="true"] {
+  border-color: color-mix(in srgb, var(--v-cyan) 42%, transparent);
+  background: color-mix(in srgb, var(--v-cyan) 12%, transparent);
+  color: var(--foreground);
+}
+
+.notifications-list {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-gutter: stable;
+}
+
+.notifications-empty {
+  margin: 0;
+  padding: 22px 16px;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.notification-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px 9px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.notification-row:last-child {
+  border-bottom: 0;
+}
+
+.notification-row > svg {
+  margin-top: 1px;
+  color: var(--v-subtle);
+}
+
+.notification-row[data-severity="success"] > svg {
+  color: var(--v-success);
+}
+
+.notification-row[data-severity="warning"] > svg,
+.notification-row[data-severity="critical"] > svg {
+  color: var(--v-warning);
+}
+
+/* Sin leer: una barra fina de acento en el margen, no un fondo que grite. */
+.notification-row[data-unread="true"] {
+  box-shadow: inset 3px 0 0 var(--v-cyan);
+}
+
+.notification-row__body {
+  min-width: 0;
+}
+
+.notification-row__title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.notification-row__text {
+  margin: 3px 0 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.notification-row__meta {
+  margin: 4px 0 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-row__actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+
+.notification-row:hover .notification-row__actions,
+.notification-row:focus-within .notification-row__actions {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notifications-scopes button,
+  .notification-row__actions {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Pie de la bandeja: contexto de lo programado y atajo al editor.
+
+   No es el editor: crear una regla se hace en un diálogo modal, porque este
+   panel se cierra al pulsar fuera o con `Escape` y un formulario a medio
+   escribir no puede depender de eso.
+   --------------------------------------------------------------------------- */
+
+.notifications-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px 7px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.notifications-panel__foot p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.notifications-panel__foot svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--v-subtle);
+}
+
+/* ---------------------------------------------------------------------------
+   Panel de avisos programados (pantalla de Seguimiento).
+   --------------------------------------------------------------------------- */
+
+.rules-panel {
+  display: grid;
+  /* En el mosaico estrecho el bloque es un elemento de rejilla que se estira a
+     la altura de su fila; sin esto las filas internas se separarían. */
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px 13px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.rules-panel__head {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.rules-panel__head > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--v-cyan);
+}
+
+.rules-panel__identity {
+  min-width: 0;
+}
+
+.rules-panel__identity h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.rules-panel__identity p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rules-panel__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rules-filter {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.rules-filter button {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  transition: color 120ms var(--ease-out);
+}
+
+.rules-filter button:hover {
+  color: var(--foreground);
+}
+
+.rules-filter button[data-active="true"] {
+  border-color: var(--border);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+}
+
+.rules-panel__count {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rules-panel__note {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.rules-panel__error {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 8px 9px;
+  border-left: 3px solid var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Estado vacío: una pantalla de producto, no un hueco. */
+.rules-empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 12px 11px;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  background: var(--background);
+}
+
+.rules-empty > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--v-cyan);
+}
+
+.rules-empty strong {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.rules-empty p {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.rules-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--border);
+  list-style: none;
+}
+
+/* `notification-rule` y no `rule-row`: ese nombre ya lo usa el constructor de
+   reglas de colecciones en `index.css`, que se carga después y ganaría. */
+.notification-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 8px 9px;
+  background: var(--background);
+}
+
+.notification-rule[data-enabled="false"] {
+  background: color-mix(in srgb, var(--background) 88%, var(--v-surface-raised));
+}
+
+.notification-rule__main {
+  min-width: 0;
+}
+
+.notification-rule__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-rule[data-enabled="false"] .notification-rule__title {
+  color: var(--v-muted);
+}
+
+.notification-rule__meta {
+  margin: 2px 0 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.notification-rule__next {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-rule__next svg {
+  width: 13px;
+  height: 13px;
+  color: var(--v-subtle);
+}
+
+.notification-rule__next[data-state="scheduled"] {
+  color: var(--foreground);
+}
+
+.notification-rule__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 0;
+}
+
+.notification-rule__tags span {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--v-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.notification-rule__actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.notification-rule__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 6px 7px;
+  border-left: 3px solid var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, var(--background));
+}
+
+.notification-rule__confirm span {
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------------------
+   Editor de una regla.
+   --------------------------------------------------------------------------- */
+
+/* Mismo patrón que `.collection-editor`: el primitivo trae `max-w-md` y un
+   radio de 6 px, y aquí se sustituyen por la geometría técnica del proyecto. */
+.rule-dialog {
+  width: min(540px, calc(100vw - 48px));
+  max-width: none;
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  border-radius: 3px;
+}
+
+.rule-form {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+}
+
+.rule-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 11px;
+}
+
+.rule-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.rule-field__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.rule-field__label em {
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.rule-field__hint {
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.rule-field__error {
+  color: var(--v-error);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.rule-field--game {
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--background);
+}
+
+.rule-game__current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.rule-game__current span {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-game__search {
+  position: relative;
+  display: grid;
+}
+
+.rule-game__search svg {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 14px;
+  height: 14px;
+  color: var(--v-subtle);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.rule-game__search input {
+  padding-left: 26px;
+}
+
+.rule-game__note {
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.rule-game__results {
+  display: grid;
+  gap: 1px;
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  background: var(--border);
+  list-style: none;
+}
+
+.rule-game__results button {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  background: var(--card);
+  color: var(--v-muted);
+  font-size: 11px;
+  text-align: left;
+  transition: color 120ms var(--ease-out);
+}
+
+.rule-game__results button:hover {
+  color: var(--foreground);
+}
+
+.rule-game__results button[data-selected="true"] {
+  background: var(--v-surface-selected);
+  color: var(--foreground);
+}
+
+.rule-form__enabled {
+  display: flex;
+  align-items: start;
+  gap: 9px;
+}
+
+.rule-form__enabled label {
+  display: grid;
+  gap: 2px;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rule-form__enabled label span {
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.rule-form__warning,
+.rule-form__error {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.rule-form__warning svg,
+.rule-form__error svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.rule-form__warning {
+  border-left: 3px solid var(--v-warning);
+  background: color-mix(in srgb, var(--v-warning) 10%, var(--card));
+  color: var(--v-muted);
+}
+
+.rule-form__warning svg {
+  color: var(--v-warning);
+}
+
+.rule-form__error {
+  border-left: 3px solid var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+  color: var(--v-error);
+}
+
+@media (max-width: 560px) {
+  .rule-form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rules-filter button,
+  .rule-game__results button {
+    transition: none;
+  }
+}

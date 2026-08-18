@@ -1,20 +1,32 @@
+pub mod archive;
+mod catalog;
+pub mod curated;
 pub mod discovery;
+pub mod dlc;
 pub mod family_catalog;
+pub mod notifications;
 mod library;
 pub mod library_dnd;
 mod metadata_queue;
-mod migrations;
-mod organization;
+pub(crate) mod migrations;
+pub mod organization;
 pub mod personal;
+pub mod pricing;
+pub mod priority;
 pub mod recovery;
+pub mod rich_metadata;
+pub mod saved_views;
+pub mod wishlist;
 
+use chrono::{DateTime, Utc};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
     GameDetail, GameListRequest, LibraryFilterOptions, MetadataEnrichmentStatus,
     MovePlannerItemInput, PagedGameSessions, PagedGames, PlannerColumn, PlannerOverview,
     PlannerSettings, Recommendation, RecommendationRequest, SaveCollectionInput,
-    SavePlannerItemInput, SmartRule, StatusDefinition, SteamConfiguration, UpdateGameInput,
+    SavePlannerItemInput, SmartRule, StatusDefinition, SteamConfiguration, SyncRun,
+    UpdateGameInput,
 };
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension,
@@ -27,9 +39,18 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+pub use archive::{ArchiveReport, PagedArchivedGames};
+pub use curated::{
+    AddCuratedGameInput, CuratedList, CuratedListDetail, SaveCuratedListInput,
+    UpdateCuratedItemInput,
+};
 pub use discovery::{
     CachedNewsInput, DiscoverySnapshot, GameReminder, NewsRefreshCandidate, NewsRefreshReport,
     SaveReminderInput,
+};
+pub use dlc::{
+    DlcFilter, DlcImportSummary, DlcRefreshCandidate, DlcRefreshReport, DlcSummary, GameDlc,
+    ImportedDlc,
 };
 pub use family_catalog::{
     FamilyCatalogGame, FamilyCatalogRequest, ImportedFamilyCatalogGame, PagedFamilyCatalogGames,
@@ -37,7 +58,26 @@ pub use family_catalog::{
 pub use library::{ImportedGame, ImportedInstallation, StoreMetadataUpdate};
 pub use library_dnd::{LibraryDropInput, LibraryDropReceipt, LibraryDropResult};
 pub(crate) use metadata_queue::MetadataJob;
+pub use notifications::{
+    NotificationInbox, NotificationInboxFilter, NotificationRefreshReport, NotificationRule,
+    SaveNotificationRuleInput,
+};
 pub use personal::{SavePersonalDatesInput, SaveSessionInput, SaveTagInput, TagDefinition};
+pub use pricing::{
+    GamePrice, PriceHistory, PriceObservation, PriceRefreshReport, RecordedPrice,
+    WishlistPriceStatus,
+};
+pub use priority::{
+    ImportedUpcomingRelease, PriorityExplanation, PriorityRanking, PriorityRecomputeReport,
+    TasteReport, UpcomingImportSummary, UpcomingRelease,
+};
+pub use rich_metadata::{DrmStateCounts, RichGameMetadata, RichMetadataUpdate};
+pub use saved_views::{SaveViewInput, SavedView};
+pub use wishlist::{
+    GameVideo, GameVideoRef, ImportedWishlistGame, SaveGameVideoInput, SaveWishlistEntryInput,
+    SteamWishlistImportResult, WishlistEntry, WishlistGame, WishlistImportReport,
+    WishlistOverview,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct SteamProfileWrite {
@@ -211,6 +251,61 @@ impl Database {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_sync_run(
+        &self,
+        source: &str,
+        status: &str,
+        started_at: &str,
+        finished_at: &str,
+        imported_count: usize,
+        updated_count: usize,
+        error_message: Option<&str>,
+    ) -> AppResult<()> {
+        self.open()?.execute(
+            "INSERT INTO sync_runs(id, source, status, started_at, finished_at,
+                                  imported_count, updated_count, error_message)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                source,
+                status,
+                started_at,
+                finished_at,
+                imported_count as i64,
+                updated_count as i64,
+                error_message,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_sync_runs(&self, limit: u32) -> AppResult<Vec<SyncRun>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(
+            "SELECT id, source, status, started_at, finished_at,
+                    imported_count, updated_count, error_message
+             FROM sync_runs ORDER BY started_at DESC LIMIT ?1",
+        )?;
+        let rows = statement.query_map([limit], |row| {
+            Ok(SyncRun {
+                id: row.get(0)?,
+                source: row.get(1)?,
+                status: row.get(2)?,
+                started_at: row.get(3)?,
+                finished_at: row.get(4)?,
+                imported_count: row.get(5)?,
+                updated_count: row.get(6)?,
+                error_message: row.get(7)?,
+            })
+        })?;
+        let mut runs = Vec::new();
+        for row in rows {
+            runs.push(row?);
+        }
+        Ok(runs)
+    }
+
     pub fn get_steam_account(&self) -> AppResult<Option<crate::models::SteamAccount>> {
         let connection = self.open()?;
         connection
@@ -329,7 +424,7 @@ impl Database {
     }
 
     pub fn game_detail(&self, app_id: u32) -> AppResult<GameDetail> {
-        library::get_game_detail(&self.open()?, app_id)
+        Self::detail_with_rich(&self.open()?, app_id)
     }
 
     pub fn list_tags(&self) -> AppResult<Vec<TagDefinition>> {
@@ -348,13 +443,13 @@ impl Database {
         let mut connection = self.open()?;
         personal::set_game_tags(&mut connection, app_id, tag_ids)?;
         personal::game_tag_ids(&connection, app_id)?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn save_session(&self, input: &SaveSessionInput) -> AppResult<GameDetail> {
         let mut connection = self.open()?;
         personal::save_session(&mut connection, input)?;
-        library::get_game_detail(&connection, input.app_id)
+        Self::detail_with_rich(&connection, input.app_id)
     }
 
     pub fn list_game_sessions(
@@ -369,13 +464,13 @@ impl Database {
     pub fn delete_session(&self, id: &str) -> AppResult<GameDetail> {
         let mut connection = self.open()?;
         let app_id = personal::delete_session(&mut connection, id)?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn save_personal_dates(&self, input: &SavePersonalDatesInput) -> AppResult<GameDetail> {
         let mut connection = self.open()?;
         personal::save_personal_dates(&mut connection, input)?;
-        library::get_game_detail(&connection, input.app_id)
+        Self::detail_with_rich(&connection, input.app_id)
     }
 
     pub fn store_metadata_refresh_due(&self, app_id: u32) -> AppResult<bool> {
@@ -412,13 +507,13 @@ impl Database {
             release_date.as_deref(),
             &fetched_at,
         )?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn mark_store_metadata_attempt(&self, app_id: u32, status: &str) -> AppResult<GameDetail> {
         let connection = self.open()?;
         library::mark_store_metadata_attempt(&connection, app_id, status)?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn enqueue_metadata_enrichment(
@@ -516,19 +611,19 @@ impl Database {
     ) -> AppResult<GameDetail> {
         let connection = self.open()?;
         library::save_achievements(&connection, app_id, unlocked, total)?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn mark_achievements_attempt(&self, app_id: u32, status: &str) -> AppResult<GameDetail> {
         let connection = self.open()?;
         library::mark_achievements_attempt(&connection, app_id, status)?;
-        library::get_game_detail(&connection, app_id)
+        Self::detail_with_rich(&connection, app_id)
     }
 
     pub fn update_game(&self, input: &UpdateGameInput) -> AppResult<GameDetail> {
         let mut connection = self.open()?;
         library::update_game(&mut connection, input)?;
-        library::get_game_detail(&connection, input.app_id)
+        Self::detail_with_rich(&connection, input.app_id)
     }
 
     pub fn bulk_update_status(&self, input: &BulkUpdateStatusInput) -> AppResult<usize> {
@@ -632,6 +727,444 @@ impl Database {
         request: &FamilyCatalogRequest,
     ) -> AppResult<PagedFamilyCatalogGames> {
         family_catalog::list(&self.open()?, request)
+    }
+
+    /// Ficha completa: los datos de biblioteca más los metadatos enriquecidos.
+    /// Es el único punto que compone ambas mitades, para que ninguna ruta pueda
+    /// devolver una ficha a medias.
+    fn detail_with_rich(connection: &Connection, app_id: u32) -> AppResult<GameDetail> {
+        let mut detail = library::get_game_detail(connection, app_id)?;
+        detail.rich = rich_metadata::get(connection, app_id)?;
+        Ok(detail)
+    }
+
+    pub fn rich_game_metadata(&self, app_id: u32) -> AppResult<RichGameMetadata> {
+        rich_metadata::get(&self.open()?, app_id)
+    }
+
+    pub fn drm_state_counts(&self) -> AppResult<DrmStateCounts> {
+        rich_metadata::drm_state_counts(&self.open()?)
+    }
+
+    pub fn save_rich_metadata(&self, app_id: u32, update: &RichMetadataUpdate) -> AppResult<()> {
+        rich_metadata::save(&mut self.open()?, app_id, update)
+    }
+
+    /// Persiste en una sola transacción todo lo que aporta una única respuesta
+    /// de la tienda: los campos de biblioteca y los metadatos de ficha.
+    pub fn save_store_bundle(
+        &self,
+        app_id: u32,
+        metadata: &StoreMetadataUpdate,
+        rich: &RichMetadataUpdate,
+    ) -> AppResult<GameDetail> {
+        let mut connection = self.open()?;
+        {
+            let transaction = connection.transaction()?;
+            library::save_store_metadata(&transaction, app_id, metadata)?;
+            rich_metadata::save_in_transaction(&transaction, app_id, rich)?;
+            transaction.commit()?;
+        }
+        let (is_early_access, release_date, fetched_at) = connection.query_row(
+            "SELECT is_early_access, release_date, metadata_fetched_at
+               FROM games WHERE app_id = ?1",
+            [app_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<bool>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        discovery::record_metadata_observation(
+            &mut connection,
+            app_id,
+            is_early_access,
+            release_date.as_deref(),
+            &fetched_at,
+        )?;
+        Self::detail_with_rich(&connection, app_id)
+    }
+
+    pub(crate) fn complete_metadata_enrichment_bundle(
+        &self,
+        app_id: u32,
+        metadata: &StoreMetadataUpdate,
+        rich: &RichMetadataUpdate,
+    ) -> AppResult<()> {
+        let mut connection = self.open()?;
+        let transaction = connection.transaction()?;
+        library::save_store_metadata(&transaction, app_id, metadata)?;
+        rich_metadata::save_in_transaction(&transaction, app_id, rich)?;
+        metadata_queue::mark_success(&transaction, app_id)?;
+        transaction.commit()?;
+
+        let (is_early_access, release_date, fetched_at) = connection.query_row(
+            "SELECT is_early_access, release_date, metadata_fetched_at
+               FROM games WHERE app_id = ?1",
+            [app_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<bool>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        discovery::record_metadata_observation(
+            &mut connection,
+            app_id,
+            is_early_access,
+            release_date.as_deref(),
+            &fetched_at,
+        )
+    }
+
+    // --- Avisos y bandeja de eventos ----------------------------------------
+
+    pub fn list_notification_rules(
+        &self,
+        app_id: Option<u32>,
+        now: DateTime<Utc>,
+    ) -> AppResult<Vec<NotificationRule>> {
+        notifications::list_rules(&self.open()?, app_id, now)
+    }
+
+    pub fn save_notification_rule(
+        &self,
+        input: &SaveNotificationRuleInput,
+        now: DateTime<Utc>,
+    ) -> AppResult<NotificationRule> {
+        notifications::save_rule(&mut self.open()?, input, now)
+    }
+
+    pub fn delete_notification_rule(&self, id: &str) -> AppResult<()> {
+        notifications::delete_rule(&self.open()?, id)
+    }
+
+    pub fn notification_inbox(
+        &self,
+        filter: &NotificationInboxFilter,
+        limit: u32,
+        offset: u32,
+    ) -> AppResult<NotificationInbox> {
+        notifications::inbox(&self.open()?, filter, limit, offset)
+    }
+
+    pub fn mark_notification_read(&self, event_id: &str, now: DateTime<Utc>) -> AppResult<()> {
+        notifications::mark_read(&self.open()?, event_id, now)
+    }
+
+    pub fn mark_all_notifications_read(&self, now: DateTime<Utc>) -> AppResult<u32> {
+        notifications::mark_all_read(&mut self.open()?, now)
+    }
+
+    pub fn dismiss_notification(&self, event_id: &str, now: DateTime<Utc>) -> AppResult<()> {
+        notifications::dismiss_event(&self.open()?, event_id, now)
+    }
+
+    pub fn refresh_notification_events(
+        &self,
+        now: DateTime<Utc>,
+    ) -> AppResult<NotificationRefreshReport> {
+        notifications::refresh(&mut self.open()?, now)
+    }
+
+    // --- Prioridad dinámica y modelo de gustos -------------------------------
+    // `Utc::now()` se resuelve en la frontera y no dentro del cálculo: el
+    // núcleo es puro y determinista respecto al instante que recibe.
+
+    pub fn recompute_priorities(&self) -> AppResult<PriorityRecomputeReport> {
+        priority::recompute_priorities(&mut self.open()?, Utc::now())
+    }
+
+    pub fn explain_priority(&self, app_id: u32) -> AppResult<PriorityExplanation> {
+        priority::explain_priority(&self.open()?, app_id)
+    }
+
+    pub fn set_priority_lock(&self, app_id: u32, locked: bool) -> AppResult<()> {
+        priority::set_priority_lock(&self.open()?, app_id, locked)
+    }
+
+    pub fn list_priority_ranking(&self, limit: u32) -> AppResult<Vec<PriorityRanking>> {
+        priority::list_priority_ranking(&self.open()?, limit)
+    }
+
+    pub fn learn_taste(&self) -> AppResult<TasteReport> {
+        priority::learn_taste(&mut self.open()?, Utc::now())
+    }
+
+    pub fn record_taste_feedback(
+        &self,
+        app_id: u32,
+        verdict: &str,
+        surface: &str,
+    ) -> AppResult<()> {
+        priority::record_taste_feedback(&self.open()?, app_id, verdict, surface)
+    }
+
+    pub fn save_upcoming_releases(
+        &self,
+        items: &[ImportedUpcomingRelease],
+    ) -> AppResult<UpcomingImportSummary> {
+        priority::upsert_upcoming(&mut self.open()?, items)
+    }
+
+    pub fn score_upcoming_releases(&self) -> AppResult<usize> {
+        priority::score_upcoming(&mut self.open()?, Utc::now())
+    }
+
+    pub fn list_upcoming_releases(&self, limit: u32) -> AppResult<Vec<UpcomingRelease>> {
+        priority::list_upcoming(&self.open()?, limit)
+    }
+
+    pub fn dismiss_upcoming_release(&self, app_id: u32) -> AppResult<()> {
+        priority::dismiss_upcoming(&self.open()?, app_id)
+    }
+
+    // --- Precio observado -------------------------------------------------
+
+    pub fn record_price_observation(
+        &self,
+        observation: &PriceObservation,
+        now: DateTime<Utc>,
+    ) -> AppResult<RecordedPrice> {
+        pricing::record_observation(&mut self.open()?, observation, now)
+    }
+
+    pub fn game_prices(&self, app_id: u32, now: DateTime<Utc>) -> AppResult<Vec<GamePrice>> {
+        pricing::prices_for_game(&self.open()?, app_id, now)
+    }
+
+    pub fn game_price_history(
+        &self,
+        app_id: u32,
+        currency: &str,
+        limit: u32,
+    ) -> AppResult<PriceHistory> {
+        pricing::price_history(&self.open()?, app_id, currency, limit)
+    }
+
+    pub fn wishlist_price_statuses(
+        &self,
+        now: DateTime<Utc>,
+    ) -> AppResult<Vec<WishlistPriceStatus>> {
+        pricing::wishlist_price_statuses(&self.open()?, now)
+    }
+
+    pub fn stale_wishlist_price_targets(
+        &self,
+        now: DateTime<Utc>,
+        limit: u32,
+    ) -> AppResult<Vec<u32>> {
+        pricing::stale_wishlist_app_ids(&self.open()?, now, limit)
+    }
+
+    pub fn forget_game_prices(&self, app_id: u32) -> AppResult<()> {
+        pricing::forget_prices(&mut self.open()?, app_id)
+    }
+
+    // --- Archivado --------------------------------------------------------
+
+    pub fn archive_games(
+        &self,
+        app_ids: &[u32],
+        reason: &str,
+        now: DateTime<Utc>,
+    ) -> AppResult<ArchiveReport> {
+        archive::archive_games(&mut self.open()?, app_ids, reason, now)
+    }
+
+    pub fn unarchive_games(&self, app_ids: &[u32]) -> AppResult<ArchiveReport> {
+        archive::unarchive_games(&mut self.open()?, app_ids)
+    }
+
+    pub fn archived_games(&self, limit: u32, offset: u32) -> AppResult<PagedArchivedGames> {
+        archive::list_archived(&self.open()?, limit, offset)
+    }
+
+    pub fn archived_game_count(&self) -> AppResult<i64> {
+        archive::count(&self.open()?)
+    }
+
+    pub fn is_game_archived(&self, app_id: u32) -> AppResult<bool> {
+        archive::is_archived(&self.open()?, app_id)
+    }
+
+    // --- Vistas guardadas ---------------------------------------------------
+
+    pub fn list_saved_views(&self) -> AppResult<Vec<SavedView>> {
+        saved_views::list(&self.open()?)
+    }
+
+    pub fn save_saved_view(&self, input: &SaveViewInput) -> AppResult<SavedView> {
+        saved_views::save(&mut self.open()?, input)
+    }
+
+    pub fn delete_saved_view(&self, view_id: &str) -> AppResult<()> {
+        saved_views::delete(&mut self.open()?, view_id)
+    }
+
+    pub fn reorder_saved_views(&self, ordered_ids: &[String]) -> AppResult<()> {
+        saved_views::reorder(&mut self.open()?, ordered_ids)
+    }
+
+    pub fn mark_saved_view_used(&self, view_id: &str) -> AppResult<SavedView> {
+        saved_views::mark_used(&self.open()?, view_id)
+    }
+
+    // --- Listas curadas -----------------------------------------------------
+
+    pub fn list_curated_lists(&self) -> AppResult<Vec<CuratedList>> {
+        curated::list_curated_lists(&self.open()?)
+    }
+
+    pub fn save_curated_list(&self, input: &SaveCuratedListInput) -> AppResult<CuratedList> {
+        curated::save_curated_list(&mut self.open()?, input)
+    }
+
+    pub fn delete_curated_list(&self, list_id: &str) -> AppResult<()> {
+        curated::delete_curated_list(&mut self.open()?, list_id)
+    }
+
+    pub fn reorder_curated_lists(&self, ordered_ids: &[String]) -> AppResult<()> {
+        curated::reorder_curated_lists(&mut self.open()?, ordered_ids)
+    }
+
+    pub fn curated_list_detail(
+        &self,
+        list_id: &str,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> AppResult<CuratedListDetail> {
+        curated::curated_list_detail(&self.open()?, list_id, limit, offset)
+    }
+
+    pub fn add_curated_game(&self, input: &AddCuratedGameInput) -> AppResult<()> {
+        curated::add_curated_game(&mut self.open()?, input)
+    }
+
+    pub fn update_curated_item(&self, input: &UpdateCuratedItemInput) -> AppResult<()> {
+        curated::update_curated_item(&mut self.open()?, input)
+    }
+
+    pub fn remove_curated_game(&self, list_id: &str, app_id: u32) -> AppResult<()> {
+        curated::remove_curated_game(&mut self.open()?, list_id, app_id)
+    }
+
+    pub fn move_curated_item(
+        &self,
+        list_id: &str,
+        app_id: u32,
+        before_app_id: Option<u32>,
+    ) -> AppResult<()> {
+        curated::move_curated_item(&mut self.open()?, list_id, app_id, before_app_id)
+    }
+
+    pub fn reorder_curated_items(&self, list_id: &str, ordered_app_ids: &[u32]) -> AppResult<()> {
+        curated::reorder_curated_items(&mut self.open()?, list_id, ordered_app_ids)
+    }
+
+    // --- Deseados y vídeos --------------------------------------------------
+
+    pub fn wishlist_overview(&self) -> AppResult<WishlistOverview> {
+        wishlist::wishlist_overview(&self.open()?)
+    }
+
+    pub fn save_wishlist_entry(&self, input: &SaveWishlistEntryInput) -> AppResult<WishlistEntry> {
+        wishlist::save_wishlist_entry(&mut self.open()?, input)
+    }
+
+    pub fn remove_wishlist_entry(&self, app_id: u32) -> AppResult<()> {
+        wishlist::remove_wishlist_entry(&mut self.open()?, app_id)
+    }
+
+    pub fn move_wishlist_entry(
+        &self,
+        app_id: u32,
+        bucket: &str,
+        before_app_id: Option<u32>,
+    ) -> AppResult<()> {
+        wishlist::move_wishlist_entry(&mut self.open()?, app_id, bucket, before_app_id)
+    }
+
+    pub fn reorder_wishlist_bucket(&self, bucket: &str, ordered_app_ids: &[u32]) -> AppResult<()> {
+        wishlist::reorder_wishlist_bucket(&mut self.open()?, bucket, ordered_app_ids)
+    }
+
+    pub fn import_steam_wishlist(
+        &self,
+        games: &[ImportedWishlistGame],
+    ) -> AppResult<WishlistImportReport> {
+        wishlist::import_steam_wishlist(&mut self.open()?, games)
+    }
+
+    pub fn list_game_videos(&self, app_id: u32, kind: Option<&str>) -> AppResult<Vec<GameVideo>> {
+        wishlist::list_game_videos(&self.open()?, app_id, kind)
+    }
+
+    pub fn save_game_video(&self, input: &SaveGameVideoInput) -> AppResult<GameVideo> {
+        wishlist::save_game_video(&mut self.open()?, input)
+    }
+
+    pub fn delete_game_video(&self, app_id: u32, provider: &str, video_id: &str) -> AppResult<()> {
+        wishlist::delete_game_video(&mut self.open()?, app_id, provider, video_id)
+    }
+
+    pub fn reorder_game_videos(
+        &self,
+        app_id: u32,
+        kind: &str,
+        ordered: &[GameVideoRef],
+    ) -> AppResult<()> {
+        wishlist::reorder_game_videos(&mut self.open()?, app_id, kind, ordered)
+    }
+
+    pub fn list_game_dlc(&self, app_id: u32, filter: DlcFilter) -> AppResult<Vec<GameDlc>> {
+        dlc::list_dlc(&self.open()?, app_id, filter)
+    }
+
+    pub fn game_dlc_summary(&self, app_id: u32) -> AppResult<DlcSummary> {
+        dlc::dlc_summary(&self.open()?, app_id)
+    }
+
+    pub fn save_game_dlc(&self, app_id: u32, items: &[ImportedDlc]) -> AppResult<DlcImportSummary> {
+        dlc::upsert_dlc_batch(&mut self.open()?, app_id, items)
+    }
+
+    pub fn claim_game_dlc_refresh(
+        &self,
+        app_id: u32,
+        limit: usize,
+    ) -> AppResult<Vec<DlcRefreshCandidate>> {
+        dlc::claim_game_dlc_refresh_candidates(&mut self.open()?, app_id, limit)
+    }
+
+    pub fn mark_game_dlc_failed(&self, app_id: u32, dlc_app_id: u32) -> AppResult<()> {
+        dlc::mark_dlc_metadata_failed(&self.open()?, app_id, dlc_app_id)
+    }
+
+    pub fn set_game_dlc_owned(&self, app_id: u32, dlc_app_id: u32, owned: bool) -> AppResult<GameDlc> {
+        dlc::set_dlc_owned(&self.open()?, app_id, dlc_app_id, owned)
+    }
+
+    pub fn set_game_dlc_hidden(
+        &self,
+        app_id: u32,
+        dlc_app_id: u32,
+        hidden: bool,
+    ) -> AppResult<GameDlc> {
+        dlc::set_dlc_hidden(&self.open()?, app_id, dlc_app_id, hidden)
+    }
+
+    pub fn set_game_dlc_installed(
+        &self,
+        app_id: u32,
+        dlc_app_id: u32,
+        installed: bool,
+    ) -> AppResult<GameDlc> {
+        dlc::set_dlc_installed(&self.open()?, app_id, dlc_app_id, installed)
     }
 
     pub fn family_catalog_game(&self, app_id: u32) -> AppResult<FamilyCatalogGame> {
@@ -1231,6 +1764,7 @@ fn seed_defaults(connection: &mut Connection) -> AppResult<()> {
         ("density", "compact"),
         ("periodic_sync_minutes", "0"),
         ("confirm_uninstall", "true"),
+        ("art_cache_mib", "512"),
     ];
     for (key, value) in settings {
         transaction.execute(
@@ -1311,6 +1845,60 @@ mod durability_tests {
             checkpoint: Some("Campamento".to_string()),
             notes: Some("Decisiones pendientes".to_string()),
         }
+    }
+
+    #[test]
+    fn sync_runs_record_and_list_newest_first() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = database_at(&directory, "sync-runs.sqlite3");
+
+        database
+            .record_sync_run(
+                "local",
+                "success",
+                "2026-08-15T10:00:00Z",
+                "2026-08-15T10:00:04Z",
+                12,
+                3,
+                None,
+            )
+            .expect("registrar importación local");
+        database
+            .record_sync_run(
+                "steam",
+                "error",
+                "2026-08-15T11:00:00Z",
+                "2026-08-15T11:00:01Z",
+                0,
+                0,
+                Some("steam_network"),
+            )
+            .expect("registrar fallo de sync");
+        database
+            .record_sync_run(
+                "steam",
+                "success",
+                "2026-08-15T12:00:00Z",
+                "2026-08-15T12:00:09Z",
+                4,
+                1810,
+                None,
+            )
+            .expect("registrar sync correcta");
+
+        let runs = database.list_sync_runs(8).expect("listar historial");
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[0].source, "steam");
+        assert_eq!(runs[0].status, "success");
+        assert_eq!(runs[0].updated_count, 1810);
+        assert_eq!(runs[1].status, "error");
+        assert_eq!(runs[1].error_message.as_deref(), Some("steam_network"));
+        assert_eq!(runs[2].source, "local");
+        assert_eq!(runs[2].imported_count, 12);
+
+        let limited = database.list_sync_runs(1).expect("limitar historial");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].started_at, "2026-08-15T12:00:00Z");
     }
 
     #[test]

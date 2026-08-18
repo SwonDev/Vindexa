@@ -1,0 +1,1324 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Ficha de juego — banner a color y descripciones estructuradas.
+
+   Este archivo se importa desde `GameDetailSheet.tsx` y llega al bundle ANTES
+   que `src/index.css` (main.tsx importa `App` antes que la hoja global), así
+   que cada regla que sustituye a otra de `index.css` usa especificidad
+   estrictamente mayor. No dependas del orden de cascada aquí.
+
+   Reglas de estilo del proyecto: radios 0–4 px (prohibido `rounded-full`),
+   movimiento de 120–260 ms sobre `transform`/`opacity`, números tabulares.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. Banner ──────────────────────────────────────────────────────────────
+   El banner se veía apagado porque el degradado antiguo llegaba a
+   `var(--card)` OPACO al 100 % y ya iba al 50 % a media altura: borraba el
+   color de toda la mitad inferior. Ahora el color original se respeta en los
+   dos tercios superiores, la legibilidad se resuelve en el tercio inferior
+   (donde vive el texto) y el último tramo cierra exactamente sobre el color de
+   la barra de acciones, de modo que no hay banda ni corte visible.          */
+
+.detail-hero .detail-hero__media {
+  /* Holgura suficiente para que el parallax (hasta 58 px) nunca descubra el
+     borde superior del banner. */
+  inset: -64px 0 -16px;
+}
+
+.detail-hero .detail-hero__media .artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Realce mínimo: devuelve el color que perdía el scrim sin volverse
+     estridente. Nada de desaturar. */
+  filter: saturate(1.04);
+}
+
+.detail-hero .detail-hero__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgb(10 14 19 / 0%) 0%,
+    rgb(10 14 19 / 0%) 44%,
+    rgb(10 14 19 / 6%) 54%,
+    rgb(10 14 19 / 18%) 63%,
+    rgb(11 15 20 / 34%) 71%,
+    rgb(12 16 21 / 52%) 78%,
+    rgb(14 18 23 / 68%) 85%,
+    rgb(20 25 31 / 84%) 92%,
+    rgb(30 37 46 / 96%) 97.5%,
+    var(--v-surface-raised) 100%
+  );
+}
+
+/* Capa de contraste local: sólo cubre el bloque de texto, así el resto del
+   banner conserva su color. Su borde superior se difumina en 34 px para que no
+   se lea como una caja. */
+.game-detail-sheet .detail-hero [data-slot="sheet-header"] {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  left: 22px;
+  z-index: 1;
+  isolation: isolate;
+  gap: 6px;
+  /* El bloque ya está posicionado con `inset`; el `p-4` de SheetHeader sólo
+     empujaba el texto hacia la zona clara del banner. */
+  padding: 0;
+}
+
+.game-detail-sheet .detail-hero [data-slot="sheet-header"]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -78px -20px -14px -20px;
+  background:
+    linear-gradient(90deg, rgb(8 12 16 / 14%) 0%, rgb(8 12 16 / 6%) 72%, rgb(8 12 16 / 0%) 100%),
+    linear-gradient(
+      180deg,
+      rgb(8 12 16 / 0%) 0,
+      rgb(8 12 16 / 8%) 24px,
+      rgb(8 12 16 / 26%) 44px,
+      rgb(8 12 16 / 44%) 60px,
+      rgb(8 12 16 / 52%) 72px,
+      rgb(8 12 16 / 52%) 100%
+    );
+  /* La capa horizontal tiene la misma opacidad a todas las alturas, así que su
+     borde superior era un corte seco que partía el banner por la mitad. La
+     máscara desvanece **las dos** capas a la vez, de modo que la caja no puede
+     empezar con un canto visible por mucho que se ajusten sus degradados. */
+  mask-image: linear-gradient(180deg, transparent 0, #000 62px, #000 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 62px, #000 100%);
+}
+
+.game-detail-sheet .detail-hero [data-slot="sheet-header"] h2 {
+  max-width: 88%;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1.15;
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 58%),
+    0 2px 14px rgb(0 0 0 / 46%);
+}
+
+/* Las etiquetas viven ahora sobre la parte intacta del banner, así que cada
+   una lleva su propio fondo: `variant="outline"` era ilegible sobre arte
+   claro. El color del borde de estado sigue llegando por estilo en línea. */
+.game-detail-sheet .detail-hero .detail-hero__badges [data-slot="badge"] {
+  border-color: rgb(238 238 240 / 24%);
+  background: rgb(9 13 17 / 82%);
+  color: #eeeef0;
+  backdrop-filter: blur(6px);
+}
+
+/* ── 2. Descripción estructurada ───────────────────────────────────────────
+   `detail-overview` conserva su caja (`flex: 0 0 auto`, ancho de 920 px y
+   separador inferior). `detail-about` reordena su interior: columna de lectura
+   con medida de línea acotada a la izquierda y etiquetas a la derecha.      */
+
+/* Una sola columna: reservar una banda lateral para dos o tres etiquetas de
+   género dejaba más de la mitad del bloque vacío. Las etiquetas viven ahora en
+   el flujo del texto, justo bajo el encabezado. */
+.detail-overview.detail-about {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 20px 22px 22px;
+}
+
+.detail-about__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  order: -1;
+}
+
+.detail-about__copy {
+  min-width: 0;
+}
+
+.detail-about__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.detail-about__head h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.detail-about__head .eyebrow {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+.detail-about__prose {
+  position: relative;
+  /* Debe coincidir con `PROSE_CLAMP_PX` de GameDetailSheet.tsx. */
+  --detail-prose-clamp: 248px;
+  max-width: 37em;
+  color: #c3cdd1;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.detail-about__prose[data-collapsed="true"] {
+  max-height: var(--detail-prose-clamp, 248px);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 0 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0 72%, transparent 100%);
+}
+
+.detail-about__lead {
+  margin: 0 0 12px;
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.detail-about__prose p {
+  margin: 0 0 10px;
+}
+
+.detail-about__prose p:last-child {
+  margin-bottom: 0;
+}
+
+.detail-about__prose h4 {
+  margin: 16px 0 6px;
+  color: #dfe6e8;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-about__prose :is(ul, ol) {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  list-style-position: outside;
+}
+
+.detail-about__prose ul {
+  list-style-type: disc;
+}
+
+.detail-about__prose ol {
+  list-style-type: decimal;
+}
+
+.detail-about__prose li {
+  margin-bottom: 4px;
+}
+
+.detail-about__prose li::marker {
+  color: var(--v-cyan);
+}
+
+.detail-about__toggle {
+  height: auto;
+  margin-top: 8px;
+  padding: 0;
+  color: var(--v-cyan);
+  font-size: 11px;
+}
+
+.detail-about__toggle svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 160ms var(--ease-out);
+}
+
+.detail-about__toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.detail-about__state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  max-width: 37em;
+  color: var(--v-muted);
+  font-size: 13px;
+}
+
+.detail-about .detail-about__tags {
+  display: flex;
+  align-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+  /* El relleno superior de `.detail-overview__tags` compensaba una cabecera
+     que ahora vive dentro de la columna de lectura. */
+  padding-top: 0;
+}
+
+/* ── 3. Especificaciones ───────────────────────────────────────────────────
+   Sólo se dibuja lo que existe: no hay filas con «—» ni con «Desconocido».  */
+
+.detail-specs {
+  flex: 0 0 auto;
+  width: min(100%, 920px);
+  margin: 0 auto;
+  padding: 16px 22px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-specs > h3,
+.detail-media > h3 {
+  margin: 0 0 10px;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.detail-specs__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 1px;
+}
+
+.detail-spec {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 32px;
+  padding: 7px 10px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.detail-spec > dt {
+  display: flex;
+  align-items: center;
+  flex: 0 0 152px;
+  gap: 5px;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detail-spec > dt svg {
+  width: 13px;
+  height: 13px;
+}
+
+.detail-spec > dd {
+  margin: 0;
+  color: #dfe6e8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+.detail-spec--wide {
+  grid-column: 1 / -1;
+}
+
+.detail-spec__score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-spec__score > span {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.62;
+}
+
+.detail-spec__score[data-band="high"] {
+  border-color: color-mix(in srgb, var(--v-lime) 46%, var(--border));
+  color: #c3e04f;
+}
+
+.detail-spec__score[data-band="mid"] {
+  border-color: color-mix(in srgb, var(--v-warning) 46%, var(--border));
+  color: var(--v-warning);
+}
+
+.detail-spec__score[data-band="low"] {
+  border-color: color-mix(in srgb, var(--destructive) 46%, var(--border));
+  color: #f2a2a2;
+}
+
+.detail-drm {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--v-surface-raised) 60%, transparent);
+  color: #dfe6e8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: help;
+  font-family: inherit;
+}
+
+.detail-drm svg {
+  width: 13px;
+  height: 13px;
+}
+
+.detail-drm[data-state="drm_free"] {
+  border-color: color-mix(in srgb, var(--v-lime) 50%, var(--border));
+  color: #c3e04f;
+}
+
+.detail-drm[data-state="third_party_drm"] {
+  border-color: color-mix(in srgb, var(--v-warning) 50%, var(--border));
+  color: var(--v-warning);
+}
+
+.detail-drm__evidence {
+  margin: 4px 0 0;
+  padding-left: 14px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.detail-spec__languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.detail-spec__language {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--v-surface-raised) 55%, transparent);
+  font-size: 11px;
+}
+
+/* ── 4. Medios ─────────────────────────────────────────────────────────── */
+
+.detail-media {
+  flex: 0 0 auto;
+  width: min(100%, 920px);
+  margin: 0 auto;
+  padding: 16px 22px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-media__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detail-media__item {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #151a20;
+}
+
+.detail-media__item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 200ms var(--ease-out);
+}
+
+button.detail-media__item {
+  cursor: pointer;
+}
+
+button.detail-media__item:hover img,
+button.detail-media__item:focus-visible img {
+  transform: scale(1.03);
+}
+
+.detail-media__badge {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid rgb(238 238 240 / 22%);
+  border-radius: 2px;
+  background: rgb(9 13 17 / 82%);
+  color: #eeeef0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.detail-media__badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.detail-media__more {
+  margin-top: 8px;
+  color: var(--v-cyan);
+  font-size: 11px;
+}
+
+/* ── 5. Adaptación y movimiento ───────────────────────────────────────── */
+
+@media (width <= 1180px) {
+  .detail-overview.detail-about {
+    /* `.detail-overview` de index.css ya colapsa a una columna en este ancho,
+       pero `.detail-overview.detail-about` gana por especificidad: hay que
+       repetir el colapso aquí. */
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 16px 16px 18px;
+  }
+
+  .detail-about .detail-about__tags {
+    margin-top: 4px;
+  }
+
+  .detail-specs,
+  .detail-media {
+    padding: 14px 16px 16px;
+  }
+
+  .detail-specs__list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-about__toggle svg,
+  .detail-media__item img {
+    transition: none;
+  }
+
+  button.detail-media__item:hover img,
+  button.detail-media__item:focus-visible img {
+    transform: none;
+  }
+}
+
+/* ── 6. Tipografía del hero ────────────────────────────────────────────────
+   Va al final del archivo a propósito: son selectores de mayor especificidad
+   sobre `.eyebrow` y `p`, y colocarlos antes dispararía la regla de
+   especificidad descendente de Biome.                                       */
+
+/* Sobre el arte el antetítulo conserva su color; lo que cambia es la sombra,
+   que es la que le devuelve el contraste que le quita la imagen. */
+.game-detail-sheet .detail-hero [data-slot="sheet-header"] .eyebrow {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 62%);
+}
+
+.game-detail-sheet .detail-hero [data-slot="sheet-header"] p {
+  color: #dfe6e8;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 58%);
+}
+
+/* Una acción destructiva se anuncia como tal y se separa del grupo seguro: el
+   `DESIGN.md` reserva el rojo de error para «acciones destructivas con icono y
+   texto», y `Desinstalar` estaba a un tabulador de `Jugar` con el mismo peso. */
+.detail-action--destructive {
+  margin-inline-start: auto;
+  border: 1px solid color-mix(in srgb, var(--destructive) 35%, transparent);
+  color: var(--v-error);
+}
+
+.detail-action--destructive:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--destructive) 62%, transparent);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  color: #f6d0d0;
+}
+
+/* Las pestañas se agrupan a la izquierda: repartidas de borde a borde con 250 px
+   de hueco se leen como cuatro títulos sueltos, no como un grupo. */
+.game-detail-sheet [data-slot="tabs-list"] {
+  justify-content: flex-start;
+  gap: 24px;
+}
+
+/* Tira de métricas: todas las celdas alineadas a la izquierda y con la misma
+   estructura, para que la fila se lea como una tabla y no como seis fichas. */
+.game-detail-sheet .detail-metrics > * {
+  text-align: start;
+  align-items: start;
+}
+
+/* Campo con unidad: el número y su magnitud viajan juntos. */
+.detail-form__measure {
+  position: relative;
+  display: block;
+}
+
+.detail-form__measure input {
+  padding-inline-end: 38px;
+}
+
+.detail-form__measure em {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-style: normal;
+  pointer-events: none;
+}
+
+.detail-form__hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ── 7. Prioridad explicable ───────────────────────────────────────────────
+   La prioridad no es un número que aparece solo: se explica entera. La cifra
+   efectiva preside el bloque, la frase del backend la justifica, cada señal
+   enseña su aporte con el signo por delante y la última línea deja la suma
+   comprobable a ojo. El azul no aparece en ninguna etiqueta pasiva: lo que
+   sube usa el lima de progreso y lo que baja el ámbar de aviso, y ambos van
+   siempre acompañados del signo y de un texto para lectores de pantalla.   */
+
+.priority-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--v-surface-raised);
+}
+
+.priority-panel--loading,
+.priority-panel--error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.priority-panel--error {
+  border-color: color-mix(in srgb, var(--destructive) 52%, var(--border));
+  color: #f2a2a2;
+  font-size: 12px;
+}
+
+.priority-panel--error svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.priority-panel--error div {
+  flex: 1;
+}
+
+.priority-panel--error p {
+  margin: 3px 0 0;
+  color: var(--v-muted);
+}
+
+.priority-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.priority-panel__heading h3 {
+  margin: 0;
+  color: #dfe6e8;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.priority-panel__caption {
+  margin: 2px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.priority-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin: 0;
+  color: #dfe6e8;
+  font-variant-numeric: tabular-nums;
+}
+
+.priority-score__value {
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.priority-score__scale {
+  color: var(--v-subtle);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.priority-meter {
+  position: relative;
+  overflow: hidden;
+  height: 4px;
+  border-radius: 1px;
+  background: #202832;
+}
+
+.priority-meter > i {
+  position: absolute;
+  inset: 0;
+  background: var(--v-lime);
+  transform: scaleX(var(--priority-meter-fill, 0));
+  transform-origin: left center;
+  transition: transform 220ms var(--ease-out);
+}
+
+.priority-panel__reason {
+  margin: 0;
+  max-width: 60ch;
+  color: #dfe6e8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.priority-verdicts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+}
+
+.priority-verdict {
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.priority-verdict[data-leading="true"] {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--v-lime) 44%, var(--border));
+}
+
+.priority-verdict > span {
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.priority-verdict > strong {
+  color: #dfe6e8;
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.priority-verdict > em {
+  color: var(--v-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.priority-verdict[data-leading="true"] > em {
+  color: #c3e04f;
+}
+
+.priority-override {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--v-warning);
+  background: color-mix(in srgb, var(--v-warning) 12%, transparent);
+  color: #dfe6e8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.priority-override svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--v-warning);
+}
+
+.priority-lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--card);
+}
+
+.priority-lock__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.priority-lock__copy strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #dfe6e8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.priority-lock__copy strong svg {
+  width: 13px;
+  height: 13px;
+  color: var(--v-subtle);
+}
+
+.priority-lock__copy span {
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.priority-panel__failure {
+  margin: 0;
+  color: #f2a2a2;
+  font-size: 11px;
+}
+
+.priority-panel__empty {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.priority-signals h4 {
+  margin: 0 0 4px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.priority-signals__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.priority-signal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px 58px;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 5px 0;
+  border-top: 1px solid #303944;
+}
+
+.priority-signal__detail {
+  color: #cbd4d7;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.priority-signal__bar {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  height: 8px;
+  background: #202832;
+}
+
+.priority-signal__bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+}
+
+.priority-signal__bar > i {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 50%;
+  transform: scaleX(var(--priority-signal-fill, 0));
+  transition: transform 200ms var(--ease-out);
+}
+
+.priority-signal__weight {
+  color: #cbd4d7;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.priority-signal[data-direction="up"] .priority-signal__bar > i {
+  left: 50%;
+  background: #c3e04f;
+  transform-origin: left center;
+}
+
+.priority-signal[data-direction="down"] .priority-signal__bar > i {
+  right: 50%;
+  background: var(--v-warning);
+  transform-origin: right center;
+}
+
+.priority-signal[data-direction="up"] .priority-signal__weight {
+  color: #c3e04f;
+}
+
+.priority-signal[data-direction="down"] .priority-signal__weight {
+  color: var(--v-warning);
+}
+
+.priority-signals__more {
+  height: auto;
+  margin-top: 6px;
+  padding: 0;
+  color: var(--v-cyan);
+  font-size: 11px;
+}
+
+.priority-signals__more svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 160ms var(--ease-out);
+}
+
+.priority-signals__more[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.priority-arithmetic {
+  margin: 8px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+.priority-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #303944;
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+/* ── 8. Contenido adicional ────────────────────────────────────────────────
+   «Sin confirmar» nunca se escribe como «no lo tienes»: la única prueba local
+   es el manifiesto de Steam y hay contenido que no deja depósito propio. El
+   importe pendiente tampoco es un total cerrado, así que se anuncia como «al
+   menos» y se dice cuánto se quedó fuera de la suma.                        */
+
+.dlc-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.dlc-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dlc-panel__heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #dfe6e8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dlc-panel__heading h3 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--v-subtle);
+}
+
+.dlc-panel__heading p {
+  margin: 3px 0 0;
+  max-width: 62ch;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dlc-pending {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--v-surface-raised);
+}
+
+.dlc-pending--settled {
+  color: var(--v-muted);
+  font-size: 12px;
+}
+
+.dlc-pending[data-open] {
+  border-left: 2px solid var(--v-warning);
+}
+
+.dlc-pending__label {
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dlc-pending__value {
+  color: #dfe6e8;
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.dlc-pending__caveat {
+  margin: 2px 0 0;
+  max-width: 62ch;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dlc-evidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-left: 2px solid var(--v-warning);
+  background: color-mix(in srgb, var(--v-warning) 11%, transparent);
+}
+
+.dlc-evidence > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--v-warning);
+}
+
+.dlc-evidence strong {
+  display: block;
+  color: #dfe6e8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dlc-evidence p {
+  margin: 3px 0 0;
+  max-width: 62ch;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dlc-evidence code {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dlc-evidence__rule b {
+  color: #dfe6e8;
+  font-weight: 600;
+}
+
+.dlc-receipt {
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+.dlc-panel__failure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #f2a2a2;
+  font-size: 11px;
+}
+
+.dlc-panel__empty {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--v-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dlc-filters {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.dlc-filters__legend {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dlc-filters__legend b {
+  color: #dfe6e8;
+  font-weight: 600;
+}
+
+.dlc-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 1px;
+  list-style: none;
+}
+
+.dlc-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 9px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.dlc-row[data-hidden] {
+  opacity: 0.62;
+}
+
+.dlc-row__art {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 84px;
+  aspect-ratio: 231 / 87;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #151a20;
+}
+
+.dlc-row__art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dlc-row__art-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--v-subtle);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.dlc-row__main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dlc-row__title {
+  overflow: hidden;
+  color: #dfe6e8;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dlc-row__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dlc-row__unconfirmed {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--v-warning) 46%, var(--border));
+  border-radius: 2px;
+  color: var(--v-warning);
+  font-weight: 600;
+  cursor: help;
+}
+
+.dlc-row__flag {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--v-subtle);
+}
+
+.dlc-row__price {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  color: #cbd4d7;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.dlc-row__price-unknown {
+  color: var(--v-subtle);
+  font-weight: 400;
+}
+
+.dlc-row__discount {
+  padding: 0 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--v-lime) 20%, transparent);
+  color: #c3e04f;
+  font-size: 10px;
+}
+
+.dlc-row__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dlc-flag-button {
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.dlc-flag-button[data-on] {
+  border: 1px solid color-mix(in srgb, var(--v-lime) 46%, var(--border));
+  color: #c3e04f;
+}
+
+.detail-tab-count {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+@media (width <= 1180px) {
+  .dlc-counters {
+    --metric-strip-columns: 3;
+  }
+
+  .dlc-row {
+    grid-template-columns: 68px minmax(0, 1fr);
+    row-gap: 6px;
+  }
+
+  .dlc-row__art {
+    width: 68px;
+  }
+
+  .dlc-row__price,
+  .dlc-row__controls {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .priority-signal {
+    grid-template-columns: minmax(0, 1fr) 72px 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priority-meter > i,
+  .priority-signal__bar > i,
+  .priority-signals__more svg {
+    transition: none;
+  }
+}
+
+.dlc-list__more {
+  height: auto;
+  justify-self: start;
+  padding: 0;
+  color: var(--v-cyan);
+  font-size: 11px;
+}

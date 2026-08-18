@@ -1,5 +1,13 @@
-import { DndContext, type DragStartEvent } from "@dnd-kit/core";
-import { render, screen } from "@testing-library/react";
+import {
+  DndContext,
+  type DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +16,8 @@ import type { GameSummary, LibraryView } from "@/lib/types";
 
 vi.mock("@/components/common/Artwork", () => ({
   Artwork: ({ title }: { title: string }) => <div aria-hidden="true">{title}</div>,
+  // La precarga es una mejora de tiempos: en pruebas basta con que exista.
+  prefetchArtwork: () => undefined,
 }));
 
 vi.mock("@/lib/tauri", () => ({
@@ -33,6 +43,7 @@ vi.mock("@tanstack/react-virtual", () => ({
       })),
     getTotalSize: () => count * 58,
     measure: vi.fn(),
+    scrollToIndex: vi.fn(),
   }),
 }));
 
@@ -53,6 +64,27 @@ const game: GameSummary = {
   manualPosition: 0,
 };
 
+/** Reproduce exactamente los sensores que monta `LibraryScreen`: el umbral de
+ *  8 píxeles es lo que permite que toda la carátula sea arrastrable sin robarle
+ *  el clic simple a la selección. */
+function LibraryDndHarness({
+  onDragStart,
+  children,
+}: {
+  onDragStart: (event: DragStartEvent) => void;
+  children: React.ReactNode;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  return (
+    <DndContext sensors={sensors} onDragStart={onDragStart}>
+      {children}
+    </DndContext>
+  );
+}
+
 function renderBrowser(
   view: LibraryView = "grid",
   onDragStart = vi.fn<(event: DragStartEvent) => void>(),
@@ -60,7 +92,7 @@ function renderBrowser(
   const onOpen = vi.fn();
   const onSelect = vi.fn();
   render(
-    <DndContext onDragStart={onDragStart}>
+    <LibraryDndHarness onDragStart={onDragStart}>
       <TooltipProvider>
         <GameBrowser
           games={[game]}
@@ -75,7 +107,7 @@ function renderBrowser(
           manualPositioning
         />
       </TooltipProvider>
-    </DndContext>,
+    </LibraryDndHarness>,
   );
   return { onDragStart, onOpen, onSelect };
 }
@@ -125,6 +157,40 @@ describe("interacción de ficha y activador de arrastre", () => {
     expect(onDragStart).toHaveBeenCalledTimes(1);
     expect(String(onDragStart.mock.calls[0]?.[0].active.id)).toBe("game:730");
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it.each<LibraryView>(["grid", "list"])(
+    "inicia el arrastre desde cualquier punto de la carátula en vista %s",
+    async (view) => {
+      const { onDragStart, onOpen } = renderBrowser(view);
+      const target = screen.getByRole("button", {
+        name: "Counter-Strike 2, Jugando, 25%",
+      });
+
+      fireEvent.pointerDown(target, {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        clientX: 40,
+        clientY: 40,
+      });
+      fireEvent.pointerMove(document, { pointerId: 1, clientX: 40, clientY: 80 });
+
+      expect(onDragStart).toHaveBeenCalledTimes(1);
+      expect(String(onDragStart.mock.calls[0]?.[0].active.id)).toBe("game:730");
+      expect(onOpen).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(document, { pointerId: 1 });
+    },
+  );
+
+  it("no dibuja ningún asa de arrastre visible sobre la carátula", () => {
+    renderBrowser();
+
+    expect(document.querySelector(".game-drag-handle")).toBeNull();
+    const activator = screen.getByRole("button", { name: "Arrastrar Counter-Strike 2" });
+    expect(activator).toHaveClass("game-drag-activator");
+    expect(activator).toBeEmptyDOMElement();
   });
 
   it("monta un ancla global estable cuando el orden manual está activo", () => {

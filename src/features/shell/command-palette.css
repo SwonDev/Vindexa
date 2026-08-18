@@ -1,0 +1,208 @@
+/*
+ * Paleta de comandos.
+ *
+ * La primitiva de `src/components/ui/command.tsx` llega con la geometría de
+ * shadcn —radios de 6 px, alturas cómodas, tipografía de 14 px—. Aquí se
+ * reescribe con la de Vindexa: bordes casi rectos, filas de 30 px y metadatos
+ * de 11 px, para que la paleta parezca parte de la biblioteca y no un widget
+ * invitado. Todo el color sale de los tokens de `src/index.css`; no hay ni un
+ * literal hexadecimal en esta hoja.
+ */
+
+.command-palette[data-slot="dialog-content"] {
+  width: min(680px, calc(100vw - 96px));
+  max-width: min(680px, calc(100vw - 96px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--card);
+  gap: 0;
+}
+
+.command-palette__surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(60vh, 480px);
+  padding: 0;
+  border-radius: 3px;
+  background: transparent;
+}
+
+/* Campo de búsqueda ------------------------------------------------------ */
+
+.command-palette__surface [data-slot="command-input-wrapper"] {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-palette__surface [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+  height: 42px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--background);
+}
+
+.command-palette__surface [data-slot="command-input"] {
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.command-palette__surface [data-slot="command-input"]::placeholder {
+  color: var(--v-subtle);
+}
+
+/* Lista y grupos --------------------------------------------------------- */
+
+.command-palette__list {
+  max-height: none;
+  padding: 4px 0 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.command-palette__group {
+  padding: 0;
+}
+
+.command-palette__group [cmdk-group-heading] {
+  padding: 9px 12px 4px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Filas ------------------------------------------------------------------ */
+
+.command-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: 0;
+  color: var(--v-muted);
+  font-size: 13px;
+  /* Sólo transform y opacidad: el fondo cambia de golpe para que la fila
+     seleccionada se lea en el mismo fotograma que la pulsación. */
+  transition:
+    transform 120ms var(--ease-out),
+    opacity 120ms var(--ease-out);
+}
+
+.command-palette__item svg {
+  flex: none;
+  color: var(--v-subtle);
+}
+
+.command-palette__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.command-palette__detail {
+  flex: none;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.command-palette__shortcut {
+  flex: none;
+  margin-left: 8px;
+  color: var(--v-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.command-palette__item[data-selected="true"] {
+  background: var(--v-surface-selected);
+  color: var(--foreground);
+  transform: translateX(1px);
+}
+
+.command-palette__item[data-selected="true"] svg,
+.command-palette__item[data-selected="true"] .command-palette__detail,
+.command-palette__item[data-selected="true"] .command-palette__shortcut {
+  color: var(--foreground);
+}
+
+/* La fila destructiva se marca con el icono, no invirtiendo el fondo: un rojo
+   pleno bajo texto claro no llegaría a AA. */
+.command-palette__item[data-destructive="true"] svg,
+.command-palette__item[data-selected="true"][data-destructive="true"] svg {
+  color: var(--v-error);
+}
+
+/* Estado vacío ----------------------------------------------------------- */
+
+.command-palette__empty {
+  display: grid;
+  gap: 3px;
+  padding: 26px 12px;
+  color: var(--v-muted);
+  text-align: center;
+}
+
+.command-palette__empty strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.command-palette__empty span {
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+/* Pie -------------------------------------------------------------------- */
+
+.command-palette__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 28px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.command-palette__footer kbd {
+  display: inline-block;
+  min-width: 15px;
+  padding: 1px 3px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--v-muted);
+  font:
+    600 10px / 1.2 Inter,
+    sans-serif;
+  text-align: center;
+}
+
+/* La preferencia del sistema anula el movimiento, no lo atenúa. No hace falta
+   forzar la prioridad de ninguna declaración: esta hoja no vive en ninguna capa
+   de Tailwind y las utilidades de `animate-in` sí, de modo que gana la cascada. */
+@media (prefers-reduced-motion: reduce) {
+  .command-palette[data-slot="dialog-content"],
+  .command-palette[data-slot="dialog-content"] * {
+    animation: none;
+    transition: none;
+  }
+
+  .command-palette__item[data-selected="true"][data-selected="true"] {
+    transform: none;
+  }
+}

@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   IconAlertCircle,
   IconBrandSteam,
+  IconBuildingStore,
   IconCheck,
   IconDatabase,
   IconDeviceDesktop,
@@ -21,7 +22,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import {
@@ -53,23 +54,28 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
+import { StoresPanel } from "@/features/settings/StoresPanel";
 import {
+  type AnyShortcutAction,
   DEFAULT_SHORTCUTS,
+  describeShortcutRejection,
   eventToShortcut,
   findShortcutCollision,
-  getReservedShortcutName,
+  LEGACY_SEARCH_SHORTCUT,
+  type LocalShortcutAction,
+  readLocalShortcuts,
+  resolveShortcuts,
+  SHORTCUT_CATALOGUE,
+  SHORTCUT_SCOPE_HINTS,
+  SHORTCUT_SCOPE_LABELS,
+  type ShortcutScope,
   shortcutLabel,
+  writeLocalShortcuts,
 } from "@/features/shell/shortcuts";
-import { formatBytes, formatDate } from "@/lib/format";
+import { formatBytes, formatDate, formatRelativeDate } from "@/lib/format";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
-import type {
-  AppBootstrap,
-  AppPreferences,
-  ShortcutAction,
-  ShortcutBindings,
-  SteamSyncResult,
-} from "@/lib/types";
+import type { AppBootstrap, AppPreferences, ShortcutBindings, SteamSyncResult } from "@/lib/types";
 
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(16, "Introduce una Web API Key válida.").max(128),
@@ -84,7 +90,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: SettingsDialogProps) {
   const [section, setSection] = useState<
-    "steam" | "organization" | "appearance" | "shortcuts" | "data" | "privacy" | "about"
+    "steam" | "stores" | "organization" | "appearance" | "shortcuts" | "data" | "privacy" | "about"
   >("steam");
   return (
     <Dialog open={dialogOpen} onOpenChange={onOpenChange}>
@@ -102,6 +108,12 @@ export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: Se
               icon={IconBrandSteam}
               label="Steam"
               onClick={() => setSection("steam")}
+            />
+            <SettingsNavItem
+              active={section === "stores"}
+              icon={IconBuildingStore}
+              label="Tiendas"
+              onClick={() => setSection("stores")}
             />
             <SettingsNavItem
               active={section === "organization"}
@@ -142,6 +154,7 @@ export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: Se
           </nav>
           <div className="settings-pane">
             {section === "steam" && <SteamSettings bootstrap={bootstrap} />}
+            {section === "stores" && <StoresPanel />}
             {section === "organization" && <OrganizationSettings bootstrap={bootstrap} />}
             {section === "appearance" && <AppearanceSettings bootstrap={bootstrap} />}
             {section === "shortcuts" && <ShortcutSettings bootstrap={bootstrap} />}
@@ -371,6 +384,12 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
       )}
       <SettingsDivider />
       <SettingsHeading
+        title="Historial de sincronización"
+        description="Últimas ejecuciones locales y de Steam, con su resultado."
+      />
+      <SyncHistory />
+      <SettingsDivider />
+      <SettingsHeading
         title="Web API Key"
         description="Algunas bibliotecas requieren una clave personal para obtener juegos y tiempo jugado. Se almacena en Keychain, nunca en SQLite ni en la interfaz."
       />
@@ -515,6 +534,7 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
       periodicSyncMinutes: 60,
       confirmUninstall: true,
       librarySort: "manual",
+      artCacheMib: 512,
       shortcuts: DEFAULT_SHORTCUTS,
     },
   );
@@ -565,6 +585,28 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
         />
       </SettingRow>
       <SettingRow
+        label="Caché de arte"
+        description="Vindexa guarda las portadas y los banners oficiales en su máxima resolución. Al llegar al techo, desaloja primero lo que hace más tiempo que no se ve."
+      >
+        <Select
+          value={String(preferences.artCacheMib)}
+          onValueChange={(mib) => update({ ...preferences, artCacheMib: Number(mib) })}
+        >
+          <SelectTrigger className="w-40" aria-label="Presupuesto de la caché de arte">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="128">128 MiB</SelectItem>
+            <SelectItem value="256">256 MiB</SelectItem>
+            <SelectItem value="512">512 MiB</SelectItem>
+            <SelectItem value="1024">1 GiB</SelectItem>
+            <SelectItem value="2048">2 GiB</SelectItem>
+            <SelectItem value="4096">4 GiB</SelectItem>
+            <SelectItem value="8192">8 GiB</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+      <SettingRow
         label="Sincronización periódica"
         description="Intervalo entre comprobaciones automáticas cuando Steam está vinculado."
       >
@@ -599,26 +641,18 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
   );
 }
 
-const shortcutNames: Record<ShortcutAction, string> = {
-  library: "Biblioteca",
-  planner: "Planificador",
-  collections: "Colecciones",
-  tracking: "Seguimiento",
-  search: "Buscar en la biblioteca",
-  sync: "Sincronizar con Steam",
-  closePanel: "Cerrar panel activo",
-};
+const SHORTCUT_SCOPES: readonly ShortcutScope[] = ["navigation", "library", "game"];
 
 function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
   const queryClient = useQueryClient();
-  const [bindings, setBindings] = useState<ShortcutBindings>(
-    bootstrap?.preferences.shortcuts ?? DEFAULT_SHORTCUTS,
-  );
-  const [recording, setRecording] = useState<ShortcutAction>();
+  const [overrides, setOverrides] =
+    useState<Partial<Record<LocalShortcutAction, string>>>(readLocalShortcuts);
+  const [recording, setRecording] = useState<AnyShortcutAction>();
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
-  useEffect(() => {
-    if (bootstrap) setBindings(bootstrap.preferences.shortcuts);
-  }, [bootstrap]);
+  const bindings = useMemo(
+    () => resolveShortcuts(bootstrap?.preferences.shortcuts, overrides),
+    [bootstrap?.preferences.shortcuts, overrides],
+  );
   const mutation = useMutation({
     mutationFn: (next: AppPreferences) => api.savePreferences(next),
     onSuccess: () => {
@@ -634,38 +668,51 @@ function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined 
       event.stopPropagation();
       const shortcut = eventToShortcut(event);
       if (!shortcut) return;
-      const reserved = getReservedShortcutName(shortcut);
-      if (reserved) {
-        setNotice({
-          kind: "error",
-          message: `${shortcutLabel(shortcut)} está reservado para ${reserved}.`,
-        });
+      const rejection = describeShortcutRejection(bindings, recording, shortcut);
+      if (rejection) {
+        setNotice({ kind: "error", message: rejection });
         setRecording(undefined);
         return;
       }
-      const collision = findShortcutCollision(bindings, recording, shortcut);
-      if (collision) {
-        setNotice({
-          kind: "error",
-          message: `${shortcutLabel(shortcut)} ya está asignado a ${shortcutNames[collision]}.`,
-        });
-        setRecording(undefined);
-        return;
-      }
-      const next = { ...bindings, [recording]: shortcut };
-      setBindings(next);
+      const descriptor = SHORTCUT_CATALOGUE.find((entry) => entry.action === recording);
       setRecording(undefined);
       setNotice(undefined);
-      if (bootstrap) mutation.mutate({ ...bootstrap.preferences, shortcuts: next });
+      if (descriptor?.persistence === "local") {
+        const next = { ...overrides, [recording as LocalShortcutAction]: shortcut };
+        setOverrides(next);
+        writeLocalShortcuts(next);
+        setNotice({ kind: "success", message: "Atajos guardados." });
+        return;
+      }
+      if (!bootstrap) return;
+      const persisted: ShortcutBindings = {
+        ...bootstrap.preferences.shortcuts,
+        [recording]: shortcut,
+      };
+      // `Mod+K` era el valor de fábrica de la búsqueda antes de existir la
+      // paleta. Si la nueva asignación choca con ese resto, se migra en el
+      // mismo guardado: Rust rechaza cualquier mapa con duplicados.
+      if (
+        persisted.search === LEGACY_SEARCH_SHORTCUT &&
+        findShortcutCollision(persisted, "search", persisted.search)
+      ) {
+        persisted.search = DEFAULT_SHORTCUTS.search;
+      }
+      mutation.mutate({ ...bootstrap.preferences, shortcuts: persisted });
     };
     window.addEventListener("keydown", capture, true);
     return () => window.removeEventListener("keydown", capture, true);
-  }, [bindings, bootstrap, mutation, recording]);
+  }, [bindings, bootstrap, mutation, overrides, recording]);
   const reset = () => {
-    setBindings(DEFAULT_SHORTCUTS);
     setRecording(undefined);
     setNotice(undefined);
-    if (bootstrap) mutation.mutate({ ...bootstrap.preferences, shortcuts: DEFAULT_SHORTCUTS });
+    setOverrides({});
+    writeLocalShortcuts({});
+    if (bootstrap) {
+      mutation.mutate({ ...bootstrap.preferences, shortcuts: { ...DEFAULT_SHORTCUTS } });
+    } else {
+      setNotice({ kind: "success", message: "Atajos guardados." });
+    }
   };
   return (
     <div className="settings-section">
@@ -674,30 +721,41 @@ function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined 
         description="Selecciona una acción y pulsa la nueva combinación. Las colisiones se rechazan antes de guardar."
       />
       {notice && <InlineNotice {...notice} />}
-      <div className="shortcut-list">
-        {(Object.keys(shortcutNames) as ShortcutAction[]).map((action) => (
-          <div className="shortcut-row" key={action}>
-            <span>{shortcutNames[action]}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant={recording === action ? "secondary" : "outline"}
-              aria-label={`Cambiar ${shortcutNames[action]}`}
-              aria-pressed={recording === action}
-              onClick={() => {
-                setNotice(undefined);
-                setRecording(action);
-              }}
-            >
-              {recording === action ? (
-                "Pulsa una combinación…"
-              ) : (
-                <kbd>{shortcutLabel(bindings[action])}</kbd>
-              )}
-            </Button>
+      {SHORTCUT_SCOPES.map((scope, index) => (
+        <Fragment key={scope}>
+          {index > 0 && <SettingsDivider />}
+          <SettingsHeading
+            title={SHORTCUT_SCOPE_LABELS[scope]}
+            description={SHORTCUT_SCOPE_HINTS[scope]}
+          />
+          <div className="shortcut-list">
+            {SHORTCUT_CATALOGUE.filter((entry) => entry.scope === scope).map((entry) => (
+              <div className="shortcut-row" key={entry.action}>
+                <span>{entry.label}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={recording === entry.action ? "secondary" : "outline"}
+                  aria-label={`Cambiar ${entry.label}`}
+                  aria-pressed={recording === entry.action}
+                  onClick={() => {
+                    setNotice(undefined);
+                    setRecording(entry.action);
+                  }}
+                >
+                  {recording === entry.action ? (
+                    "Pulsa una combinación…"
+                  ) : bindings[entry.action] ? (
+                    <kbd>{shortcutLabel(bindings[entry.action])}</kbd>
+                  ) : (
+                    "Sin asignar"
+                  )}
+                </Button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </Fragment>
+      ))}
       <div className="button-row">
         <Button
           type="button"
@@ -710,7 +768,9 @@ function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined 
         </Button>
       </div>
       <p className="settings-note">
-        Los atajos no se ejecutan mientras escribes en campos, áreas de texto o editores.
+        Los atajos no se ejecutan mientras escribes en campos, áreas de texto o editores. Los de
+        biblioteca y juego sólo actúan sobre la rejilla o la lista, nunca sobre el control que tenga
+        el foco en otra parte de la aplicación.
       </p>
     </div>
   );
@@ -741,6 +801,19 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
         void queryClient.invalidateQueries();
       }
     },
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
+  const maintainCache = useMutation({
+    mutationFn: api.maintainArtCache,
+    onSuccess: (report) =>
+      setNotice({
+        kind: "success",
+        message: `Caché depurada: ${report.removedFiles + report.evictedFiles} archivo${
+          report.removedFiles + report.evictedFiles === 1 ? "" : "s"
+        } liberado${report.removedFiles + report.evictedFiles === 1 ? "" : "s"}; ocupa ${formatBytes(
+          report.bytesAfter,
+        )}.`,
+      }),
     onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
   });
   const clearCache = useMutation({
@@ -793,7 +866,20 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
         >
           <IconRefresh /> Vaciar caché de imágenes
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => maintainCache.mutate()}
+          disabled={maintainCache.isPending}
+        >
+          <IconRefresh /> Depurar caché
+        </Button>
       </div>
+      <p className="settings-hint">
+        Vindexa guarda el arte oficial en su máxima resolución. Depurar elimina lo huérfano y
+        respeta el presupuesto en disco configurado en Apariencia; vaciar obliga a descargarlo todo
+        de nuevo bajo demanda.
+      </p>
       <SettingsDivider />
       <SettingsHeading
         title="Diagnóstico local"
@@ -946,5 +1032,38 @@ function InlineNotice({ kind, message }: { kind: "success" | "error"; message: s
       {kind === "success" ? <IconCheck /> : <IconAlertCircle />}
       <span>{message}</span>
     </div>
+  );
+}
+function SyncHistory() {
+  const runs = useQuery({ queryKey: ["sync-runs"], queryFn: () => api.listSyncRuns(8) });
+  if (!runs.data?.length) {
+    return (
+      <p className="sync-history-empty">
+        Aún no hay ejecuciones registradas; aparecerán aquí tras la próxima sincronización o
+        importación local.
+      </p>
+    );
+  }
+  return (
+    <ul className="sync-history">
+      {runs.data.map((run) => (
+        <li key={run.id} data-status={run.status}>
+          <span className="sync-history__dot" aria-hidden="true" />
+          <div>
+            <strong>
+              {run.source === "local" ? "Importación local" : "Sincronización con Steam"}
+            </strong>
+            <span>{formatRelativeDate(run.startedAt)}</span>
+          </div>
+          {run.status === "success" ? (
+            <data>
+              +{run.importedCount} · {run.updatedCount} actualizados
+            </data>
+          ) : (
+            <data title={run.errorMessage ?? undefined}>Error — {run.errorMessage}</data>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

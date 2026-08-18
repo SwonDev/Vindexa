@@ -129,6 +129,10 @@ pub struct LibraryStats {
     pub backlog_games: i64,
     pub tracked_games: i64,
     pub total_playtime_minutes: i64,
+    /// Juegos archivados. No se suman a `total_games`: el total tiene que
+    /// coincidir con lo que se ve. Este recuento existe para que el archivado
+    /// nunca sea un agujero negro y la interfaz pueda ofrecer verlos.
+    pub archived_games: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,8 +142,21 @@ pub struct AppPreferences {
     pub periodic_sync_minutes: u32,
     pub confirm_uninstall: bool,
     pub library_sort: String,
+    /// Presupuesto en disco de la caché de arte, en mebibytes. Subir la calidad
+    /// del arte multiplica el espacio ocupado, así que el techo es explícito y
+    /// gobierna el desalojo por uso menos reciente.
+    #[serde(default = "default_art_cache_mib")]
+    pub art_cache_mib: u32,
     #[serde(default)]
     pub shortcuts: ShortcutBindings,
+}
+
+pub const DEFAULT_ART_CACHE_MIB: u32 = 512;
+pub const MIN_ART_CACHE_MIB: u32 = 128;
+pub const MAX_ART_CACHE_MIB: u32 = 8_192;
+
+fn default_art_cache_mib() -> u32 {
+    DEFAULT_ART_CACHE_MIB
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,6 +164,10 @@ pub struct AppPreferences {
 pub struct ShortcutBindings {
     pub library: String,
     pub planner: String,
+    /// Sección de deseados. Lleva `default` para que una preferencia guardada
+    /// antes de que existiera la sección siga deserializando.
+    #[serde(default = "default_wishlist_shortcut")]
+    pub wishlist: String,
     pub collections: String,
     pub tracking: String,
     pub search: String,
@@ -154,14 +175,19 @@ pub struct ShortcutBindings {
     pub close_panel: String,
 }
 
+fn default_wishlist_shortcut() -> String {
+    "Mod+5".into()
+}
+
 impl Default for ShortcutBindings {
     fn default() -> Self {
         Self {
             library: "Mod+1".into(),
             planner: "Mod+2".into(),
+            wishlist: "Mod+5".into(),
             collections: "Mod+3".into(),
             tracking: "Mod+4".into(),
-            search: "Mod+K".into(),
+            search: "Mod+F".into(),
             sync: "Mod+Shift+S".into(),
             close_panel: "Escape".into(),
         }
@@ -204,6 +230,12 @@ pub struct GameSummary {
     pub is_early_access: bool,
     pub is_free: bool,
     pub steam_deck_status: Option<String>,
+    /// Sistemas en los que la tienda ofrece el juego. `None` significa que aún
+    /// no se sabe: **no es lo mismo que «no compatible»**, y la interfaz no
+    /// puede desaconsejar una instalación sin el dato.
+    pub platform_windows: Option<bool>,
+    pub platform_mac: Option<bool>,
+    pub platform_linux: Option<bool>,
     pub achievements_unlocked: Option<u32>,
     pub achievements_total: Option<u32>,
     pub ownership_source: String,
@@ -225,6 +257,14 @@ pub struct GameSummary {
     pub checkpoint: Option<String>,
     pub notes: Option<String>,
     pub manual_position: i64,
+    /// Colecciones manuales a las que pertenece. Se resuelve en la propia
+    /// consulta de biblioteca para que el menú contextual pueda marcar la
+    /// pertenencia sin una petición adicional por juego.
+    pub collection_ids: Vec<String>,
+    /// Géneros declarados por la tienda. Permiten agrupar la lista sin pedir la
+    /// ficha completa de cada juego.
+    pub genres: Vec<String>,
+    pub developer: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,6 +320,10 @@ pub struct GameDetail {
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub abandoned_at: Option<String>,
+    /// Metadatos enriquecidos de tienda. Viajan con la ficha para que abrirla
+    /// sea una sola petición y el contenido no salte al terminar una segunda.
+    #[serde(flatten)]
+    pub rich: RichGameMetadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -372,11 +416,40 @@ pub struct GameListRequest {
     pub min_session_minutes: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_session_minutes: Option<u32>,
+    /// Ámbito de archivado: `active` (predeterminado), `archived` o `all`.
+    /// Sin él la biblioteca esconde lo archivado, que es el sentido de
+    /// archivar; con `archived` se consulta lo escondido de forma explícita.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive_scope: Option<String>,
     pub sort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_seed: Option<u32>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+}
+
+/// Ámbitos admitidos por `GameListRequest::archive_scope`.
+///
+/// `active` es el predeterminado y es lo que hace que archivar signifique algo.
+/// `archived` es el escondite consultable. `all` existe para poder comprobar
+/// que archivar no ha perdido nada.
+pub const ARCHIVE_SCOPES: [&str; 3] = ["active", "archived", "all"];
+
+pub fn is_valid_archive_scope(value: &str) -> bool {
+    ARCHIVE_SCOPES.contains(&value)
+}
+
+/// Cláusula que filtra la consulta de biblioteca según el ámbito. `None`
+/// significa «no filtres», que es exactamente lo que pide `all`.
+///
+/// Vive junto a `GameListRequest` y no en `db::archive` porque las pruebas de
+/// integración compilan `db/library.rs` con `models.rs` y sin el resto de `db`.
+pub fn archive_scope_clause(scope: &str) -> Option<&'static str> {
+    match scope {
+        "archived" => Some("EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)"),
+        "all" => None,
+        _ => Some("NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)"),
+    }
 }
 
 pub fn is_valid_game_sort(value: &str) -> bool {
@@ -478,6 +551,19 @@ pub struct SteamSyncResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncRun {
+    pub id: String,
+    pub source: String,
+    pub status: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub imported_count: i64,
+    pub updated_count: i64,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecommendationRequest {
     pub duration_minutes: Option<u32>,
     pub mood: Option<String>,
@@ -541,3 +627,144 @@ pub struct DatabaseRecoverySnapshot {
     pub backups: Vec<RecoveryBackupSummary>,
     pub recovery_actions_available: bool,
 }
+
+// ── Contrato de ficha enriquecida ──────────────────────────────────────────
+// Estos tipos son parte del contrato con la interfaz, así que viven aquí y no
+// en `db::rich_metadata`, que conserva su lógica de saneado y persistencia.
+// `models.rs` se compila aislado en las pruebas de contrato: no puede depender
+// de ningún otro módulo del proyecto.
+
+/// Un bloque de la descripción ya convertido a texto plano seguro.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DescriptionBlock {
+    /// Encabezado con su nivel original acotado a 1..=6.
+    Heading { level: u8, text: String },
+    /// Párrafo de texto plano.
+    Paragraph { text: String },
+    /// Lista ordenada o sin ordenar de textos planos.
+    List { ordered: bool, items: Vec<String> },
+}
+
+
+/// Descripción completa de un juego como secuencia de bloques seguros.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredDescription {
+    pub blocks: Vec<DescriptionBlock>,
+}
+
+
+/// Clasificación de DRM derivada solo de señales oficiales de la tienda.
+///
+/// Los valores serializados coinciden exactamente con el `CHECK` de la
+/// migración 018 y con la convención del proyecto para valores de enumeración
+/// (`ownership_source = 'family_shared'`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DrmState {
+    /// No hay señal suficiente. Es el valor por defecto: nunca se adivina.
+    #[default]
+    Unknown,
+    /// La tienda no declara DRM de terceros ni cuenta externa.
+    DrmFree,
+    /// La tienda declara un DRM o lanzador de terceros.
+    ThirdPartyDrm,
+    /// La tienda declara Steamworks DRM o el cliente de Steam.
+    SteamDrm,
+}
+
+
+/// Señal exacta que motivó una clasificación, para que la ficha pueda
+/// justificarla ante el usuario.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DrmEvidence {
+    /// Campo oficial del que procede la señal (`drmNotice`, `legalNotice`…).
+    pub source: String,
+    /// Texto exacto o etiqueta canónica de la coincidencia.
+    #[serde(rename = "match")]
+    pub matched: String,
+}
+
+
+/// Estado de DRM más las evidencias que lo sostienen.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DrmAssessment {
+    pub state: DrmState,
+    pub evidence: Vec<DrmEvidence>,
+}
+
+
+/// Recuento de juegos por estado de DRM, para los filtros de biblioteca.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DrmStateCounts {
+    pub unknown: i64,
+    pub drm_free: i64,
+    pub third_party_drm: i64,
+    pub steam_drm: i64,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameMediaKind {
+    Screenshot,
+    Movie,
+}
+
+
+/// Una captura o un vídeo oficial del juego.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameMediaItem {
+    /// Identificador estable dentro del juego (`screenshot:12`, `movie:2565`).
+    pub media_id: String,
+    pub kind: GameMediaKind,
+    pub thumbnail_url: Option<String>,
+    pub full_url: Option<String>,
+    /// Codificación alternativa del mismo recurso (por ejemplo WebM frente a MP4).
+    pub alt_url: Option<String>,
+    /// Orden declarado por la tienda dentro de su tipo.
+    pub position: u32,
+}
+
+
+/// Colocación del logotipo sobre el hero, tal y como la publica Steam para su
+/// propia biblioteca. `appdetails` no la expone: la columna queda a `NULL`
+/// mientras ninguna fuente oficial la aporte.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogoPosition {
+    pub pinned_position: String,
+    pub width_pct: f64,
+    pub height_pct: f64,
+}
+
+
+/// Lectura completa para la ficha inmersiva.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RichGameMetadata {
+    pub app_id: u32,
+    pub detailed_description: Option<StructuredDescription>,
+    pub about_the_game: Option<StructuredDescription>,
+    pub supported_languages: Option<String>,
+    pub website_url: Option<String>,
+    pub metacritic_score: Option<u8>,
+    pub metacritic_url: Option<String>,
+    pub required_age: Option<u32>,
+    pub controller_support: Option<String>,
+    pub background_url: Option<String>,
+    pub library_hero_url: Option<String>,
+    pub library_logo_url: Option<String>,
+    pub logo_position: Option<LogoPosition>,
+    pub drm_notice: Option<String>,
+    pub drm: DrmAssessment,
+    pub drm_checked_at: Option<String>,
+    pub screenshots: Vec<GameMediaItem>,
+    pub movies: Vec<GameMediaItem>,
+}
+

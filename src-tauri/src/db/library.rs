@@ -1,8 +1,9 @@
 use crate::error::{AppError, AppResult};
+use crate::models::RichGameMetadata;
 use crate::models::{
     ActivityItem, BulkUpdateStatusInput, GameDetail, GameListRequest, GameSession, GameSummary,
     LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PagedGames, UpdateGameInput,
-    is_valid_game_sort,
+    archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
 };
 use chrono::NaiveDate;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, Transaction, params, params_from_iter};
@@ -37,6 +38,8 @@ pub struct ImportedGame {
 pub struct StoreMetadataUpdate {
     pub short_description: Option<String>,
     pub hero_url: Option<String>,
+    pub header_url: Option<String>,
+    pub capsule_url: Option<String>,
     pub developer: Option<String>,
     pub publisher: Option<String>,
     pub genres: Vec<String>,
@@ -45,6 +48,12 @@ pub struct StoreMetadataUpdate {
     pub release_date: Option<String>,
     pub is_free: bool,
     pub is_early_access: bool,
+    /// Sistemas en los que la tienda ofrece el juego. `None` es «no se sabe»,
+    /// que no es lo mismo que «no compatible»: sin el dato, la interfaz no
+    /// puede desaconsejar una instalación.
+    pub platform_windows: Option<bool>,
+    pub platform_mac: Option<bool>,
+    pub platform_linux: Option<bool>,
 }
 
 struct GameDetailMetadata {
@@ -69,7 +78,12 @@ const GAME_SELECT: &str = "
            p.status_id, s.name, s.color, p.progress, p.priority,
            p.pinned, p.tracking, p.rating, p.estimated_minutes,
            p.target_date, p.next_action, p.checkpoint, p.notes, p.manual_position,
-           g.is_free, g.ownership_source, g.family_availability
+           g.is_free, g.ownership_source, g.family_availability,
+           (SELECT GROUP_CONCAT(cg.collection_id, CHAR(31))
+              FROM collection_games cg
+             WHERE cg.app_id = g.app_id) AS collection_ids,
+           g.genres_json, g.developer,
+           g.platform_windows, g.platform_mac, g.platform_linux
       FROM games g
       JOIN game_personal p ON p.app_id = g.app_id
       JOIN statuses s ON s.id = p.status_id
@@ -89,12 +103,14 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     COALESCE(SUM(CASE WHEN p.status_id = 'playing' THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN p.status_id = 'backlog' THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN p.tracking = 1 THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(g.playtime_minutes), 0)
+                    COALESCE(SUM(g.playtime_minutes), 0),
+                    (SELECT COUNT(*) FROM game_archive)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
                 AND g.family_availability <> 'confirmed'
-            )",
+            )
+              AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)",
             [],
             |row| {
                 Ok(LibraryStats {
@@ -104,6 +120,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     backlog_games: row.get(3)?,
                     tracked_games: row.get(4)?,
                     total_playtime_minutes: row.get(5)?,
+                    archived_games: row.get(6)?,
                 })
             },
         )
@@ -333,6 +350,17 @@ pub fn list_games(
         "NOT (g.ownership_source = 'family_shared' AND g.family_availability <> 'confirmed')"
             .to_string(),
     ];
+    // Lo archivado se esconde salvo que se pida verlo: es el sentido de
+    // archivar. Un ámbito desconocido es un error, no un `active` silencioso.
+    let archive_scope = request.archive_scope.as_deref().unwrap_or("active");
+    if !is_valid_archive_scope(archive_scope) {
+        return Err(AppError::validation(
+            "El ámbito de archivado de la biblioteca no es válido.",
+        ));
+    }
+    if let Some(clause) = archive_scope_clause(archive_scope) {
+        clauses.push(clause.to_string());
+    }
     let mut values: Vec<Box<dyn ToSql>> = Vec::new();
 
     if let Some(query) = request
@@ -704,6 +732,24 @@ fn map_game_summary(row: &Row<'_>) -> rusqlite::Result<GameSummary> {
         is_free: row.get::<_, i64>(30)? != 0,
         ownership_source: row.get(31)?,
         family_availability: row.get(32)?,
+        collection_ids: row
+            .get::<_, Option<String>>(33)?
+            .map(|joined| {
+                joined
+                    .split('\u{1f}')
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        genres: row
+            .get::<_, Option<String>>(34)?
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default(),
+        developer: row.get(35)?,
+        platform_windows: row.get::<_, Option<i64>>(36)?.map(|value| value != 0),
+        platform_mac: row.get::<_, Option<i64>>(37)?.map(|value| value != 0),
+        platform_linux: row.get::<_, Option<i64>>(38)?.map(|value| value != 0),
     })
 }
 
@@ -831,6 +877,9 @@ pub fn get_game_detail(connection: &Connection, app_id: u32) -> AppResult<GameDe
         started_at,
         completed_at,
         abandoned_at,
+        // La parte enriquecida la compone `Database::detail_with_rich`, que sí
+        // puede alcanzar `db::rich_metadata`.
+        rich: RichGameMetadata::default(),
     })
 }
 
@@ -885,6 +934,11 @@ pub fn save_store_metadata(
             release_date = COALESCE(?9, release_date),
             is_free = ?10,
             is_early_access = ?11,
+            header_url = COALESCE(?12, header_url),
+            capsule_url = COALESCE(?13, capsule_url),
+            platform_windows = COALESCE(?14, platform_windows),
+            platform_mac = COALESCE(?15, platform_mac),
+            platform_linux = COALESCE(?16, platform_linux),
             metadata_status = 'success',
             metadata_fetched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -905,6 +959,11 @@ pub fn save_store_metadata(
             } else {
                 0_i64
             },
+            metadata.header_url,
+            metadata.capsule_url,
+            metadata.platform_windows.map(i64::from),
+            metadata.platform_mac.map(i64::from),
+            metadata.platform_linux.map(i64::from),
         ],
     )?;
     if changed != 1 {
@@ -1280,8 +1339,14 @@ pub(crate) fn upsert_imported_games_in_transaction(
              ON CONFLICT(app_id) DO UPDATE SET
                 title = excluded.title,
                 icon_url = COALESCE(excluded.icon_url, games.icon_url),
-                cover_url = COALESCE(excluded.cover_url, games.cover_url),
-                header_url = COALESCE(excluded.header_url, games.header_url),
+                -- El arte que trae la importación es la URL derivada por
+                -- convención: una conjetura a partir del AppID que devuelve 404
+                -- para buena parte del catálogo moderno. Cuando la fila ya tiene
+                -- una URL —la que `steam::store_assets` resolvió contra el
+                -- índice oficial— se conserva, en vez de sustituir un nombre de
+                -- archivo comprobado por uno inventado.
+                cover_url = COALESCE(games.cover_url, excluded.cover_url),
+                header_url = COALESCE(games.header_url, excluded.header_url),
                 playtime_minutes = MAX(excluded.playtime_minutes, games.playtime_minutes),
                 playtime_recent_minutes = excluded.playtime_recent_minutes,
                 last_played_at = COALESCE(excluded.last_played_at, games.last_played_at),

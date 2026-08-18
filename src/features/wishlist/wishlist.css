@@ -1,0 +1,1461 @@
+/* Vindexa · Pantalla de Deseados
+ *
+ * Reglas de `DESIGN.md` que gobiernan este archivo:
+ *
+ * - Radios de 0 a 4 px. No hay un solo círculo: ni pastillas, ni avatares
+ *   redondos, ni botones de reproducción circulares. Los indicadores de
+ *   prioridad son cuadrados de 5 px, no puntos.
+ * - Solo variables ya definidas. Ningún color literal, ningún gradiente
+ *   decorativo, ninguna curva suelta.
+ * - `--v-cyan-strong` únicamente en superficies que se pulsan; jamás en una
+ *   etiqueta pasiva.
+ * - Densidad alta, cifras con `tabular-nums`.
+ * - Movimiento de 120 a 260 ms sobre `transform` y `opacity`, anulado por
+ *   completo con `prefers-reduced-motion`.
+ *
+ * La especificidad se eleva con `[data-layout="split"]` donde hace falta pisar
+ * reglas heredadas, para que el orden de carga de las hojas no decida nada.
+ */
+
+/* --- Marco --------------------------------------------------------------- */
+
+/* Cabecera, aviso de importación y tablero. El aviso se dimensiona por su
+   contenido y sólo el tablero recibe el alto restante; un hijo sin fila
+   declarada caería en una fila implícita y el tablero lo taparía. Sin aviso la
+   fila automática queda vacía y no ocupa nada. */
+.wishlist-screen[data-layout="split"] {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wishlist-heading__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-heading__meta b {
+  color: var(--v-muted);
+  font-weight: 600;
+}
+
+/* La cifra agregada nunca finge ser un total cerrado: cuando lleva «Al menos»
+   delante, el borde punteado repite la misma información sin depender de que
+   alguien lea el texto entero. */
+.wishlist-heading__figure[data-at-least="true"] {
+  padding: 0 4px;
+  border: 1px dashed color-mix(in srgb, var(--v-warning) 60%, var(--border));
+  color: var(--v-warning);
+}
+
+.wishlist-heading__caveat {
+  max-width: 62ch;
+  margin: 3px 0 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.wishlist-heading__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wishlist-heading__totals li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-heading__totals b {
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.wishlist-heading__totals span {
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.wishlist-workspace {
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.wishlist-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.wishlist-message {
+  flex: none;
+}
+
+.wishlist-message[data-tone="error"] {
+  border-left-color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+
+.wishlist-empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.wishlist-empty strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+/* --- Carriles ------------------------------------------------------------ */
+
+.wishlist-lanes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .wishlist-lanes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .wishlist-lanes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.wishlist-lane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.wishlist-lane__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 7px 7px 7px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.wishlist-lane__title {
+  display: flex;
+  grid-column: 1;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.wishlist-lane__count {
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  color: var(--v-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.wishlist-lane__hint {
+  grid-column: 1;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.wishlist-lane__head > [data-slot="button"] {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+}
+
+.wishlist-lane__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 92px;
+  padding: 6px;
+}
+
+.wishlist-lane__empty {
+  margin: 0;
+  padding: 10px 9px;
+  border: 1px dashed var(--border);
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.wishlist-picker[data-slot="popover-content"] {
+  width: min(340px, 86vw);
+  padding: 10px;
+}
+
+/* --- Tarjeta de deseado -------------------------------------------------- */
+
+/* Ningún asa de seis puntos sobre la carátula: toda la tarjeta arrastra, igual
+   que en la biblioteca. Este activador existe solo para teclado y lectores. */
+.wishlist-drag-activator {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wishlist-drag-activator:focus-visible {
+  z-index: 6;
+  top: 3px;
+  left: 3px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 3px 7px;
+  overflow: visible;
+  clip-path: none;
+  border: 1px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.wishlist-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+  cursor: grab;
+  touch-action: manipulation;
+}
+
+.wishlist-card:active,
+.wishlist-card[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.wishlist-card[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--v-cyan) 60%, var(--border));
+  box-shadow: inset 2px 0 0 var(--v-cyan);
+}
+
+.wishlist-card[data-dragging="true"] {
+  z-index: 3;
+  opacity: 0.34;
+  filter: saturate(0.5);
+}
+
+.wishlist-card__surface {
+  display: grid;
+  grid-template-rows: auto auto;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 6px 8px 5px 7px;
+  text-align: left;
+}
+
+.wishlist-card__cover {
+  position: relative;
+  display: block;
+  grid-row: 1 / span 2;
+  width: 32px;
+  min-width: 0;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: var(--background);
+}
+
+.wishlist-card__cover img,
+.wishlist-card__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wishlist-card__name {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wishlist-card__target {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wishlist-card__target[aria-pressed="true"] {
+  color: var(--v-cyan);
+}
+
+.wishlist-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+/* Cuadraditos, nunca circulitos. */
+.wishlist-card__priority {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.wishlist-card__priority i {
+  width: 5px;
+  height: 5px;
+  border: 1px solid color-mix(in srgb, var(--v-muted) 45%, transparent);
+}
+
+.wishlist-card__priority i[data-on="true"] {
+  border-color: var(--v-lime);
+  background: var(--v-lime);
+}
+
+.wishlist-card__price {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--v-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-card__price svg {
+  width: 11px;
+  height: 11px;
+}
+
+.wishlist-card__price[data-missing="true"] {
+  color: var(--v-subtle);
+}
+
+.wishlist-card__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--v-subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wishlist-card__note svg {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+}
+
+.wishlist-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 5px 5px;
+}
+
+.wishlist-drag-ghost {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--v-cyan);
+  background: color-mix(in srgb, var(--v-surface-raised) 96%, transparent);
+  color: var(--foreground);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 48%);
+}
+
+.wishlist-drag-ghost__cover {
+  display: block;
+  overflow: hidden;
+  width: 30px;
+  height: 45px;
+  border: 1px solid color-mix(in srgb, var(--v-cyan) 40%, transparent);
+  background: var(--background);
+}
+
+.wishlist-drag-ghost__cover img,
+.wishlist-drag-ghost__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wishlist-drag-ghost strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Editor de la entrada ------------------------------------------------ */
+
+.wishlist-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.wishlist-editor__head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.wishlist-editor__cover {
+  display: block;
+  overflow: hidden;
+  width: 34px;
+  height: 51px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: var(--background);
+}
+
+.wishlist-editor__cover img,
+.wishlist-editor__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wishlist-editor__title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+}
+
+.wishlist-editor__title strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wishlist-editor__title span {
+  color: var(--v-subtle);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wishlist-editor__form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.wishlist-editor__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.wishlist-editor__row--price label,
+.wishlist-editor__note {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wishlist-editor__row--price label:first-child {
+  width: min(160px, 42vw);
+}
+
+.wishlist-editor__row--price label:last-child {
+  width: 84px;
+}
+
+.wishlist-editor__form label > span,
+.video-form__field > span,
+.game-picker__label,
+.curated-editor__fields label > span {
+  color: var(--v-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wishlist-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* --- Vídeos -------------------------------------------------------------- */
+
+.video-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 42%, var(--card));
+}
+
+.video-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.video-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.video-panel__title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--v-muted);
+}
+
+.video-panel__title data {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  color: var(--v-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-panel__filter {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.video-panel__notice {
+  margin: 0;
+}
+
+.video-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  align-items: end;
+  padding: 9px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.video-form__field {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.video-form__field--wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 720px) {
+  .video-form__field--wide {
+    grid-column: span 1;
+  }
+}
+
+.video-panel__empty {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.video-panel__empty strong {
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.video-group {
+  display: grid;
+  gap: 6px;
+}
+
+.video-group__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.video-group__title data {
+  color: var(--v-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  gap: 10px;
+}
+
+.video-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.video-card__stage {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: var(--background);
+}
+
+.video-card__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* El cartel es la portada del propio juego servida desde la caché local: no se
+   pide ninguna miniatura remota, y el marco del reproductor no existe en el DOM
+   hasta que alguien pulsa aquí. */
+.video-card__poster {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--background);
+  cursor: pointer;
+}
+
+.video-card__poster:disabled {
+  cursor: not-allowed;
+}
+
+.video-card__art {
+  position: absolute;
+  inset: 0;
+  display: block;
+  opacity: 0.62;
+}
+
+.video-card__art img,
+.video-card__art > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-card__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--v-cyan) 70%, transparent);
+  background: color-mix(in srgb, var(--v-cyan-strong) 88%, transparent);
+  color: var(--foreground);
+  transform: translate(-50%, -50%);
+  transition: transform 140ms var(--ease-out);
+}
+
+.video-card__poster:hover .video-card__play {
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.video-card__poster:disabled .video-card__play {
+  border-color: color-mix(in srgb, var(--v-warning) 60%, transparent);
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  color: var(--v-warning);
+}
+
+.video-card__play svg {
+  width: 16px;
+  height: 16px;
+}
+
+.video-card__badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  color: var(--v-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.video-card__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 9px 4px;
+}
+
+.video-card__title {
+  overflow: hidden;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.video-card__warning {
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--v-warning) 55%, var(--border));
+  color: var(--v-warning);
+}
+
+.video-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 6px 6px;
+}
+
+/* --- Buscador compartido ------------------------------------------------- */
+
+.game-picker {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.game-picker__field {
+  display: grid;
+  gap: 3px;
+}
+
+.game-picker__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-picker__control > svg {
+  position: absolute;
+  left: 7px;
+  width: 14px;
+  height: 14px;
+  color: var(--v-subtle);
+  pointer-events: none;
+}
+
+.game-picker__control [data-slot="input"] {
+  padding-left: 26px;
+}
+
+.game-picker__control > svg.is-spinning {
+  position: static;
+  color: var(--v-cyan);
+}
+
+.game-picker__note {
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.game-picker__results {
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.game-picker__result {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-picker__result:hover:not(:disabled),
+.game-picker__result:focus-visible {
+  border-color: color-mix(in srgb, var(--v-cyan) 45%, var(--border));
+  background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+}
+
+.game-picker__result:disabled {
+  color: var(--v-subtle);
+  cursor: not-allowed;
+}
+
+.game-picker__cover {
+  display: block;
+  overflow: hidden;
+  width: 22px;
+  height: 33px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: var(--background);
+}
+
+.game-picker__cover img,
+.game-picker__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-picker__title {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-picker__hint {
+  color: var(--v-subtle);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --- Listas curadas ------------------------------------------------------ */
+
+.curated-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.curated-panel__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.curated-panel__intro {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.curated-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(226px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.curated-tile {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: grab;
+  touch-action: manipulation;
+}
+
+.curated-tile:active,
+.curated-tile[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.curated-tile[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--v-cyan) 60%, var(--border));
+}
+
+.curated-tile[data-dragging="true"] {
+  z-index: 3;
+  opacity: 0.34;
+  filter: saturate(0.5);
+}
+
+.curated-tile--skeleton {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+/* La franja lleva el acento elegido, y solo puede ser uno de los tokens que ya
+   existen: el sistema no gana colores nuevos por una lista. */
+.curated-tile__accent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  width: 3px;
+  pointer-events: none;
+}
+
+.curated-tile__surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 3px 7px;
+  padding: 8px 9px 8px 12px;
+  text-align: left;
+}
+
+.curated-tile__icon {
+  display: grid;
+  grid-row: 1;
+  place-items: center;
+  color: var(--v-muted);
+}
+
+.curated-tile__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.curated-tile__name {
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.curated-tile__target {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.curated-tile__target[aria-pressed="true"] {
+  color: var(--v-cyan);
+}
+
+.curated-tile__count {
+  grid-row: 1;
+  color: var(--v-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.curated-tile__summary {
+  grid-row: 2;
+  grid-column: 2 / span 2;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.curated-tile__footer {
+  display: flex;
+  flex-wrap: wrap;
+  grid-row: 3;
+  grid-column: 2 / span 2;
+  gap: 5px;
+}
+
+.curated-tile__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  color: var(--v-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.curated-tile__chip[data-pinned="true"] {
+  border-color: color-mix(in srgb, var(--v-lime) 50%, var(--border));
+  color: var(--v-lime);
+}
+
+.curated-tile__chip svg {
+  width: 10px;
+  height: 10px;
+}
+
+.curated-tile__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 6px 6px 12px;
+}
+
+.curated-drag-ghost {
+  padding: 6px 10px;
+  border: 1px solid var(--v-cyan);
+  background: color-mix(in srgb, var(--v-surface-raised) 96%, transparent);
+  color: var(--foreground);
+  font-size: 12px;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 48%);
+}
+
+.curated-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.curated-detail__head {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 0 0 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.curated-detail__accent {
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+}
+
+.curated-detail__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.curated-detail__title strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.curated-detail__title data {
+  color: var(--v-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.curated-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.curated-detail__kind {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  color: var(--v-muted);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.curated-detail__add {
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.curated-items {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.curated-item {
+  display: grid;
+  grid-template-columns: 22px 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.curated-item[data-highlight="true"] {
+  border-left: 3px solid var(--v-lime);
+}
+
+.curated-item--skeleton {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.curated-item__rank {
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.curated-item__cover {
+  display: block;
+  overflow: hidden;
+  width: 30px;
+  height: 45px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: var(--background);
+}
+
+.curated-item__cover img,
+.curated-item__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.curated-item__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.curated-item__title {
+  overflow: hidden;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.curated-item__note {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--v-subtle);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.curated-item__note:hover,
+.curated-item__note:focus-visible {
+  color: var(--v-cyan);
+}
+
+.curated-item__editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.curated-item__editor [data-slot="textarea"] {
+  min-width: 180px;
+}
+
+.curated-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.curated-editor__fields {
+  display: grid;
+  gap: 9px;
+}
+
+.curated-editor__fields label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.curated-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 9px;
+}
+
+.curated-editor__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+/* --- Movimiento reducido ------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .video-card__play,
+  .video-card__poster:hover .video-card__play {
+    transform: translate(-50%, -50%);
+    transition: none;
+  }
+
+  .wishlist-card,
+  .curated-tile {
+    transition: none;
+  }
+}
+
+/* --- Precio observado ------------------------------------------------------
+   El precio y la fecha en la que se miró son el mismo dato. Por eso comparten
+   bloque y ninguna regla de aquí esconde la segunda parte: un importe suelto
+   invita a leerlo como «el precio», que es justo lo que no es. */
+
+.wishlist-prices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.wishlist-prices__figure {
+  color: var(--v-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-prices__caveat {
+  flex: 1 1 24ch;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+/* Consultar la tienda tarda: la barra lo dice mientras dura, sin bloquear el
+   tablero, porque reordenar carriles no depende de que llegue el precio. */
+.wishlist-prices[data-pending="true"] .wishlist-prices__figure {
+  color: var(--v-subtle);
+}
+
+.wishlist-card__observed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  grid-column: 2;
+  min-width: 0;
+  margin: 2px 0 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.wishlist-card__observed-amount {
+  color: var(--v-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sin precio no se pinta un hueco: se pinta la frase. */
+.wishlist-card__observed-amount[data-missing="true"] {
+  color: var(--v-subtle);
+  font-weight: 500;
+}
+
+.wishlist-card__observed-was {
+  color: var(--v-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-card__observed-cut {
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--v-success) 55%, var(--border));
+  color: var(--v-success);
+  font-variant-numeric: tabular-nums;
+}
+
+.wishlist-card__observed-when,
+.wishlist-card__observed-verdict,
+.wishlist-card__observed-low {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* Un precio caducado se marca en el texto y además con el borde punteado: la
+   advertencia no puede depender de que alguien lea la frase entera. */
+.wishlist-card__observed[data-freshness="stale"] .wishlist-card__observed-amount,
+.wishlist-card__observed[data-freshness="unknown"] .wishlist-card__observed-amount {
+  padding: 0 3px;
+  border: 1px dashed color-mix(in srgb, var(--v-warning) 60%, var(--border));
+  color: var(--v-warning);
+}
+
+.wishlist-card__observed[data-meets="true"] .wishlist-card__observed-verdict {
+  color: var(--v-success);
+}
+
+/* Informe de la última importación. Se queda a la vista hasta la siguiente:
+   los recuentos son la prueba de qué entró y qué no, y esconderlos a los tres
+   segundos obligaría a repetir la importación para volver a leerlos. */
+.wishlist-screen__notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--v-surface-raised);
+  color: var(--v-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.wishlist-screen__notice-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* La salida va pegada al aviso que la justifica, y no se encoge: cuando el
+   texto explica que el perfil no es público, el botón que lo resuelve tiene que
+   seguir siendo pulsable por estrecha que quede la ventana. */
+.wishlist-screen__notice > .btn,
+.wishlist-screen__notice > button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .wishlist-screen__notice {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

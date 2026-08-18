@@ -23,7 +23,9 @@ export class VindexaPage {
     ).toBeVisible();
   }
 
-  async navigate(section: "Biblioteca" | "Planificador" | "Colecciones" | "Seguimiento") {
+  async navigate(
+    section: "Biblioteca" | "Planificador" | "Deseados" | "Colecciones" | "Seguimiento",
+  ) {
     await this.page.getByRole("button", { name: section, exact: true }).click();
   }
 

@@ -18,6 +18,7 @@ const INDEXES_AND_SEARCH: &str = include_str!("../migrations/002_indexes.sql");
 const SORT_INDEXES: &str = include_str!("../migrations/004_library_sorting.sql");
 const COMPLETE_METADATA: &str = include_str!("../migrations/007_steam_metadata_complete.sql");
 const MANUAL_POSITION_INDEX: &str = include_str!("../migrations/016_manual_position_index.sql");
+const PRICING_AND_ARCHIVE: &str = include_str!("../migrations/029_pricing_and_archive.sql");
 
 fn database() -> Connection {
     let mut connection = Connection::open_in_memory().expect("abrir SQLite temporal");
@@ -39,6 +40,9 @@ fn database() -> Connection {
     connection
         .execute_batch(MANUAL_POSITION_INDEX)
         .expect("alinear índice con el orden manual");
+    connection
+        .execute_batch(PRICING_AND_ARCHIVE)
+        .expect("aplicar precios y archivado");
     connection
         .execute(
             "INSERT INTO statuses(id, name, color, position, built_in)

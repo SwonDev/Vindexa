@@ -39,3 +39,7 @@ artifacts/
 *.njsproj
 *.sln
 *.sw?
+
+# Artefactos de Playwright
+test-results/
+artifacts/showcase/

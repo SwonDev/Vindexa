@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CollectionIcon, collectionIconOptions } from "@/features/collections/CollectionIcon";
+import { formatDate, formatPlaytime } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   CollectionSummary,
@@ -35,11 +36,27 @@ import type {
   StatusDefinition,
 } from "@/lib/types";
 
+/**
+ * Semilla de una colección sugerida por la pantalla. Rellena el diálogo sin
+ * guardar nada: la persona sigue viendo, editando y confirmando sus reglas.
+ */
+export interface CollectionSeed {
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+  kind: "manual" | "smart";
+  matchMode: "all" | "any";
+  rules: readonly Omit<SmartRule, "id" | "position">[];
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   collection?: CollectionSummary | undefined;
   statuses?: StatusDefinition[] | undefined;
+  /** Plantilla con la que arrancar una colección nueva. Se ignora al editar. */
+  seed?: CollectionSeed | undefined;
 }
 
 type RuleFieldKind = "boolean" | "number" | "date" | "status" | "text" | "list";
@@ -285,6 +302,153 @@ const operatorLabels: Record<string, string> = {
 
 const operatorsWithoutValue = new Set(["isSet", "isNotSet", "isTrue", "isFalse"]);
 
+/* --- Resumen legible de las reglas --------------------------------------
+ *
+ * Una colección inteligente no se explica con la palabra «Inteligente»: hay que
+ * poder leer qué la mantiene al día sin abrir el editor. Estas funciones
+ * traducen el contrato persistido a frases cortas reutilizando el mismo
+ * catálogo de campos y operadores que usa el formulario, para que editor y
+ * resumen nunca puedan divergir.
+ */
+
+const integerFormat = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
+const percentFields = new Set(["progress", "achievementPercent"]);
+const minuteFields = new Set(["playtimeMinutes", "estimatedMinutes"]);
+const lowerBoundOperators = new Set(["greaterThan", "greaterOrEqual"]);
+const upperBoundOperators = new Set(["lessThan", "lessOrEqual"]);
+
+/** Frases completas para los campos booleanos: «Instalados» dice más que «Instalación: sí». */
+const booleanPhrases: Record<string, readonly [string, string]> = {
+  installed: ["Instalados", "Sin instalar"],
+  tracking: ["En seguimiento", "Fuera de seguimiento"],
+  earlyAccess: ["En acceso anticipado", "Sin acceso anticipado"],
+  isFree: ["Gratuitos", "De pago"],
+};
+
+function shortFieldLabel(option: RuleFieldOption): string {
+  return option.label.replace(/\s*\([^)]*\)$/, "");
+}
+
+function formatRuleValue(
+  option: RuleFieldOption,
+  value: unknown,
+  statuses: readonly StatusDefinition[],
+): string {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string").join(", ");
+  }
+  if (option.kind === "status") {
+    const status = statuses.find((candidate) => candidate.id === value);
+    return status?.name ?? String(value ?? "");
+  }
+  if (option.kind === "date") return formatDate(typeof value === "string" ? value : undefined);
+  if (option.kind === "number" && typeof value === "number") {
+    if (minuteFields.has(option.value)) return formatPlaytime(value);
+    return percentFields.has(option.value)
+      ? `${integerFormat.format(value)} %`
+      : integerFormat.format(value);
+  }
+  return String(value ?? "");
+}
+
+function describeRule(rule: SmartRule, statuses: readonly StatusDefinition[]): string | undefined {
+  const option = fieldOptions.find((candidate) => candidate.value === rule.field);
+  if (!option) return undefined;
+  const label = shortFieldLabel(option);
+
+  if (option.kind === "boolean") {
+    const phrases = booleanPhrases[option.value];
+    const affirmative =
+      rule.operator === "isTrue" || (rule.operator === "equals" && rule.value === true);
+    const negative =
+      rule.operator === "isFalse" || (rule.operator === "equals" && rule.value === false);
+    if (phrases && (affirmative || negative)) return affirmative ? phrases[0] : phrases[1];
+    if (affirmative || negative) return `${label}: ${affirmative ? "sí" : "no"}`;
+  }
+
+  if (rule.operator === "isSet") return `${label} definido`;
+  if (rule.operator === "isNotSet") return `${label} sin definir`;
+
+  const value = formatRuleValue(option, rule.value, statuses);
+  if (!value) return undefined;
+  switch (rule.operator) {
+    case "equals":
+      return `${label}: ${value}`;
+    case "notEquals":
+      return `${label} distinto de ${value}`;
+    case "greaterThan":
+      return `${label} > ${value}`;
+    case "greaterOrEqual":
+      return `${label} ≥ ${value}`;
+    case "lessThan":
+      return `${label} < ${value}`;
+    case "lessOrEqual":
+      return `${label} ≤ ${value}`;
+    case "before":
+      return `${label} antes del ${value}`;
+    case "after":
+      return `${label} después del ${value}`;
+    case "contains":
+      return `${label} contiene «${value}»`;
+    case "notContains":
+      return `${label} sin «${value}»`;
+    case "in":
+      return `${label}: ${value}`;
+    default:
+      return `${label}: ${value}`;
+  }
+}
+
+/**
+ * Convierte las reglas guardadas en frases cortas y ordenadas por grupo. Dos
+ * cotas del mismo campo dentro de un grupo se funden en un intervalo, de modo
+ * que se lee «Progreso entre 20 % y 80 %» en vez de dos condiciones sueltas.
+ */
+export function describeSmartRules(
+  rules: readonly SmartRule[],
+  statuses: readonly StatusDefinition[] = [],
+): string[] {
+  const groups = new Map<number, SmartRule[]>();
+  for (const rule of rules) {
+    const group = groups.get(rule.groupId);
+    if (group) group.push(rule);
+    else groups.set(rule.groupId, [rule]);
+  }
+
+  const phrases: string[] = [];
+  for (const groupId of Array.from(groups.keys()).sort((a, b) => a - b)) {
+    const groupRules = (groups.get(groupId) ?? []).slice().sort((a, b) => a.position - b.position);
+    const consumed = new Set<SmartRule>();
+    for (const rule of groupRules) {
+      if (consumed.has(rule)) continue;
+      const option = fieldOptions.find((candidate) => candidate.value === rule.field);
+      if (option && lowerBoundOperators.has(rule.operator)) {
+        const upper = groupRules.find(
+          (candidate) =>
+            candidate !== rule &&
+            !consumed.has(candidate) &&
+            candidate.field === rule.field &&
+            upperBoundOperators.has(candidate.operator),
+        );
+        if (upper) {
+          consumed.add(rule);
+          consumed.add(upper);
+          const from = formatRuleValue(option, rule.value, statuses);
+          const to = formatRuleValue(option, upper.value, statuses);
+          if (from && to) {
+            phrases.push(`${shortFieldLabel(option)} entre ${from} y ${to}`);
+            continue;
+          }
+        }
+      }
+      consumed.add(rule);
+      const phrase = describeRule(rule, statuses);
+      if (phrase) phrases.push(phrase);
+    }
+  }
+  return phrases;
+}
+
 function ruleHasValidValue(rule: SmartRule) {
   const field = fieldOptions.find((option) => option.value === rule.field);
   if (!field?.operators.includes(rule.operator)) return false;
@@ -310,7 +474,22 @@ function defaultRule(): SmartRule {
   };
 }
 
-export function CollectionEditorDialog({ open, onOpenChange, collection, statuses = [] }: Props) {
+function seedRules(seed: CollectionSeed | undefined): SmartRule[] {
+  if (!seed || seed.kind === "manual") return [];
+  return seed.rules.map((rule, index) => ({
+    ...rule,
+    id: crypto.randomUUID(),
+    position: index,
+  }));
+}
+
+export function CollectionEditorDialog({
+  open,
+  onOpenChange,
+  collection,
+  statuses = [],
+  seed,
+}: Props) {
   const queryClient = useQueryClient();
   const editing = Boolean(collection);
   const [name, setName] = useState("");
@@ -322,23 +501,33 @@ export function CollectionEditorDialog({ open, onOpenChange, collection, statuse
   const [rules, setRules] = useState<SmartRule[]>([defaultRule()]);
   const [error, setError] = useState<string>();
 
+  /* Comparte caché con el resumen de reglas de la pantalla de colecciones: si
+   * la tarjeta ya las leyó, el editor abre con ellas y sin pedir nada. Una
+   * lectura fallida sigue reintentándose al abrir, porque abrir el editor es
+   * justo el momento en el que volver a intentarlo tiene sentido. */
   const rulesQuery = useQuery({
     queryKey: ["collection-rules", collection?.id],
     queryFn: () => api.listSmartRules(collection?.id ?? ""),
     enabled: open && collection?.kind === "smart",
+    staleTime: 120_000,
   });
 
   useEffect(() => {
     if (!open) return;
-    setName(collection?.name ?? "");
-    setDescription(collection?.description ?? "");
-    setColor(collection?.color ?? "#5CAAC1");
-    setIcon(collection?.icon ?? (collection?.kind === "manual" ? "folder" : "sparkles"));
-    setKind(collection?.kind ?? "smart");
-    setMatchMode(collection?.matchMode ?? "all");
-    setRules(collection ? [] : [defaultRule()]);
+    const fallbackKind = seed?.kind ?? "smart";
+    setName(collection?.name ?? seed?.name ?? "");
+    setDescription(collection?.description ?? seed?.description ?? "");
+    setColor(collection?.color ?? seed?.color ?? "#5CAAC1");
+    setIcon(
+      collection?.icon ??
+        seed?.icon ??
+        ((collection?.kind ?? fallbackKind) === "manual" ? "folder" : "sparkles"),
+    );
+    setKind(collection?.kind ?? fallbackKind);
+    setMatchMode(collection?.matchMode ?? seed?.matchMode ?? "all");
+    setRules(collection ? [] : seed ? seedRules(seed) : [defaultRule()]);
     setError(undefined);
-  }, [collection, open]);
+  }, [collection, open, seed]);
 
   useEffect(() => {
     if (open && collection?.kind === "smart" && rulesQuery.data) setRules(rulesQuery.data);

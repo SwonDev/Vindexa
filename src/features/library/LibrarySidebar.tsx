@@ -4,12 +4,12 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   IconBook2,
   IconChevronDown,
-  IconCircleFilled,
   IconDeviceGamepad2,
   IconFolder,
   IconFolders,
   IconGripVertical,
   IconPlus,
+  IconSquareFilled,
   IconUsersGroup,
 } from "@tabler/icons-react";
 import { useState } from "react";
@@ -99,7 +99,7 @@ export function LibrarySidebar({
             <SidebarItem
               key={status.id}
               active={selected("status", status.id)}
-              icon={IconCircleFilled}
+              icon={IconSquareFilled}
               iconColor={status.color}
               label={status.name}
               count={status.gameCount}

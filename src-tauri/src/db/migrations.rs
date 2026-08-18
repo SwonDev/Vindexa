@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 /// `VNDX` en ASCII. Permite rechazar cualquier SQLite que no haya sido creado
 /// por Vindexa antes de una restauración.
 pub const APPLICATION_ID: i64 = 0x564E4458;
-pub const CURRENT_VERSION: i64 = 16;
+pub const CURRENT_VERSION: i64 = 34;
 
 struct Migration {
     version: i64,
@@ -92,6 +92,96 @@ const MIGRATIONS: &[Migration] = &[
         version: 16,
         name: "manual_position_index",
         sql: include_str!("../../migrations/016_manual_position_index.sql"),
+    },
+    Migration {
+        version: 17,
+        name: "game_capsule_url",
+        sql: include_str!("../../migrations/017_game_capsule_url.sql"),
+    },
+    Migration {
+        version: 18,
+        name: "drm_free_detection",
+        sql: include_str!("../../migrations/018_drm_free_detection.sql"),
+    },
+    Migration {
+        version: 19,
+        name: "rich_game_metadata",
+        sql: include_str!("../../migrations/019_rich_game_metadata.sql"),
+    },
+    Migration {
+        version: 20,
+        name: "game_dlc",
+        sql: include_str!("../../migrations/020_game_dlc.sql"),
+    },
+    Migration {
+        version: 21,
+        name: "curated_lists",
+        sql: include_str!("../../migrations/021_curated_lists.sql"),
+    },
+    Migration {
+        version: 22,
+        name: "wishlist_and_videos",
+        sql: include_str!("../../migrations/022_wishlist_and_videos.sql"),
+    },
+    Migration {
+        version: 23,
+        name: "notifications",
+        sql: include_str!("../../migrations/023_notifications.sql"),
+    },
+    Migration {
+        version: 24,
+        name: "priority_engine",
+        sql: include_str!("../../migrations/024_priority_engine.sql"),
+    },
+    Migration {
+        version: 25,
+        name: "external_stores",
+        sql: include_str!("../../migrations/025_external_stores.sql"),
+    },
+    Migration {
+        version: 26,
+        name: "agent_bridge",
+        sql: include_str!("../../migrations/026_agent_bridge.sql"),
+    },
+    Migration {
+        version: 27,
+        name: "agent_receipt",
+        sql: include_str!("../../migrations/027_agent_receipt.sql"),
+    },
+    Migration {
+        version: 28,
+        name: "saved_views",
+        sql: include_str!("../../migrations/028_saved_views.sql"),
+    },
+    Migration {
+        version: 29,
+        name: "pricing_and_archive",
+        sql: include_str!("../../migrations/029_pricing_and_archive.sql"),
+    },
+    Migration {
+        version: 30,
+        name: "wishlist_catalog",
+        sql: include_str!("../../migrations/030_wishlist_catalog.sql"),
+    },
+    Migration {
+        version: 31,
+        name: "game_platforms",
+        sql: include_str!("../../migrations/031_game_platforms.sql"),
+    },
+    Migration {
+        version: 32,
+        name: "itch_store",
+        sql: include_str!("../../migrations/032_itch_store.sql"),
+    },
+    Migration {
+        version: 33,
+        name: "catalog_prices",
+        sql: include_str!("../../migrations/033_catalog_prices.sql"),
+    },
+    Migration {
+        version: 34,
+        name: "sharp_covers",
+        sql: include_str!("../../migrations/034_sharp_covers.sql"),
     },
 ];
 

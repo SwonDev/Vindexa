@@ -1,4 +1,5 @@
 import {
+  type CollisionDetection,
   closestCenter,
   DndContext,
   type DragEndEvent,
@@ -6,6 +7,7 @@ import {
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -19,7 +21,18 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Artwork } from "@/components/common/Artwork";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -29,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FamilyCatalogBrowser } from "@/features/library/FamilyCatalogBrowser";
-import { GameBrowser } from "@/features/library/GameBrowser";
+import { GameBrowser, type GameOrganizationHandlers } from "@/features/library/GameBrowser";
 import { type LibraryScope, LibrarySidebar } from "@/features/library/LibrarySidebar";
 import { type ExtraFilters, LibraryToolbar } from "@/features/library/LibraryToolbar";
 import {
@@ -40,6 +53,8 @@ import {
   reorderCollectionIds,
 } from "@/features/library/library-dnd";
 import { activeLibraryFilterCount } from "@/features/library/library-filters";
+import type { LibraryGrouping } from "@/features/library/library-grouping";
+import { applySelectionGesture, type SelectionGesture } from "@/features/library/library-selection";
 import {
   libraryScopeKey,
   readLibraryScroll,
@@ -47,10 +62,36 @@ import {
   writeLibraryScroll,
   writeLibrarySession,
 } from "@/features/library/library-session";
+import {
+  describeUndo,
+  peekUndo,
+  popUndo,
+  pruneUndo,
+  pushUndo,
+  type UndoEntry,
+} from "@/features/library/library-undo";
+import {
+  combinedPresentation,
+  combineViews,
+  type SavedLibraryView,
+  type SavedViewQuery,
+  toggleViewInStack,
+} from "@/features/library/library-views";
+import { SavedViewsBar } from "@/features/library/SavedViewsBar";
+import {
+  gameContextShortcuts,
+  type LibraryContextSnapshot,
+  onLibraryCommand,
+  onLibraryContextRequest,
+  publishLibraryContext,
+  readLocalShortcuts,
+  resolveShortcuts,
+} from "@/features/shell/shortcuts";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   AppBootstrap,
+  ArchiveScope,
   FamilyCatalogAvailability,
   FamilyCatalogSort,
   GameListRequest,
@@ -59,6 +100,7 @@ import type {
   LibraryDropReceipt,
   LibraryDropTarget,
   LibraryView,
+  UpdateGameInput,
 } from "@/lib/types";
 import emptyLibraryArtwork from "../../../assets/brand/vindexa-empty-library.png";
 import "./library-dnd.css";
@@ -81,6 +123,20 @@ interface Props {
   onRetry: () => void;
 }
 
+/**
+ * Resolución del destino de un arrastre.
+ *
+ * Manda dónde está el puntero, no dónde queda el centro de lo que se arrastra:
+ * una carátula mide más de trescientos píxeles de alto y con `closestCenter` el
+ * juego caía en el destino de debajo del que la persona estaba señalando. Sólo
+ * cuando no hay puntero —arrastre con teclado— se recurre al centro, que ahí sí
+ * es la única referencia disponible.
+ */
+const dropCollision: CollisionDetection = (args) => {
+  const bajoElPuntero = pointerWithin(args);
+  return bajoElPuntero.length > 0 ? bajoElPuntero : closestCenter(args);
+};
+
 export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   const queryClient = useQueryClient();
   const session = useMemo(readLibrarySession, []);
@@ -92,6 +148,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   );
   const [randomSeed, setRandomSeed] = useState(session.randomSeed);
   const [view, setView] = useState<LibraryView>(session.view);
+  const [grouping, setGrouping] = useState<LibraryGrouping>(session.grouping);
   const [familyAvailability, setFamilyAvailability] = useState<FamilyCatalogAvailability>(
     session.familyAvailability,
   );
@@ -99,15 +156,29 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   const [filters, setFilters] = useState<ExtraFilters>(session.filters);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detailId, setDetailId] = useState<number>();
+  /** Cursor de teclado. `detailId` sigue siendo, solo, la ficha abierta. */
+  const [focusedId, setFocusedId] = useState<number>();
   const [collectionEditorOpen, setCollectionEditorOpen] = useState(false);
   const [operationMessage, setOperationMessage] = useState<string>();
   const [undoReceipt, setUndoReceipt] = useState<LibraryDropReceipt>();
-  const [activeDrag, setActiveDrag] = useState<{ appIds: number[]; title: string }>();
+  /**
+   * Pila unificada de deshacer. Convive con `undoReceipt` y `orderUndo`, que
+   * son los que alimentan los botones puntuales de cada operación; la pila es
+   * lo que consume el atajo, que no sabe qué tipo de cambio fue el último.
+   */
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const [activeDrag, setActiveDrag] = useState<{
+    appIds: number[];
+    title: string;
+    appId: number;
+    coverUrl?: string | undefined;
+  }>();
   const [activeCollectionDrag, setActiveCollectionDrag] = useState<{
     id: string;
     title: string;
   }>();
   const [collectionOrder, setCollectionOrder] = useState<string[]>([]);
+  const [orderUndo, setOrderUndo] = useState<string[]>();
   const awaitingInitialPreferences = useRef(!bootstrap);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -121,11 +192,12 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       sort,
       randomSeed,
       view,
+      grouping,
       familyAvailability,
       familySort,
       filters,
     });
-  }, [familyAvailability, familySort, filters, query, randomSeed, scope, sort, view]);
+  }, [familyAvailability, familySort, filters, grouping, query, randomSeed, scope, sort, view]);
   useEffect(() => {
     if (bootstrap && awaitingInitialPreferences.current) {
       awaitingInitialPreferences.current = false;
@@ -156,6 +228,16 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     staleTime: 30_000,
   });
 
+  /*
+   * Archivar sólo significa algo si la vista por defecto esconde lo archivado.
+   * El ámbito vive fuera de `filters` a propósito: no es un filtro más que se
+   * combina con los otros, es la pregunta previa de qué biblioteca se está
+   * mirando. Y no se persiste entre sesiones: volver a abrir Vindexa tiene que
+   * devolverte a tu biblioteca, no al vertedero que decidiste esconder.
+   */
+  const [archiveScope, setArchiveScope] = useState<ArchiveScope>("active");
+  const archivedCount = bootstrap?.stats.archivedGames ?? 0;
+
   const requestBase = useMemo<GameListRequest>(() => {
     const { statusId, collectionId, installed, ...advancedFilters } = filters;
     return {
@@ -176,11 +258,12 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         : installed !== undefined
           ? { installed }
           : {}),
+      ...(archiveScope === "active" ? {} : { archiveScope }),
       sort,
       ...(sort === "random" ? { sortSeed: randomSeed } : {}),
       limit: 240,
     };
-  }, [debouncedQuery, filters, randomSeed, scope, sort]);
+  }, [archiveScope, debouncedQuery, filters, randomSeed, scope, sort]);
   const gamesQuery = useInfiniteQuery({
     queryKey: ["games", requestBase],
     queryFn: ({ pageParam }) => api.listGames({ ...requestBase, offset: pageParam }),
@@ -240,6 +323,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       if (detailId) setDetailId(undefined);
       else if (collectionEditorOpen) setCollectionEditorOpen(false);
       else if (selected.size) setSelected(new Set());
+      else if (focusedId !== undefined) setFocusedId(undefined);
     };
     window.addEventListener("vindexa:focus-search", focusSearch);
     window.addEventListener("vindexa:close-panel", closePanel);
@@ -247,7 +331,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       window.removeEventListener("vindexa:focus-search", focusSearch);
       window.removeEventListener("vindexa:close-panel", closePanel);
     };
-  }, [collectionEditorOpen, detailId, selected.size]);
+  }, [collectionEditorOpen, detailId, focusedId, selected.size]);
 
   const localImport = useMutation({
     mutationFn: api.importLocalSteam,
@@ -275,6 +359,177 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         `La ordenación se aplicó, pero no se pudo guardar: ${getErrorMessage(cause)}`,
       ),
   });
+  /**
+   * Vistas guardadas. `activeViewIds` es una **pila**: varias vistas pueden
+   * estar aplicadas a la vez y sus filtros se intersecan, en lugar de que la
+   * última descarte a la anterior. El orden importa porque decide quién gana
+   * los campos que no admiten dos valores.
+   */
+  /**
+   * Juego cuya desinstalación espera confirmación. Teclado, paleta de comandos
+   * y menú contextual pasan por aquí: la preferencia `confirmUninstall` debe
+   * valer igual se pida desde donde se pida, y `Supr` es demasiado fácil de
+   * pulsar sin querer sobre la ficha que tenga el foco.
+   */
+  const [uninstallTarget, setUninstallTarget] = useState<GameSummary | undefined>(undefined);
+  const [activeViewIds, setActiveViewIds] = useState<string[]>([]);
+  const [namingView, setNamingView] = useState(false);
+  const savedViewsQuery = useQuery({
+    queryKey: ["saved-views"],
+    queryFn: api.listSavedViews,
+    staleTime: 60_000,
+  });
+  const savedViews = useMemo(() => savedViewsQuery.data ?? [], [savedViewsQuery.data]);
+
+  const currentViewQuery = useMemo<SavedViewQuery>(
+    () => ({ search: query, sort, grouping, view, filters }),
+    [query, sort, grouping, view, filters],
+  );
+
+  // Los conflictos se recalculan a partir de la pila, no se guardan: así nunca
+  // quedan colgados de una vista que ya se retiró.
+  const viewConflicts = useMemo(() => {
+    const stack = activeViewIds
+      .map((id) => savedViews.find((entry) => entry.id === id))
+      .filter((entry): entry is SavedLibraryView => Boolean(entry));
+    return combineViews(stack).conflicts;
+  }, [activeViewIds, savedViews]);
+
+  /**
+   * El plan se lee aquí sólo para saber a qué columna va un juego añadido desde
+   * la biblioteca; la pantalla del planificador sigue siendo su dueña.
+   */
+  const plannerColumnsQuery = useQuery({
+    queryKey: ["planner-overview"],
+    queryFn: api.getPlannerOverview,
+    staleTime: 60_000,
+  });
+  const plannerColumns = useMemo(
+    () => plannerColumnsQuery.data?.columns ?? [],
+    [plannerColumnsQuery.data],
+  );
+  /*
+   * Archivar en masa. Cuatrocientos juegos de paquete no se archivan de uno en
+   * uno, así que la operación es una sola llamada con toda la selección: el
+   * backend la valida entera antes de tocar nada y no deja lotes a medias.
+   */
+  const archiveSelection = useMutation({
+    mutationFn: ({ appIds, archived }: { appIds: readonly number[]; archived: boolean }) =>
+      archived ? api.archiveGames([...appIds]) : api.unarchiveGames([...appIds]),
+    onSuccess: (report, { archived }) => {
+      const verb = archived ? "archivado" : "devuelto a la biblioteca";
+      const parts = [
+        report.changed === 1 ? `1 juego ${verb}` : `${report.changed} juegos ${verb}s`,
+      ];
+      // Lo que no cambió se dice: anunciar un cambio que no ocurrió es mentir.
+      if (report.unchanged > 0) {
+        parts.push(
+          report.unchanged === 1 ? "1 ya estaba así" : `${report.unchanged} ya estaban así`,
+        );
+      }
+      // Archivar no saca nada del plan; si algo sigue ahí, se avisa en vez de
+      // borrarlo en silencio.
+      if (archived && report.inPlanner > 0) {
+        parts.push(
+          report.inPlanner === 1 ? "1 sigue en el plan" : `${report.inPlanner} siguen en el plan`,
+        );
+      }
+      setOperationMessage(`${parts.join("; ")}.`);
+      setSelected(new Set());
+      void queryClient.invalidateQueries({ queryKey: ["games"] });
+      void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+      void queryClient.invalidateQueries({ queryKey: ["library-filter-options"] });
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+
+  const addToPlanner = useMutation({
+    mutationFn: async ({
+      appIds,
+      columnId,
+    }: {
+      appIds: readonly number[];
+      columnId?: string | undefined;
+    }) => {
+      const column = columnId ?? plannerColumns[0]?.id;
+      if (!column) {
+        throw new Error("El plan no tiene ninguna columna donde colocar el juego.");
+      }
+      // `move_planner_item` es también el alta: si el juego no estaba en el
+      // plan, lo crea en la columna indicada.
+      const start = plannerColumns.find((entry) => entry.id === column)?.items.length ?? 0;
+      let added = 0;
+      for (const [offset, appId] of appIds.entries()) {
+        await api.movePlannerItem(appId, column, start + offset);
+        added += 1;
+      }
+      return { added, column };
+    },
+    onSuccess: ({ added, column }) => {
+      const name = plannerColumns.find((entry) => entry.id === column)?.name ?? "el plan";
+      setOperationMessage(
+        added === 1 ? `Añadido a ${name}.` : `${added} juegos añadidos a ${name}.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["planner-overview"] });
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+
+  const saveView = useMutation({
+    mutationFn: api.saveSavedView,
+    onSuccess: (saved) => {
+      setOperationMessage(`Vista «${saved.name}» guardada.`);
+      setActiveViewIds([saved.id]);
+      void queryClient.invalidateQueries({ queryKey: ["saved-views"] });
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+  const deleteView = useMutation({
+    mutationFn: api.deleteSavedView,
+    onSuccess: (_data, viewId) => {
+      setActiveViewIds((previous) => previous.filter((id) => id !== viewId));
+      setOperationMessage("Vista eliminada.");
+      void queryClient.invalidateQueries({ queryKey: ["saved-views"] });
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+  const markViewUsed = useMutation({
+    mutationFn: api.markSavedViewUsed,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["saved-views"] }),
+    // Que falle el contador de uso no debe estorbar: la vista ya se aplicó.
+    onError: () => undefined,
+  });
+
+  /**
+   * Aplica la pila resultante a la pantalla. Se llama con la lista ya calculada
+   * para que alternar y restaurar compartan exactamente el mismo camino.
+   */
+  const applyViewStack = useCallback(
+    (ids: string[]) => {
+      setActiveViewIds(ids);
+      const stack = ids
+        .map((id) => savedViews.find((entry) => entry.id === id))
+        .filter((entry): entry is SavedLibraryView => Boolean(entry));
+      const combined = combineViews(stack);
+      const presentation = combinedPresentation(stack);
+      setFilters(combined.filters);
+      setQuery(combined.search);
+      if (presentation.sort) setSort(presentation.sort);
+      if (presentation.grouping) setGrouping(presentation.grouping);
+      if (presentation.view) setView(presentation.view);
+    },
+    [savedViews],
+  );
+
+  const toggleSavedView = useCallback(
+    (target: SavedLibraryView) => {
+      const next = toggleViewInStack(activeViewIds, target.id);
+      applyViewStack(next);
+      if (next.includes(target.id)) markViewUsed.mutate(target.id);
+    },
+    [activeViewIds, applyViewStack, markViewUsed],
+  );
+
   const changeSort = (nextSort: GameSort) => {
     setSort(nextSort);
     if (nextSort === "random") {
@@ -284,6 +539,314 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       sortPreference.mutate({ ...bootstrap.preferences, librarySort: nextSort });
     }
   };
+  /**
+   * Operaciones del menú contextual. Se resuelven aquí porque necesitan el
+   * bootstrap completo (estados y colecciones) y porque el mensaje de resultado
+   * y la invalidación de consultas ya viven en esta pantalla.
+   */
+  const organizeGame = useMutation({
+    mutationFn: ({ input }: { input: UpdateGameInput; message: string }) => api.updateGame(input),
+    onSuccess: (_data, variables) => {
+      setOperationMessage(variables.message);
+      void queryClient.invalidateQueries();
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+  const organizeCollections = useMutation({
+    mutationFn: ({
+      appId,
+      collectionIds,
+    }: {
+      appId: number;
+      collectionIds: string[];
+      message: string;
+    }) => api.setGameCollections(appId, collectionIds),
+    onSuccess: (_data, variables) => {
+      setOperationMessage(variables.message);
+      void queryClient.invalidateQueries();
+    },
+    onError: (cause) => setOperationMessage(getErrorMessage(cause)),
+  });
+  const collectionIdsByApp = useMemo(() => {
+    const index = new Map<number, readonly string[]>();
+    for (const game of games) index.set(game.appId, game.collectionIds ?? []);
+    return index;
+  }, [games]);
+  /**
+   * Contexto que la paleta de comandos y los atajos necesitan para operar sobre
+   * el juego enfocado. Se publica al cambiar y se vuelve a publicar cuando el
+   * shell lo pide, para que abrir la paleta nunca encuentre datos rancios.
+   */
+  const librarySnapshot = useMemo<LibraryContextSnapshot>(
+    () => ({
+      games,
+      focusedAppId: focusedId,
+      selectedAppIds: [...selected],
+      statuses: bootstrap?.statuses ?? [],
+      collections: bootstrap?.collections ?? [],
+      collectionIdsByApp,
+      plannerColumns: plannerColumns.map((column) => ({ id: column.id, name: column.name })),
+      view,
+      scopeLabel: scope.label,
+    }),
+    [bootstrap, collectionIdsByApp, focusedId, games, plannerColumns, scope.label, selected, view],
+  );
+  useEffect(() => {
+    publishLibraryContext(librarySnapshot);
+    return onLibraryContextRequest(() => publishLibraryContext(librarySnapshot));
+  }, [librarySnapshot]);
+
+  /** `updateGame` reemplaza el registro personal completo: cualquier cambio
+   *  puntual debe partir del estado vigente del juego para no borrar el resto. */
+  const personalUpdate = useCallback(
+    (game: GameSummary, patch: Partial<UpdateGameInput>): UpdateGameInput => ({
+      appId: game.appId,
+      statusId: game.statusId,
+      progress: game.progress,
+      priority: game.priority,
+      pinned: game.pinned,
+      tracking: game.tracking,
+      rating: game.rating,
+      estimatedMinutes: game.estimatedMinutes,
+      targetDate: game.targetDate,
+      nextAction: game.nextAction,
+      checkpoint: game.checkpoint,
+      notes: game.notes,
+      ...patch,
+    }),
+    [],
+  );
+  /**
+   * Congela el estado personal vigente antes de tocarlo. `personalUpdate` sin
+   * parche es exactamente lo que hay ahora, así que aplicarlo de vuelta deshace
+   * el cambio sin depender de qué campo se modificó.
+   */
+  const recordGameEdit = useCallback(
+    (game: GameSummary, label: string) => {
+      const previous = personalUpdate(game, {});
+      setUndoStack((stack) => pushUndo(stack, { kind: "gameEdit", label, previous }));
+    },
+    [personalUpdate],
+  );
+  const organization: GameOrganizationHandlers = useMemo(
+    () => ({
+      statuses: bootstrap?.statuses,
+      collections: bootstrap?.collections,
+      collectionIdsByApp,
+      onChangeStatus: (game, statusId) => {
+        const status = bootstrap?.statuses.find((candidate) => candidate.id === statusId);
+        recordGameEdit(game, `${game.title} pasó a «${status?.name ?? statusId}»`);
+        organizeGame.mutate({
+          input: personalUpdate(game, { statusId }),
+          message: `${game.title} pasó a «${status?.name ?? statusId}».`,
+        });
+      },
+      onChangePriority: (game, priority) => {
+        recordGameEdit(game, `prioridad de ${game.title}`);
+        return organizeGame.mutate({
+          input: personalUpdate(game, { priority }),
+          message: `Prioridad de ${game.title} fijada en ${priority}.`,
+        });
+      },
+      onTogglePinned: (game, pinned) => {
+        recordGameEdit(game, `${game.title} ${pinned ? "fijado" : "desfijado"}`);
+        return organizeGame.mutate({
+          input: personalUpdate(game, { pinned }),
+          message: pinned
+            ? `${game.title} fijado en la biblioteca.`
+            : `${game.title} ya no está fijado.`,
+        });
+      },
+      onToggleTracking: (game, tracking) => {
+        recordGameEdit(game, `seguimiento de ${game.title}`);
+        return organizeGame.mutate({
+          input: personalUpdate(game, { tracking }),
+          message: tracking
+            ? `${game.title} añadido a seguimiento.`
+            : `${game.title} salió de seguimiento.`,
+        });
+      },
+      onToggleCollection: (game, collectionId, member) => {
+        const current = collectionIdsByApp.get(game.appId) ?? [];
+        const next = member
+          ? Array.from(new Set([...current, collectionId]))
+          : current.filter((id) => id !== collectionId);
+        const collection = bootstrap?.collections.find(
+          (candidate) => candidate.id === collectionId,
+        );
+        organizeCollections.mutate({
+          appId: game.appId,
+          collectionIds: next,
+          message: member
+            ? `${game.title} añadido a «${collection?.name ?? "la colección"}».`
+            : `${game.title} retirado de «${collection?.name ?? "la colección"}».`,
+        });
+      },
+    }),
+    [
+      bootstrap,
+      collectionIdsByApp,
+      organizeCollections,
+      organizeGame,
+      personalUpdate,
+      recordGameEdit,
+    ],
+  );
+
+  /**
+   * Ejecuta las órdenes que emiten los atajos y la paleta de comandos. Es el
+   * único punto que traduce una intención de teclado en una operación real, con
+   * el mismo feedback que las acciones de ratón.
+   */
+  const undoLastRef = useRef<() => void>(() => undefined);
+  const runGameAction = useCallback(
+    (game: GameSummary, pending: string, done: string, operation: () => Promise<unknown>) => {
+      setOperationMessage(pending);
+      void operation()
+        .then(() => setOperationMessage(done))
+        .catch((cause) => setOperationMessage(`${game.title}: ${getErrorMessage(cause)}`));
+    },
+    [],
+  );
+  useEffect(() => {
+    return onLibraryCommand((command) => {
+      if (command.kind === "setView") return setView(command.view);
+      if (command.kind === "selectAll") {
+        setSelected(new Set(games.map((candidate) => candidate.appId)));
+        return;
+      }
+      // El movimiento del cursor lo resuelve el navegador, que conoce columnas.
+      if (command.kind === "moveFocus") return;
+      if (command.kind === "addToPlanner") {
+        addToPlanner.mutate({ appIds: command.appIds, columnId: command.columnId });
+        return;
+      }
+      if (command.kind === "undo") {
+        // Se llama por referencia: `undoLast` depende de mutaciones declaradas
+        // más abajo, y adelantarlas sólo por el orden léxico enredaría el resto.
+        undoLastRef.current();
+        return;
+      }
+      // La ficha sólo necesita el AppID: un resultado que la paleta encontró en
+      // el catálogo completo no está en la página cargada y aun así debe abrirse.
+      if (command.kind === "openDetail") {
+        setDetailId(command.appId);
+        return;
+      }
+      const game = games.find((candidate) => candidate.appId === command.appId);
+      if (!game) return;
+      switch (command.kind) {
+        case "focus":
+          setFocusedId(game.appId);
+          return;
+        case "primary":
+          if (game.installed) {
+            runGameAction(
+              game,
+              `Abriendo ${game.title}…`,
+              `Steam recibió la solicitud para iniciar ${game.title}.`,
+              () => api.launchGame(game.appId),
+            );
+          } else {
+            setDetailId(game.appId);
+          }
+          return;
+        case "play":
+          runGameAction(
+            game,
+            `Abriendo ${game.title}…`,
+            `Steam recibió la solicitud para iniciar ${game.title}.`,
+            () => api.launchGame(game.appId),
+          );
+          return;
+        case "install":
+          runGameAction(
+            game,
+            `Preparando la instalación de ${game.title}…`,
+            `Steam recibió la solicitud para instalar ${game.title}.`,
+            () => api.installGame(game.appId),
+          );
+          return;
+        case "uninstall":
+          if (bootstrap?.preferences.confirmUninstall ?? true) {
+            setUninstallTarget(game);
+            return;
+          }
+          runGameAction(
+            game,
+            `Solicitando la desinstalación de ${game.title}…`,
+            `Steam recibió la solicitud para desinstalar ${game.title}.`,
+            () => api.uninstallGame(game.appId),
+          );
+          return;
+        case "openStore":
+          runGameAction(
+            game,
+            "Abriendo la tienda protegida…",
+            `La tienda oficial de ${game.title} se abrió en una sesión privada.`,
+            () => api.openStore(game.appId),
+          );
+          return;
+        case "reveal":
+          runGameAction(
+            game,
+            "Abriendo la carpeta de instalación…",
+            `Se abrió la instalación de ${game.title}.`,
+            () => api.revealInstallation(game.appId),
+          );
+          return;
+        case "setStatus":
+          organization.onChangeStatus?.(game, command.statusId);
+          return;
+        case "cycleStatus": {
+          const list = bootstrap?.statuses ?? [];
+          if (!list.length) return;
+          const index = list.findIndex((status) => status.id === game.statusId);
+          const next = list[(index + command.direction + list.length) % list.length];
+          if (next) organization.onChangeStatus?.(game, next.id);
+          return;
+        }
+        case "setPriority":
+          organization.onChangePriority?.(game, command.priority);
+          return;
+        case "shiftPriority":
+          organization.onChangePriority?.(
+            game,
+            Math.min(5, Math.max(0, game.priority + command.direction)),
+          );
+          return;
+        case "togglePinned":
+          organization.onTogglePinned?.(game, !game.pinned);
+          return;
+        case "toggleTracking":
+          organization.onToggleTracking?.(game, !game.tracking);
+          return;
+        case "toggleCollection": {
+          const member = !(collectionIdsByApp.get(game.appId) ?? []).includes(command.collectionId);
+          organization.onToggleCollection?.(game, command.collectionId, member);
+          return;
+        }
+        case "copyTitle":
+          navigator.clipboard?.writeText(game.title).catch(() => undefined);
+          setOperationMessage(`Título de ${game.title} copiado.`);
+          return;
+        case "copyAppId":
+          navigator.clipboard?.writeText(String(game.appId)).catch(() => undefined);
+          setOperationMessage(`AppID ${game.appId} copiado.`);
+          return;
+        default:
+          return;
+      }
+    });
+  }, [addToPlanner.mutate, bootstrap, collectionIdsByApp, games, organization, runGameAction]);
+  const gameShortcuts = useMemo(
+    () =>
+      gameContextShortcuts(
+        resolveShortcuts(bootstrap?.preferences.shortcuts, readLocalShortcuts()),
+      ),
+    [bootstrap?.preferences.shortcuts],
+  );
+
   const libraryDrop = useMutation({
     mutationFn: ({
       appIds,
@@ -299,6 +862,14 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
         `${result.moved} juego${result.moved === 1 ? "" : "s"} movido${result.moved === 1 ? "" : "s"} a ${label}.`,
       );
       setUndoReceipt(result.receipt);
+      setUndoStack((stack) =>
+        pushUndo(stack, {
+          kind: "drop",
+          label: `${result.moved} juego${result.moved === 1 ? "" : "s"} a ${label}`,
+          receipt: result.receipt,
+        }),
+      );
+      setOrderUndo(undefined);
       setSelected(new Set());
       void queryClient.invalidateQueries();
     },
@@ -329,6 +900,68 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       setOperationMessage(`No se pudo reordenar: ${getErrorMessage(cause)}`);
     },
   });
+  /**
+   * Deshace el último cambio de la pila, sea del tipo que sea. Cada rama delega
+   * en la mutación que ya sabe revertir ese cambio, así que no hay una segunda
+   * ruta de escritura que pueda divergir de la primera.
+   */
+  /**
+   * Las ediciones de juegos que ya no están en la página cargada no se pueden
+   * deshacer con sentido: se retiran para que la acción no exista en lugar de
+   * existir y fallar.
+   */
+  useEffect(() => {
+    const conocidos = new Set(games.map((game) => game.appId));
+    setUndoStack((stack) => {
+      const podada = pruneUndo(stack, conocidos);
+      return podada.length === stack.length ? stack : podada;
+    });
+  }, [games]);
+  const undoLabel = describeUndo(peekUndo(undoStack));
+
+  const undoLast = useCallback(() => {
+    const { entry, rest } = popUndo(undoStack);
+    if (!entry) {
+      setOperationMessage("No hay nada que deshacer.");
+      return;
+    }
+    setUndoStack(rest);
+    switch (entry.kind) {
+      case "drop":
+        setUndoReceipt(undefined);
+        undoDrop.mutate(entry.receipt);
+        return;
+      case "collectionOrder": {
+        const current = collectionOrder.length
+          ? collectionOrder
+          : (bootstrap?.collections.map((collection) => collection.id) ?? []);
+        setCollectionOrder(entry.previous);
+        setOrderUndo(undefined);
+        reorderCollections.mutate({ previous: current, next: entry.previous });
+        return;
+      }
+      case "gameEdit":
+        organizeGame.mutate({
+          input: entry.previous,
+          message: `Se deshizo: ${entry.label}`,
+        });
+        return;
+    }
+  }, [bootstrap, collectionOrder, organizeGame, reorderCollections, undoDrop, undoStack]);
+
+  useEffect(() => {
+    undoLastRef.current = undoLast;
+  }, [undoLast]);
+
+  const undoCollectionOrder = () => {
+    if (!orderUndo) return;
+    const previous = collectionOrder.length
+      ? collectionOrder
+      : (bootstrap?.collections.map((collection) => collection.id) ?? []);
+    setCollectionOrder(orderUndo);
+    setOrderUndo(undefined);
+    reorderCollections.mutate({ previous, next: orderUndo });
+  };
   const moveSelection = (target: LibraryDropTarget, label: string) => {
     const appIds = Array.from(selected);
     if (!appIds.length) return;
@@ -348,8 +981,14 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     if (!appId) return;
     const appIds = draggedAppIds(appId, selected);
     const title = String(event.active.data.current?.title ?? "Juego");
+    const rawCover = event.active.data.current?.coverUrl;
     if (!selected.has(appId)) setSelected(new Set([appId]));
-    setActiveDrag({ appIds, title });
+    setActiveDrag({
+      appIds,
+      title,
+      appId,
+      coverUrl: typeof rawCover === "string" ? rawCover : undefined,
+    });
   };
   const onDragEnd = (event: DragEndEvent) => {
     if (activeCollectionDrag) {
@@ -369,7 +1008,21 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       const next = reorderCollectionIds(previous, dragged.id, overId);
       if (next === previous) return;
       setCollectionOrder(next);
-      reorderCollections.mutate({ previous, next });
+      reorderCollections.mutate(
+        { previous, next },
+        {
+          onSuccess: () => {
+            setOrderUndo(previous);
+            setUndoStack((stack) =>
+              pushUndo(stack, {
+                kind: "collectionOrder",
+                label: "reordenar colecciones",
+                previous,
+              }),
+            );
+          },
+        },
+      );
       return;
     }
     const current = activeDrag;
@@ -429,14 +1082,24 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     }
     return "Destino no permitido.";
   };
-  const selectGame = (game: GameSummary, additive: boolean) => {
+  /**
+   * Ancla de la selección por rango: el último juego tocado sin Mayús. La
+   * lógica vive en `library-selection.ts` para poder probarse sin montar la
+   * pantalla entera.
+   */
+  const selectionAnchor = useRef<number | undefined>(undefined);
+  const selectGame = (game: GameSummary, gesture: SelectionGesture) => {
     setSelected((current) => {
-      if (!additive) return new Set([game.appId]);
-      const next = new Set(current);
-      if (next.has(game.appId)) next.delete(game.appId);
-      else next.add(game.appId);
-      return next;
+      const next = applySelectionGesture(
+        games,
+        { selected: current, anchor: selectionAnchor.current },
+        game.appId,
+        gesture,
+      );
+      selectionAnchor.current = next.anchor;
+      return new Set(next.selected);
     });
+    setFocusedId(game.appId);
   };
 
   if (loading && !bootstrap)
@@ -459,6 +1122,8 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             onSortChange={changeSort}
             view={view}
             onViewChange={setView}
+            grouping={grouping}
+            onGroupingChange={setGrouping}
             filters={filters}
             onFiltersChange={setFilters}
             statuses={[]}
@@ -493,7 +1158,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={dropCollision}
       accessibility={{
         screenReaderInstructions: {
           draggable:
@@ -538,12 +1203,88 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             onSortChange={changeSort}
             view={view}
             onViewChange={setView}
+            grouping={grouping}
+            onGroupingChange={setGrouping}
             filters={filters}
             onFiltersChange={setFilters}
             statuses={bootstrap?.statuses ?? []}
             collections={bootstrap?.collections ?? []}
             filterOptions={filterOptionsQuery.data}
+            onSaveView={scope.kind === "family" ? undefined : () => setNamingView(true)}
+            saveViewLabel={
+              activeViewIds.length > 1 ? "Guardar la combinación" : "Guardar esta vista"
+            }
           />
+          {scope.kind !== "family" && (
+            <SavedViewsBar
+              creating={namingView}
+              onCreatingChange={setNamingView}
+              views={savedViews}
+              activeIds={activeViewIds}
+              onToggle={toggleSavedView}
+              onSave={(name) => saveView.mutate({ name, query: currentViewQuery, pinned: false })}
+              onUpdate={(target) =>
+                saveView.mutate({
+                  id: target.id,
+                  name: target.name,
+                  description: target.description,
+                  icon: target.icon,
+                  accent: target.accent,
+                  query: currentViewQuery,
+                  pinned: target.pinned,
+                })
+              }
+              onDelete={(target) => deleteView.mutate(target.id)}
+              onTogglePinned={(target) =>
+                saveView.mutate({
+                  id: target.id,
+                  name: target.name,
+                  description: target.description,
+                  icon: target.icon,
+                  accent: target.accent,
+                  query: target.query,
+                  pinned: !target.pinned,
+                })
+              }
+              currentQuery={currentViewQuery}
+              conflicts={viewConflicts}
+              statuses={bootstrap?.statuses ?? []}
+              collections={bootstrap?.collections ?? []}
+            />
+          )}
+          {/*
+            El archivado no puede ser un agujero negro: mientras haya algo
+            archivado, la biblioteca lo dice y ofrece verlo. Sin archivados la
+            franja no existe, para no cobrar espacio por una función que esta
+            biblioteca todavía no usa.
+          */}
+          {scope.kind !== "family" && (archivedCount > 0 || archiveScope !== "active") && (
+            <fieldset className="library-archive-bar">
+              <legend className="library-archive-bar__count">
+                {archivedCount === 1 ? "1 juego archivado" : `${archivedCount} juegos archivados`}
+              </legend>
+              {(
+                [
+                  ["active", "Ocultarlos"],
+                  ["archived", "Ver solo archivados"],
+                  ["all", "Ver todo"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  size="xs"
+                  variant={archiveScope === value ? "secondary" : "ghost"}
+                  aria-pressed={archiveScope === value}
+                  onClick={() => {
+                    setArchiveScope(value);
+                    setSelected(new Set());
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
+            </fieldset>
+          )}
           {(scope.kind === "family" ? familyQuery.isPending : gamesQuery.isPending) ? (
             <LibrarySkeleton />
           ) : (scope.kind === "family" ? familyQuery.isError : gamesQuery.isError) ? (
@@ -655,7 +1396,13 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               total={total}
               view={view}
               selected={selected}
-              focusedGameId={detailId}
+              focusedGameId={focusedId ?? detailId}
+              shortcuts={gameShortcuts}
+              onMoveFocus={(appId, extend) => {
+                const game = games.find((candidate) => candidate.appId === appId);
+                if (!game) return;
+                selectGame(game, extend ? "range" : "replace");
+              }}
               hasMore={Boolean(gamesQuery.hasNextPage)}
               loadingMore={gamesQuery.isFetchingNextPage}
               initialScrollOffset={readLibraryScroll(scope)}
@@ -664,6 +1411,8 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               onSelect={selectGame}
               onOpen={(game) => setDetailId(game.appId)}
               manualPositioning={sort === "manual" && scope.kind === "all"}
+              organization={organization}
+              grouping={grouping}
               positionCollectionId={
                 sort === "manual" &&
                 scope.kind === "collection" &&
@@ -726,11 +1475,43 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                     ))}
                 </SelectContent>
               </Select>
+              {plannerColumns.length > 0 && (
+                <Select
+                  disabled={addToPlanner.isPending}
+                  onValueChange={(columnId) =>
+                    addToPlanner.mutate({ appIds: [...selected], columnId })
+                  }
+                >
+                  <SelectTrigger aria-label="Añadir selección al plan">
+                    <SelectValue placeholder="Añadir al plan…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {plannerColumns.map((column) => (
+                      <SelectItem key={column.id} value={column.id}>
+                        {column.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {selected.size === 1 && (
                 <Button size="sm" variant="secondary" onClick={() => setDetailId([...selected][0])}>
                   Abrir ficha
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={archiveSelection.isPending}
+                onClick={() =>
+                  archiveSelection.mutate({
+                    appIds: [...selected],
+                    archived: archiveScope !== "archived",
+                  })
+                }
+              >
+                {archiveScope === "archived" ? "Devolver a la biblioteca" : "Archivar"}
+              </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -748,7 +1529,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               role={libraryDrop.isError || undoDrop.isError ? "alert" : "status"}
             >
               <span>{operationMessage}</span>
-              {undoReceipt && (
+              {undoReceipt ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -757,7 +1538,26 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 >
                   <IconArrowBackUp /> Deshacer
                 </Button>
-              )}
+              ) : orderUndo ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={reorderCollections.isPending}
+                  onClick={undoCollectionOrder}
+                >
+                  <IconArrowBackUp /> Deshacer
+                </Button>
+              ) : undoLabel ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={organizeGame.isPending}
+                  onClick={undoLast}
+                  title={undoLabel}
+                >
+                  <IconArrowBackUp /> Deshacer
+                </Button>
+              ) : null}
               <Button
                 size="icon-xs"
                 variant="ghost"
@@ -765,6 +1565,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 onClick={() => {
                   setOperationMessage(undefined);
                   setUndoReceipt(undefined);
+                  setOrderUndo(undefined);
                 }}
               >
                 <IconX />
@@ -793,6 +1594,43 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             />
           </Suspense>
         )}
+        <AlertDialog
+          open={Boolean(uninstallTarget)}
+          onOpenChange={(open) => {
+            if (!open) setUninstallTarget(undefined);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                ¿Solicitar la desinstalación de {uninstallTarget?.title}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Vindexa no borrará archivos directamente. Abrirá el cliente oficial de Steam para
+                que revises y completes la desinstalación.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  const target = uninstallTarget;
+                  setUninstallTarget(undefined);
+                  if (!target) return;
+                  runGameAction(
+                    target,
+                    `Solicitando la desinstalación de ${target.title}…`,
+                    `Steam recibió la solicitud para desinstalar ${target.title}.`,
+                    () => api.uninstallGame(target.appId),
+                  );
+                }}
+              >
+                Solicitar a Steam
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
       <DragOverlay dropAnimation={null}>
         {activeCollectionDrag ? (
@@ -804,14 +1642,24 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             </div>
           </div>
         ) : activeDrag ? (
-          <div className="library-drag-overlay">
-            <IconGripVertical aria-hidden="true" />
+          <div className="library-drag-overlay library-drag-overlay--game">
+            <span className="library-drag-overlay__cover" aria-hidden="true">
+              <Artwork
+                appId={activeDrag.appId}
+                src={activeDrag.coverUrl}
+                title={activeDrag.title}
+              />
+              {activeDrag.appIds.length > 1 && (
+                <em className="library-drag-overlay__count">{activeDrag.appIds.length}</em>
+              )}
+            </span>
             <div>
               <strong>
-                {activeDrag.appIds.length} juego{activeDrag.appIds.length === 1 ? "" : "s"}
+                {activeDrag.appIds.length === 1 ? activeDrag.title : "Selección múltiple"}
               </strong>
               <span>
-                {activeDrag.appIds.length === 1 ? activeDrag.title : "Selección múltiple"}
+                {activeDrag.appIds.length} juego{activeDrag.appIds.length === 1 ? "" : "s"} · suelta
+                en un estado o colección
               </span>
             </div>
           </div>

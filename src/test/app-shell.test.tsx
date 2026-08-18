@@ -1,12 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/features/shell/AppShell";
 import { DENSITY_METRICS } from "@/features/shell/interface-density";
+import {
+  type LibraryCommand,
+  onLibraryCommand,
+  publishLibraryContext,
+  writeLocalShortcuts,
+} from "@/features/shell/shortcuts";
 import { api } from "@/lib/tauri";
-import type { AppBootstrap } from "@/lib/types";
+import type { AppBootstrap, GameSummary } from "@/lib/types";
 
 vi.mock("@/lib/tauri", () => ({
   api: {
@@ -87,6 +93,48 @@ function bootstrapWithSteamSync(
   };
 }
 
+const focusedGame: GameSummary = {
+  appId: 730,
+  title: "Counter-Strike 2",
+  playtimeMinutes: 4_200,
+  playtimeRecentMinutes: 0,
+  isEarlyAccess: false,
+  isFree: true,
+  ownershipSource: "owned",
+  familyAvailability: "not_applicable",
+  installed: true,
+  statusId: "playing",
+  statusName: "Jugando",
+  statusColor: "#a4d007",
+  progress: 40,
+  priority: 2,
+  pinned: false,
+  tracking: false,
+  manualPosition: 0,
+  collectionIds: [],
+  genres: [],
+};
+
+function libraryContext() {
+  return {
+    games: [focusedGame],
+    focusedAppId: focusedGame.appId,
+    selectedAppIds: [focusedGame.appId],
+    statuses: [],
+    collections: [],
+    view: "grid" as const,
+    scopeLabel: "Todos los juegos",
+  };
+}
+
+/** La rejilla real lleva esta clase; los atajos desnudos sólo actúan dentro. */
+function librarySurface(): HTMLElement {
+  const node = document.createElement("div");
+  node.className = "game-browser";
+  document.body.append(node);
+  return node;
+}
+
 function renderAppShell() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -105,8 +153,13 @@ function renderAppShell() {
 }
 
 describe("ciclo de carga de la aplicación", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mockedApi.syncSteamLibrary.mockResolvedValue(undefined);
     mockedApi.libraryFilterOptions.mockResolvedValue({
       genres: [],
@@ -241,8 +294,10 @@ describe("ciclo de carga de la aplicación", () => {
     expect(document.querySelector(".app-shell")).toHaveAttribute("data-density", "comfortable");
     expect(DENSITY_METRICS.comfortable.listRow).toBeGreaterThan(DENSITY_METRICS.compact.listRow);
     expect(DENSITY_METRICS.comfortable.gridBody).toBeGreaterThan(DENSITY_METRICS.compact.gridBody);
-    expect(DENSITY_METRICS.comfortable.gridPadding).toBe(28);
-    expect(DENSITY_METRICS.comfortable.gridGap).toBe(14);
+    expect(DENSITY_METRICS.comfortable.gridPadding).toBeGreaterThan(
+      DENSITY_METRICS.compact.gridPadding,
+    );
+    expect(DENSITY_METRICS.comfortable.gridGap).toBeGreaterThan(DENSITY_METRICS.compact.gridGap);
   });
 
   it("aplica atajos persistidos y no intercepta escritura en campos", async () => {
@@ -327,7 +382,8 @@ describe("ciclo de carga de la aplicación", () => {
     renderAppShell();
     await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
 
-    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    // `Mod+K` ya es la paleta: la búsqueda vive en `Mod+F`.
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
     await waitFor(() => expect(focusSearch).toHaveBeenCalledTimes(1));
 
     await user.click(screen.getByRole("button", { name: "Abrir ajustes" }));
@@ -337,6 +393,171 @@ describe("ciclo de carga de la aplicación", () => {
       expect(screen.queryByRole("heading", { name: "Ajustes de Vindexa" })).not.toBeInTheDocument(),
     );
     window.removeEventListener("vindexa:focus-search", focusSearch);
+  });
+
+  it("navega a Deseados con su atajo local, sin tocar el esquema de SQLite", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+    const library = screen.getByRole("button", { name: "Biblioteca" });
+
+    fireEvent.keyDown(window, { key: "5", metaKey: true });
+
+    await waitFor(() => expect(library).not.toHaveAttribute("aria-current"));
+    expect(mockedApi.savePreferences).toBeUndefined();
+  });
+
+  it("abre la paleta de comandos con Mod+K y la cierra con Escape", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByPlaceholderText("Busca una acción, un juego o una sección…"),
+    ).toBeVisible();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("también abre la paleta desde la barra superior", async () => {
+    const user = userEvent.setup();
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    await user.click(screen.getByRole("button", { name: "Abrir la paleta de comandos" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("ejecuta la acción principal sobre el juego enfocado y mueve el foco con las flechas", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    const commands: LibraryCommand[] = [];
+    const stop = onLibraryCommand((command) => commands.push(command));
+    const surface = librarySurface();
+    publishLibraryContext(libraryContext());
+
+    fireEvent.keyDown(surface, { key: "Enter" });
+    fireEvent.keyDown(surface, { key: " " });
+    fireEvent.keyDown(surface, { key: "ArrowDown" });
+    fireEvent.keyDown(surface, { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(surface, { key: "Home" });
+    fireEvent.keyDown(surface, { key: "a", metaKey: true });
+    // `LibraryScreen` publica el contexto real en cada renderizado, y la
+    // biblioteca de esta prueba está vacía: hay que volver a declarar el foco
+    // sintético antes de las teclas que operan sobre un juego concreto.
+    publishLibraryContext(libraryContext());
+    fireEvent.keyDown(surface, { key: "d", metaKey: true });
+    publishLibraryContext(libraryContext());
+    fireEvent.keyDown(surface, { key: "ArrowRight", altKey: true });
+
+    expect(commands).toEqual([
+      { kind: "primary", appId: 730 },
+      { kind: "openDetail", appId: 730 },
+      { kind: "moveFocus", direction: "down", extend: false },
+      { kind: "moveFocus", direction: "right", extend: true },
+      { kind: "moveFocus", direction: "first", extend: false },
+      { kind: "selectAll" },
+      { kind: "togglePinned", appId: 730 },
+      { kind: "cycleStatus", appId: 730, direction: 1 },
+    ]);
+    stop();
+    surface.remove();
+  });
+
+  it("no roba Intro ni las flechas fuera de la rejilla de la biblioteca", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    const commands: LibraryCommand[] = [];
+    const stop = onLibraryCommand((command) => commands.push(command));
+    publishLibraryContext(libraryContext());
+    const outside = document.createElement("button");
+    document.body.append(outside);
+
+    fireEvent.keyDown(outside, { key: "Enter" });
+    fireEvent.keyDown(outside, { key: "ArrowDown" });
+
+    expect(commands).toEqual([]);
+    stop();
+    outside.remove();
+  });
+
+  it("no dispara ningún atajo mientras se escribe una nota", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    const commands: LibraryCommand[] = [];
+    const stop = onLibraryCommand((command) => commands.push(command));
+    publishLibraryContext(libraryContext());
+    const surface = librarySurface();
+    const notes = document.createElement("textarea");
+    surface.append(notes);
+
+    fireEvent.keyDown(notes, { key: "Enter" });
+    fireEvent.keyDown(notes, { key: "ArrowDown" });
+    fireEvent.keyDown(notes, { key: "k", metaKey: true });
+    fireEvent.keyDown(notes, { key: "d", metaKey: true });
+
+    expect(commands).toEqual([]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    stop();
+    surface.remove();
+  });
+
+  it("aplica una reasignación local sin perder los atajos de navegación", async () => {
+    writeLocalShortcuts({ togglePinned: "Mod+Shift+P" });
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+
+    const commands: LibraryCommand[] = [];
+    const stop = onLibraryCommand((command) => commands.push(command));
+    publishLibraryContext(libraryContext());
+    const surface = librarySurface();
+
+    fireEvent.keyDown(surface, { key: "d", metaKey: true });
+    fireEvent.keyDown(surface, { key: "P", metaKey: true, shiftKey: true });
+    expect(commands).toEqual([{ kind: "togglePinned", appId: 730 }]);
+
+    const planner = screen.getByRole("button", { name: "Planificador" });
+    fireEvent.keyDown(window, { key: "2", metaKey: true });
+    await waitFor(() => expect(planner).toHaveAttribute("aria-current", "page"));
+    stop();
+    surface.remove();
+  });
+
+  it("cede la combinación a navegación cuando el usuario la reasigna encima de una local", async () => {
+    mockedApi.bootstrap.mockResolvedValue({
+      ...emptyBootstrap,
+      preferences: {
+        ...emptyBootstrap.preferences,
+        shortcuts: { ...emptyBootstrap.preferences.shortcuts, collections: "Mod+K" },
+      },
+    });
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+    const collections = screen.getByRole("button", { name: "Colecciones" });
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    await waitFor(() => expect(collections).toHaveAttribute("aria-current", "page"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("anuncia un fallo periódico e invalida cuenta y juegos para reflejarlo", async () => {

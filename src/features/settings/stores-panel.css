@@ -1,0 +1,586 @@
+/* Panel de tiendas externas. Reutiliza los contenedores de Ajustes
+   (`settings-section`, `settings-heading`, `inline-notice`, `button-row`) y
+   sólo define lo que es propio de esta pantalla. */
+
+/* Explicación de cómo llega la biblioteca completa. No es un aviso de error:
+   es la respuesta a «¿por qué sólo veo lo instalado?», y va antes de las
+   tarjetas para que se lea antes de escanear. */
+.stores-explainer {
+  display: grid;
+  gap: 7px;
+  padding: 11px 13px;
+  border: 1px solid #3e4a56;
+  border-left: 2px solid var(--v-cyan);
+  background: #212832;
+}
+
+.stores-explainer h4 {
+  margin: 0;
+  color: #e7edef;
+  font-size: 12px;
+}
+
+.stores-explainer p {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.stores-explainer strong {
+  color: #dfe6e8;
+}
+
+.stores-explainer code {
+  overflow-wrap: anywhere;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.stores-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.store-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #3e4a56;
+  background: #252e38;
+}
+
+/* Una tienda ausente no es un error: se apaga, no se pinta de rojo. */
+.store-card[data-detected="false"] {
+  border-color: #37434e;
+  background: #212832;
+}
+
+.store-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.store-card__head strong {
+  display: block;
+  color: #e7edef;
+  font-size: 13px;
+}
+
+.store-card__head span {
+  display: block;
+  margin-top: 2px;
+  color: var(--v-status-muted);
+  font-size: 10px;
+}
+
+.store-card__head span[data-state="detected"] {
+  color: var(--v-success);
+}
+
+.store-card__count {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid #3e4a56;
+  background: var(--v-surface-raised);
+  color: var(--v-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.store-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.store-card__facts dt {
+  color: var(--v-status-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.store-card__facts dd {
+  margin: 2px 0 0;
+  color: #dfe6e8;
+  font-size: 11px;
+}
+
+.store-card__facts dd[data-status="failed"] {
+  color: var(--v-error);
+}
+
+.store-card__facts dd[data-status="unavailable"],
+.store-card__facts dd[data-status="none"] {
+  color: var(--v-subtle);
+}
+
+.store-card__facts dd[data-status="success"] {
+  color: var(--v-success);
+}
+
+.store-card__error {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--v-warning);
+  background: rgb(214 166 75 / 10%);
+  color: #dcc79b;
+  font-size: 11px;
+}
+
+/* Qué hacer a continuación. Es una indicación, no un fallo: se pinta con el
+   color de acento y no con el de error, que ya lo usa `store-card__error`. */
+.store-card__advice {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--v-cyan);
+  background: var(--v-surface-selected);
+  color: #cfd8dc;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.store-card__paths {
+  display: grid;
+  gap: 4px;
+}
+
+.store-card__paths > span {
+  color: var(--v-status-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.store-card__paths ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store-card__paths code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--v-subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.store-card__paths[data-variant="searched"] code {
+  color: var(--v-status-muted);
+}
+
+.stores-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.stores-search {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--input);
+  background: #1e242c;
+  color: var(--v-status-muted);
+}
+
+.stores-search input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stores-search input:focus-visible {
+  outline: none;
+}
+
+.stores-chips {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.stores-chips button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3e4a56;
+  background: #212832;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.stores-chips button[data-active="true"] {
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+  color: #eef2f3;
+}
+
+.stores-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.stores-games {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #37434e;
+  background: #202730;
+  list-style: none;
+}
+
+.stores-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 150px) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #2b333d;
+}
+
+.stores-game:last-child {
+  border-bottom: 0;
+}
+
+.stores-game__identity {
+  min-width: 0;
+}
+
+.stores-game__identity strong {
+  display: block;
+  overflow: hidden;
+  color: #e7edef;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stores-game__identity span {
+  display: block;
+  margin-top: 2px;
+  color: var(--v-status-muted);
+  font-size: 10px;
+}
+
+.stores-game__match span {
+  display: block;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.stores-game__match strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #dfe6e8;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stores-game__match[data-source="manual"] span {
+  color: var(--v-cyan);
+}
+
+.stores-game__match[data-source="none"] span {
+  color: var(--v-warning);
+}
+
+.stores-picker {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #3e4a56;
+  background: #1b222c;
+}
+
+.stores-picker__results {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stores-picker__results button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  background: #232b35;
+  color: #dfe6e8;
+  font-size: 11px;
+  text-align: left;
+}
+
+.stores-picker__results button:hover:not(:disabled) {
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+}
+
+.stores-picker__results small {
+  flex: 0 0 auto;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .stores-game {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   itch.io
+
+   Bloque propio dentro del panel: itch.io se conecta con una clave de su API
+   oficial, no leyendo ficheros del disco, y esa diferencia tiene que verse.
+   Reutiliza `settings-heading`, `inline-notice`, `button-row` y
+   `stores-explainer`; aquí sólo está lo que no existía.
+   --------------------------------------------------------------------------- */
+.itch-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.itch-connect {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+  padding: 12px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+}
+
+.itch-connect__field {
+  display: grid;
+  gap: 5px;
+  width: min(100%, 420px);
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.itch-connect .settings-hint {
+  max-width: 62ch;
+}
+
+.itch-session {
+  display: grid;
+  gap: 8px;
+}
+
+.itch-session__account {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.itch-session__account svg {
+  width: 14px;
+  height: 14px;
+  color: var(--v-success);
+}
+
+/* El informe de importación. No es un aviso de éxito: son las cifras de lo que
+   ha pasado, y se leen aunque no haya nada que celebrar. */
+.itch-report {
+  display: grid;
+  gap: 7px;
+  padding: 11px 13px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-lime);
+  background: var(--v-surface-raised);
+}
+
+.itch-report__headline {
+  margin: 0;
+  font-size: 12px;
+}
+
+.itch-report__figures,
+.itch-report__skipped ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.itch-report__skipped summary {
+  color: var(--v-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.itch-report__skipped[open] summary {
+  margin-bottom: 5px;
+}
+
+/* Un aviso en línea que no interrumpe: el estado de itch.io no bloquea el resto
+   del panel, así que no toma el sitio de un `inline-notice`. */
+.itch-panel .settings-hint[data-kind="error"] {
+  color: var(--v-error);
+}
+
+/* ---------------------------------------------------------------------------
+   Sesión de cuenta (Epic Games Store y GOG)
+
+   Vive dentro de la tarjeta de su tienda, separado del bloque de escaneo por
+   una línea: son dos cosas distintas —la cuenta y el disco— y mezclarlas fue
+   justo lo que hacía que la tarjeta se contradijera a sí misma.
+   --------------------------------------------------------------------------- */
+.store-session {
+  display: grid;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--v-surface-selected);
+}
+
+.store-session__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.store-session__facts dt {
+  color: var(--v-status-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.store-session__facts dd {
+  margin: 2px 0 0;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.store-session__login {
+  display: grid;
+  gap: 7px;
+}
+
+.store-session__login p {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.store-session__login label {
+  color: var(--v-status-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* El campo del código manda: los dos botones se quedan con su ancho natural
+   para que pegar una URL larga siga siendo cómodo. */
+.store-session__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.store-session__field > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.store-session__reopen button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--v-cyan);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.store-session__reopen button:disabled {
+  color: var(--v-subtle);
+  cursor: default;
+}
+
+.store-session__error {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--v-error);
+  background: var(--v-surface-raised);
+  color: var(--v-error);
+  font-size: 11px;
+}
+
+/* Dónde acaba el testigo. Se enseña siempre, también sin sesión: es lo que hay
+   que poder comprobar justo después de cerrarla. */
+.store-session__custody {
+  margin: 0;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.store-session__custody code {
+  color: var(--v-muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.store-session__custody a {
+  color: var(--v-cyan);
+}
+
+/* El arranque del inicio de sesión: el botón manda y la vía manual queda
+   debajo, disponible pero secundaria. */
+.store-session__start {
+  display: grid;
+  gap: 6px;
+}
+
+/* Mientras la persona se identifica en la otra ventana. Es un estado de espera
+   largo —contraseña y segundo factor—, así que dice qué está pasando y cómo
+   salir en vez de dejar un botón girando sin explicación. */
+.store-session__waiting {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.store-session__reopen {
+  margin: 0;
+  color: var(--v-status-muted);
+  font-size: 10px;
+}

@@ -50,6 +50,7 @@ vi.mock("@tanstack/react-virtual", () => ({
       })),
     getTotalSize: () => count * 320,
     measure: vi.fn(),
+    scrollToIndex: vi.fn(),
   }),
 }));
 
@@ -311,18 +312,26 @@ describe("organización editable", () => {
 
   it("impide sobrescribir reglas cuando no puede cargar las guardadas y permite reintentar", async () => {
     const user = userEvent.setup();
-    mockedApi.listSmartRules
-      .mockRejectedValueOnce(new Error("No se pudieron leer las reglas."))
-      .mockResolvedValueOnce([
-        {
-          id: "rule-installed",
-          groupId: 0,
-          field: "installed",
-          operator: "equals",
-          value: true,
-          position: 0,
-        },
-      ]);
+    // La lectura de reglas ya no es exclusiva del diálogo: la tarjeta y el
+    // panel de detalle también resumen las condiciones. El fallo se controla
+    // por fase, no por número de llamada, para que la prueba siga verificando
+    // el contrato —no sobrescribir lo que no se pudo leer— sin depender de
+    // cuántos componentes consultan la misma caché.
+    let rulesReadable = false;
+    mockedApi.listSmartRules.mockImplementation(() =>
+      rulesReadable
+        ? Promise.resolve([
+            {
+              id: "rule-installed",
+              groupId: 0,
+              field: "installed",
+              operator: "equals",
+              value: true,
+              position: 0,
+            },
+          ])
+        : Promise.reject(new Error("No se pudieron leer las reglas.")),
+    );
     renderWithQuery(<CollectionsScreen bootstrap={bootstrap} loading={false} />);
 
     await user.click(screen.getByRole("button", { name: "Editar Noches tranquilas" }));
@@ -330,8 +339,12 @@ describe("organización editable", () => {
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
     expect(mockedApi.saveCollection).not.toHaveBeenCalled();
 
+    const attemptsBeforeRetry = mockedApi.listSmartRules.mock.calls.length;
+    rulesReadable = true;
     await user.click(screen.getByRole("button", { name: "Reintentar cargar reglas" }));
-    await waitFor(() => expect(mockedApi.listSmartRules).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(mockedApi.listSmartRules.mock.calls.length).toBeGreaterThan(attemptsBeforeRetry),
+    );
     expect(await screen.findByRole("button", { name: "Guardar cambios" })).toBeEnabled();
   });
 

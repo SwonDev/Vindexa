@@ -1,5 +1,7 @@
 pub mod achievements;
 pub mod actions;
+pub mod dlc;
+pub mod drm;
 pub mod family;
 pub mod local;
 pub mod metadata_enrichment;
@@ -7,7 +9,10 @@ pub mod news_api;
 pub mod openid;
 pub mod secrets;
 pub mod store_api;
+pub mod store_assets;
 pub mod web_api;
+pub mod wishlist;
+pub mod wishlist_session;
 
 pub use actions::{GameAction, open_game_action, request_uninstall, reveal_installation};
 pub use local::{detect as detect_local_steam, scan as scan_local_library};

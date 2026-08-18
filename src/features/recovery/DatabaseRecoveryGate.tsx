@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
+import { Eyebrow } from "@/components/common/Eyebrow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, getErrorMessage } from "@/lib/tauri";
@@ -114,7 +115,7 @@ export function DatabaseRecoveryGate({ children }: DatabaseRecoveryGateProps) {
             <IconShieldLock size={28} />
           </span>
           <div>
-            <p className="eyebrow">Protección local de Vindexa</p>
+            <Eyebrow>Protección local de Vindexa</Eyebrow>
             <h1 id="database-recovery-title">Recuperación de datos necesaria</h1>
             <p>
               El arranque se ha detenido antes de escribir datos nuevos. Decide cómo continuar con

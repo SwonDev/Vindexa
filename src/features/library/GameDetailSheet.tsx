@@ -3,25 +3,35 @@ import {
   IconBrandSteam,
   IconCalendar,
   IconCheck,
+  IconChevronDown,
   IconClock,
   IconDeviceGamepad2,
   IconDownload,
   IconFolderOpen,
+  IconLanguage,
   IconLoader2,
+  IconMoodKid,
+  IconMovie,
   IconPlayerPlay,
   IconRefresh,
   IconRosetteDiscountCheck,
   IconRoute,
+  IconShieldCheck,
+  IconShieldLock,
+  IconStarFilled,
   IconTargetArrow,
   IconTrash,
+  IconWorld,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MotionConfig, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { Artwork } from "@/components/common/Artwork";
+import { Eyebrow } from "@/components/common/Eyebrow";
 import { LoadingState } from "@/components/common/LoadingState";
+import { MetricStrip } from "@/components/common/MetricStrip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,10 +65,84 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import "@/features/library/game-detail.css";
+import { DLC_SUMMARY_STALE_MS, GameDlcPanel } from "@/features/library/GameDlcPanel";
 import { PersonalJournal } from "@/features/library/PersonalJournal";
-import { formatBytes, formatDate, formatPlaytime } from "@/lib/format";
+import { PriorityExplanation } from "@/features/library/PriorityExplanation";
+import {
+  formatBytes,
+  formatDate,
+  formatPlaytime,
+  formatRelativeDate,
+  formatSteamDeckStatus,
+} from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { CollectionSummary, GameDetail, StatusDefinition, UpdateGameInput } from "@/lib/types";
+
+const NEXT_ACTION_MAX = 500;
+const NOTES_MAX = 20_000;
+const DESCRIPTION_CLAMP_CHARS = 420;
+const CATEGORY_CHIPS_VISIBLE = 6;
+/** Altura a la que se pliega la prosa larga; coincide con `--detail-prose-clamp`. */
+const PROSE_CLAMP_PX = 248;
+/** Holgura para no plegar por una línea huérfana. */
+const PROSE_CLAMP_TOLERANCE_PX = 24;
+const MEDIA_VISIBLE = 6;
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Contrato de metadatos enriquecidos.
+
+   El backend (`src-tauri/src/db/rich_metadata.rs`) ya define y persiste estos
+   campos, pero todavía no viajan en `GameDetail` de `src/lib/types.ts`. Se
+   declaran aquí como opcionales y se consumen con acceso defensivo para que la
+   ficha funcione igual antes y después de que el comando los exponga. El diff
+   exacto para `types.ts` va en el informe de la tarea.
+   ────────────────────────────────────────────────────────────────────────── */
+
+export type DescriptionBlock =
+  | { kind: "heading"; level?: number; text: string }
+  | { kind: "paragraph"; text: string }
+  | { kind: "list"; ordered?: boolean; items: string[] };
+
+export interface StructuredDescription {
+  blocks?: DescriptionBlock[];
+}
+
+export type DrmState = "unknown" | "drm_free" | "third_party_drm" | "steam_drm";
+
+export interface DrmEvidence {
+  source: string;
+  match: string;
+}
+
+export interface GameMediaItem {
+  mediaId: string;
+  kind: "screenshot" | "movie";
+  thumbnailUrl?: string;
+  fullUrl?: string;
+  altUrl?: string;
+  position?: number;
+}
+
+export interface GameDetailExtras {
+  detailedDescription?: StructuredDescription | string | null;
+  aboutTheGame?: StructuredDescription | string | null;
+  supportedLanguages?: string | null;
+  websiteUrl?: string | null;
+  metacriticScore?: number | null;
+  metacriticUrl?: string | null;
+  requiredAge?: number | null;
+  controllerSupport?: string | null;
+  drmState?: DrmState | null;
+  drmNotice?: string | null;
+  drmEvidence?: DrmEvidence[] | null;
+  /** Forma alternativa: el backend agrupa estado y evidencias en `drm`. */
+  drm?: { state?: DrmState; evidence?: DrmEvidence[] } | null;
+  media?: GameMediaItem[] | null;
+}
+
+type EnrichedDetail = GameDetail & Partial<GameDetailExtras>;
 
 const detailSchema = z.object({
   appId: z.number().int().positive(),
@@ -70,9 +154,9 @@ const detailSchema = z.object({
   rating: z.number().int().min(1).max(10).optional(),
   estimatedMinutes: z.number().int().positive().optional(),
   targetDate: z.string().optional(),
-  nextAction: z.string().max(500).optional(),
+  nextAction: z.string().max(NEXT_ACTION_MAX).optional(),
   checkpoint: z.string().max(2_000).optional(),
-  notes: z.string().max(20_000).optional(),
+  notes: z.string().max(NOTES_MAX).optional(),
 });
 
 interface Props {
@@ -120,10 +204,25 @@ export function GameDetailSheet({
   const heroMediaRef = useRef<HTMLDivElement | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice>();
   const [achievementError, setAchievementError] = useState<string>();
+  const [invalidDraft, setInvalidDraft] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
+  const [mediaExpanded, setMediaExpanded] = useState(false);
+  const [failedMedia, setFailedMedia] = useState<readonly string[]>([]);
+  const [proseNode, setProseNode] = useState<HTMLDivElement | null>(null);
+  const [proseOverflows, setProseOverflows] = useState<boolean | undefined>(undefined);
   const detailQuery = useQuery({
     queryKey: ["game", appId],
     queryFn: () => api.gameDetail(appId as number),
     enabled: open && Boolean(appId),
+  });
+  // Sólo alimenta el contador de la pestaña. `GameDlcPanel` comparte esta misma
+  // clave, así que abrir la pestaña no vuelve a pedir el resumen.
+  const dlcSummaryQuery = useQuery({
+    queryKey: ["game-dlc-summary", appId],
+    queryFn: () => api.dlcSummary(appId as number),
+    enabled: open && Boolean(appId),
+    staleTime: DLC_SUMMARY_STALE_MS,
   });
   const form = useForm<z.infer<typeof detailSchema>>({
     resolver: zodResolver(detailSchema),
@@ -187,7 +286,11 @@ export function GameDetailSheet({
   const queueSave = useCallback(
     (input: UpdateGameInput, force = false) => {
       const parsed = detailSchema.safeParse(input);
-      if (!parsed.success) return Promise.resolve();
+      if (!parsed.success) {
+        setInvalidDraft(true);
+        return Promise.resolve();
+      }
+      setInvalidDraft(false);
       const fingerprint = saveFingerprint(parsed.data);
       if (
         !force &&
@@ -205,7 +308,11 @@ export function GameDetailSheet({
   const flushCurrentSave = useCallback(
     (force = false) => {
       const current = detailSchema.safeParse(form.getValues());
-      if (current.success) void queueSave(current.data, force);
+      if (current.success) {
+        void queueSave(current.data, force);
+      } else {
+        setInvalidDraft(true);
+      }
     },
     [form, queueSave],
   );
@@ -248,6 +355,11 @@ export function GameDetailSheet({
     initializedId.current = detailQuery.data.appId;
     const values = detailToForm(detailQuery.data);
     lastPersistedFingerprintRef.current = saveFingerprint(values);
+    setInvalidDraft(false);
+    setDescExpanded(false);
+    setCategoriesExpanded(false);
+    setMediaExpanded(false);
+    setFailedMedia([]);
     form.reset(values);
   }, [detailQuery.data, form]);
   useEffect(() => {
@@ -256,6 +368,7 @@ export function GameDetailSheet({
     metadataAttemptedId.current = undefined;
     setActionNotice(undefined);
     setAchievementError(undefined);
+    setInvalidDraft(false);
   }, [open]);
   useEffect(() => {
     return () => {
@@ -283,12 +396,12 @@ export function GameDetailSheet({
       frame = undefined;
       if (reduced.matches) {
         media.style.transform = "none";
-        media.style.opacity = "1";
         return;
       }
+      // Sólo `transform`: el desvanecido anterior apagaba el banner sobre el
+      // fondo del panel y era una de las causas del color lavado.
       const scroll = Math.min(scroller.scrollTop, 320);
       media.style.transform = `translate3d(0, ${Math.round(scroll * 0.18)}px, 0) scale(1.06)`;
-      media.style.opacity = String(Math.max(0.68, 1 - scroll / 720));
     };
     const schedule = () => {
       if (frame === undefined) frame = window.requestAnimationFrame(paint);
@@ -301,11 +414,48 @@ export function GameDetailSheet({
       reduced.removeEventListener("change", schedule);
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       media.style.transform = "";
-      media.style.opacity = "";
     };
   }, [open, parallaxAppId]);
+  // La prosa se pliega por altura REAL medida. Cuando el navegador todavía no
+  // ha medido (primer pintado, jsdom) se usa la estimación por longitud, así el
+  // botón nunca aparece y desaparece provocando un salto de maquetación.
+  useEffect(() => {
+    if (!proseNode || typeof ResizeObserver === "undefined") {
+      setProseOverflows(undefined);
+      return;
+    }
+    const measure = () => {
+      const height = proseNode.getBoundingClientRect().height;
+      setProseOverflows(
+        height > 0 ? height > PROSE_CLAMP_PX + PROSE_CLAMP_TOLERANCE_PX : undefined,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(proseNode);
+    return () => observer.disconnect();
+  }, [proseNode]);
 
-  const detail = detailQuery.data;
+  const detail = detailQuery.data as EnrichedDetail | undefined;
+  const longBlocks = useMemo(
+    () => toDescriptionBlocks(detail?.detailedDescription ?? detail?.aboutTheGame),
+    [detail?.aboutTheGame, detail?.detailedDescription],
+  );
+  const specs = useMemo(() => (detail ? readSpecs(detail) : []), [detail]);
+  const media = useMemo(
+    () => readMedia(detail).filter((item) => !failedMedia.includes(item.mediaId)),
+    [detail, failedMedia],
+  );
+  // Una captura que el CDN no sirve no puede dejar un hueco roto en la rejilla.
+  const dropMedia = useCallback((mediaId: string) => {
+    setFailedMedia((failed) => (failed.includes(mediaId) ? failed : [...failed, mediaId]));
+  }, []);
+  const proseLength =
+    (detail?.shortDescription?.length ?? 0) +
+    longBlocks.reduce((total, block) => total + blockLength(block), 0);
+  const hasProse = Boolean(detail?.shortDescription) || longBlocks.length > 0;
+  const needsClamp = proseOverflows ?? proseLength > DESCRIPTION_CLAMP_CHARS;
+  const proseCollapsed = hasProse && needsClamp && !descExpanded;
   const submitAction = (request: ActionRequest) => {
     if (!actionMutation.isPending) actionMutation.mutate(request);
   };
@@ -365,7 +515,7 @@ export function GameDetailSheet({
                 </Badge>
               </div>
               <SheetHeader>
-                <p className="eyebrow">STEAM · APP {detail.appId}</p>
+                <Eyebrow>STEAM · APP {detail.appId}</Eyebrow>
                 <SheetTitle>{detail.title}</SheetTitle>
                 <SheetDescription>
                   {[detail.developer, detail.releaseDate && formatDate(detail.releaseDate)]
@@ -424,7 +574,12 @@ export function GameDetailSheet({
                 (confirmUninstall ? (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="outline" disabled={actionMutation.isPending}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="detail-action--destructive"
+                        disabled={actionMutation.isPending}
+                      >
                         <IconTrash /> Desinstalar
                       </Button>
                     </AlertDialogTrigger>
@@ -452,7 +607,8 @@ export function GameDetailSheet({
                 ) : (
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className="detail-action--destructive"
                     disabled={actionMutation.isPending}
                     onClick={() => submitAction(uninstallRequest)}
                   >
@@ -476,13 +632,15 @@ export function GameDetailSheet({
               </Button>
               <span
                 className="autosave-state"
-                data-error={mutation.isError || undefined}
+                data-error={mutation.isError || invalidDraft || undefined}
                 aria-live="polite"
               >
                 {mutation.isPending ? (
                   <>
                     <IconLoader2 className="is-spinning" /> Guardando
                   </>
+                ) : invalidDraft ? (
+                  "Sin guardar: revisa los campos marcados"
                 ) : mutation.isError ? (
                   getErrorMessage(mutation.error)
                 ) : form.formState.isDirty ? (
@@ -520,47 +678,64 @@ export function GameDetailSheet({
                 )}
               </div>
             )}
-            <div className="detail-metrics">
-              <DetailMetric
-                label="Tiempo de juego"
-                value={formatPlaytime(detail.playtimeMinutes)}
-              />
-              <DetailMetric label="Última sesión" value={formatDate(detail.lastPlayedAt)} />
-              <DetailMetric
-                label="Logros"
-                icon={<IconRosetteDiscountCheck />}
-                value={
-                  detail.achievementsStatus === "success" &&
-                  typeof detail.achievementsUnlocked === "number" &&
-                  typeof detail.achievementsTotal === "number"
-                    ? `${detail.achievementsUnlocked}/${detail.achievementsTotal}`
-                    : "Sin datos"
-                }
-                action={
-                  detail.achievementsStatus !== "success" ? (
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      disabled={achievementMutation.isPending}
-                      onClick={() => achievementMutation.mutate(detail.appId)}
-                    >
-                      {achievementMutation.isPending ? (
-                        <IconLoader2 className="is-spinning" />
-                      ) : (
-                        <IconRefresh />
-                      )}
-                      {achievementMutation.isPending ? "Actualizando…" : "Actualizar logros"}
-                    </Button>
-                  ) : undefined
-                }
-              />
-              <DetailMetric
-                label="Steam Deck"
-                icon={<IconDeviceGamepad2 />}
-                value={detail.steamDeckStatus || "Sin datos"}
-              />
-              <DetailMetric label="En disco" value={formatBytes(detail.sizeOnDisk)} />
-            </div>
+            <MetricStrip
+              className="detail-metrics"
+              label="Resumen de la partida"
+              items={[
+                {
+                  id: "playtime",
+                  label: "Tiempo de juego",
+                  value: formatPlaytime(detail.playtimeMinutes),
+                },
+                {
+                  id: "recent",
+                  label: "Reciente (2 sem)",
+                  value: formatPlaytime(detail.playtimeRecentMinutes),
+                },
+                {
+                  id: "last-session",
+                  label: "Última sesión",
+                  value: formatDate(detail.lastPlayedAt),
+                },
+                {
+                  id: "achievements",
+                  label: "Logros",
+                  icon: <IconRosetteDiscountCheck size={13} />,
+                  value:
+                    detail.achievementsStatus === "success" &&
+                    typeof detail.achievementsUnlocked === "number" &&
+                    typeof detail.achievementsTotal === "number"
+                      ? `${detail.achievementsUnlocked}/${detail.achievementsTotal}`
+                      : "Sin datos",
+                  note: detail.achievementsFetchedAt
+                    ? `Act. ${formatRelativeDate(detail.achievementsFetchedAt)}`
+                    : undefined,
+                  action:
+                    detail.achievementsStatus !== "success" ? (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={achievementMutation.isPending}
+                        onClick={() => achievementMutation.mutate(detail.appId)}
+                      >
+                        {achievementMutation.isPending ? (
+                          <IconLoader2 className="is-spinning" />
+                        ) : (
+                          <IconRefresh />
+                        )}
+                        {achievementMutation.isPending ? "Actualizando…" : "Actualizar logros"}
+                      </Button>
+                    ) : undefined,
+                },
+                {
+                  id: "steam-deck",
+                  label: "Steam Deck",
+                  icon: <IconDeviceGamepad2 size={13} />,
+                  value: formatSteamDeckStatus(detail.steamDeckStatus) ?? "Sin datos",
+                },
+                { id: "size", label: "En disco", value: formatBytes(detail.sizeOnDisk) },
+              ]}
+            />
             {achievementError && (
               <div className="detail-achievement-feedback" role="alert" aria-live="assertive">
                 <IconRosetteDiscountCheck />
@@ -577,29 +752,62 @@ export function GameDetailSheet({
             )}
             <motion.section
               key={`overview-${detail.appId}`}
-              className="detail-overview"
+              className="detail-overview detail-about"
               aria-labelledby="detail-about-title"
               initial={prefersReducedMotion ? false : { opacity: 0.88, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="detail-overview__copy">
-                <p className="eyebrow">ACERCA DE ESTE JUEGO</p>
-                <h3 id="detail-about-title">{detail.title}</h3>
-                {detail.shortDescription ? (
-                  <p>{detail.shortDescription}</p>
+              <div className="detail-about__copy">
+                {/* El título ya preside el banner: repetirlo aquí es relleno de
+                    plantilla. El encabezado accesible se conserva fuera de la
+                    vista para que la sección siga teniendo nombre. */}
+                <div className="detail-about__head">
+                  <h3 id="detail-about-title" className="sr-only">
+                    Acerca de {detail.title}
+                  </h3>
+                  <Eyebrow decorative>ACERCA DE ESTE JUEGO</Eyebrow>
+                </div>
+                {hasProse ? (
+                  <>
+                    <div
+                      className="detail-about__prose"
+                      id="detail-description"
+                      data-collapsed={proseCollapsed || undefined}
+                    >
+                      <div ref={setProseNode}>
+                        {detail.shortDescription ? (
+                          <p className="detail-about__lead">{detail.shortDescription}</p>
+                        ) : null}
+                        <DescriptionBlocks blocks={longBlocks} />
+                      </div>
+                    </div>
+                    {needsClamp && (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="detail-about__toggle"
+                        aria-expanded={descExpanded}
+                        aria-controls="detail-description"
+                        onClick={() => setDescExpanded((expanded) => !expanded)}
+                      >
+                        <IconChevronDown />
+                        {descExpanded ? "Mostrar menos" : "Mostrar más"}
+                      </Button>
+                    )}
+                  </>
                 ) : metadataMutation.isPending || detail.metadataStatus === "pending" ? (
-                  <p className="detail-description-state">
+                  <p className="detail-about__state">
                     <IconLoader2 className="is-spinning" /> Cargando la descripción desde Steam…
                   </p>
                 ) : (
-                  <p className="detail-description-state">
+                  <p className="detail-about__state">
                     La descripción de Steam no está disponible ahora. Tu organización personal y los
                     datos locales siguen accesibles.
                   </p>
                 )}
               </div>
-              <div className="detail-overview__tags">
+              <div className="detail-overview__tags detail-about__tags">
                 {detail.isEarlyAccess && <Badge variant="outline">Early Access</Badge>}
                 {detail.genres.slice(0, 6).map((genre) => (
                   <Badge key={genre} variant="secondary">
@@ -629,14 +837,100 @@ export function GameDetailSheet({
                 )}
               </div>
             </motion.section>
+            {specs.length > 0 && (
+              <section className="detail-specs" aria-labelledby="detail-specs-title">
+                <h3 id="detail-specs-title">Especificaciones</h3>
+                <dl className="detail-specs__list">
+                  {specs.map((spec) => (
+                    <div
+                      className={spec.wide ? "detail-spec detail-spec--wide" : "detail-spec"}
+                      key={spec.id}
+                    >
+                      <dt>
+                        {spec.icon}
+                        {spec.label}
+                      </dt>
+                      <dd>{spec.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
+            {media.length > 0 && (
+              <section className="detail-media" aria-labelledby="detail-media-title">
+                <h3 id="detail-media-title">Capturas y vídeos</h3>
+                <ul className="detail-media__grid">
+                  {(mediaExpanded ? media : media.slice(0, MEDIA_VISIBLE)).map((item, index) => (
+                    <li key={item.mediaId}>
+                      {item.kind === "movie" ? (
+                        <button
+                          type="button"
+                          className="detail-media__item"
+                          onClick={() =>
+                            submitAction({
+                              id: "store",
+                              pending: "Abriendo la tienda protegida…",
+                              success:
+                                "La tienda oficial se abrió en una sesión privada de Vindexa.",
+                              run: () => api.openStore(detail.appId),
+                            })
+                          }
+                        >
+                          <img
+                            src={item.thumbnailUrl}
+                            alt={`Vídeo ${index + 1} de ${detail.title}. Se abre en la tienda integrada.`}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => dropMedia(item.mediaId)}
+                          />
+                          <span className="detail-media__badge">
+                            <IconMovie /> VÍDEO
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="detail-media__item">
+                          <img
+                            src={item.thumbnailUrl}
+                            alt={`Captura ${index + 1} de ${detail.title}`}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => dropMedia(item.mediaId)}
+                          />
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {media.length > MEDIA_VISIBLE && (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="detail-media__more"
+                    aria-expanded={mediaExpanded}
+                    onClick={() => setMediaExpanded((expanded) => !expanded)}
+                  >
+                    {mediaExpanded
+                      ? "Mostrar menos medios"
+                      : `Mostrar ${media.length - MEDIA_VISIBLE} medios más`}
+                  </Button>
+                )}
+              </section>
+            )}
             <Tabs defaultValue="plan" className="detail-tabs">
               <TabsList>
                 <TabsTrigger value="plan">Plan personal</TabsTrigger>
                 <TabsTrigger value="info">Información</TabsTrigger>
+                <TabsTrigger value="dlc">
+                  Contenido adicional
+                  {dlcSummaryQuery.data && dlcSummaryQuery.data.total > 0 ? (
+                    <span className="detail-tab-count">{dlcSummaryQuery.data.total}</span>
+                  ) : null}
+                </TabsTrigger>
                 <TabsTrigger value="journal">Registro</TabsTrigger>
                 <TabsTrigger value="history">Actividad</TabsTrigger>
               </TabsList>
               <TabsContent value="plan">
+                <PriorityExplanation key={`priority-${detail.appId}`} appId={detail.appId} />
                 <DetailForm
                   detail={detail}
                   statuses={statuses}
@@ -649,21 +943,73 @@ export function GameDetailSheet({
                 />
               </TabsContent>
               <TabsContent value="info" className="detail-info">
-                <InfoRow label="Desarrollador" value={detail.developer} />
-                <InfoRow label="Editor" value={detail.publisher} />
-                <InfoRow label="Lanzamiento" value={displayDate(detail.releaseDate)} />
-                <InfoRow label="Modelo" value={detail.isFree ? "Free to Play" : "De pago"} />
-                <InfoRow label="Propiedad" value={ownershipLabel(detail.ownershipSource)} />
-                {detail.ownershipSource === "family_shared" && (
-                  <InfoRow
-                    label="Disponibilidad familiar"
-                    value={familyAvailabilityLabel(detail.familyAvailability)}
-                  />
-                )}
-                <InfoRow label="Instalación" value={detail.installPath} />
-                <InfoRow label="Categorías" value={detail.categories.join(", ")} />
-                <InfoRow label="Géneros" value={detail.genres.join(", ")} />
-                <InfoRow label="Ficha actualizada" value={displayDate(detail.metadataFetchedAt)} />
+                <section className="detail-info__group" aria-labelledby="detail-info-steam-title">
+                  <h3 id="detail-info-steam-title">Steam</h3>
+                  <InfoRow label="Desarrollador" value={detail.developer} />
+                  <InfoRow label="Editor" value={detail.publisher} />
+                  <InfoRow label="Lanzamiento" value={displayDate(detail.releaseDate)} />
+                  <InfoRow label="Modelo" value={detail.isFree ? "Free to Play" : "De pago"} />
+                  <InfoRow label="Géneros" value={detail.genres.join(", ")} />
+                  {detail.categories.length > 0 && (
+                    <div className="info-row">
+                      <span>Categorías</span>
+                      <div className="info-chips" id="detail-info-categories">
+                        {(categoriesExpanded
+                          ? detail.categories
+                          : detail.categories.slice(0, CATEGORY_CHIPS_VISIBLE)
+                        ).map((category) => (
+                          <Badge key={category} variant="secondary">
+                            {category}
+                          </Badge>
+                        ))}
+                        {detail.categories.length > CATEGORY_CHIPS_VISIBLE && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            aria-expanded={categoriesExpanded}
+                            aria-controls="detail-info-categories"
+                            onClick={() => setCategoriesExpanded((expanded) => !expanded)}
+                          >
+                            {categoriesExpanded
+                              ? "Mostrar menos"
+                              : `Mostrar ${detail.categories.length - CATEGORY_CHIPS_VISIBLE} más`}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </section>
+                <section className="detail-info__group" aria-labelledby="detail-info-copy-title">
+                  <h3 id="detail-info-copy-title">Tu copia</h3>
+                  <InfoRow label="Propiedad" value={ownershipLabel(detail.ownershipSource)} />
+                  {detail.ownershipSource === "family_shared" && (
+                    <InfoRow
+                      label="Disponibilidad familiar"
+                      value={familyAvailabilityLabel(detail.familyAvailability)}
+                    />
+                  )}
+                  <InfoRow label="Instalación" value={detail.installPath} />
+                </section>
+                <section className="detail-info__group" aria-labelledby="detail-info-sync-title">
+                  <h3 id="detail-info-sync-title">Sincronización</h3>
+                  {detail.metadataFetchedAt ? (
+                    <InfoRow
+                      label="Ficha actualizada"
+                      value={formatDate(detail.metadataFetchedAt)}
+                    />
+                  ) : (
+                    <p className="muted-copy">
+                      Todavía no se ha descargado la ficha oficial de Steam.
+                    </p>
+                  )}
+                </section>
+              </TabsContent>
+              <TabsContent value="dlc">
+                <GameDlcPanel
+                  key={`dlc-${detail.appId}`}
+                  appId={detail.appId}
+                  title={detail.title}
+                />
               </TabsContent>
               <TabsContent value="journal">
                 <PersonalJournal detail={detail} />
@@ -713,163 +1059,215 @@ function DetailForm({
   savePending: boolean;
   collectionMutation: ReturnType<typeof useMutation<GameDetail, Error, string[]>>;
 }) {
+  const nextActionLength = watched.nextAction?.length ?? 0;
+  const notesLength = watched.notes?.length ?? 0;
+  const estimatedMinutesValue = watched.estimatedMinutes ?? 0;
+  const nextActionError =
+    nextActionLength > NEXT_ACTION_MAX
+      ? `La próxima acción supera el máximo de ${NEXT_ACTION_MAX} caracteres.`
+      : undefined;
+  const notesError =
+    notesLength > NOTES_MAX ? "Las notas superan el máximo de 20 000 caracteres." : undefined;
   return (
     <form className="detail-form" onSubmit={form.handleSubmit((values) => onSave(values, true))}>
-      <div className="detail-form__row">
-        <div className="detail-field">
-          <span>Estado</span>
-          <Select
-            value={watched.statusId ?? "unclassified"}
-            onValueChange={(value) => {
-              if (!value) return;
-              form.setValue("statusId", value, { shouldDirty: true });
-            }}
-          >
-            <SelectTrigger aria-label="Estado personal">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {statuses.map((status) => (
-                <SelectItem key={status.id} value={status.id}>
-                  <span className="select-status">
-                    <i style={{ backgroundColor: status.color }} />
-                    {status.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <fieldset className="detail-form__group">
+        <legend>Estado y progreso</legend>
+        <div className="detail-form__row">
+          <div className="detail-field">
+            <span>Estado</span>
+            <Select
+              value={watched.statusId ?? "unclassified"}
+              onValueChange={(value) => {
+                if (!value) return;
+                form.setValue("statusId", value, { shouldDirty: true });
+              }}
+            >
+              <SelectTrigger aria-label="Estado personal">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statuses.map((status) => (
+                  <SelectItem key={status.id} value={status.id}>
+                    <span className="select-status">
+                      <i style={{ backgroundColor: status.color }} />
+                      {status.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="detail-field">
+            <span>Valoración</span>
+            <Select
+              value={watched.rating ? String(watched.rating) : "none"}
+              onValueChange={(value) => {
+                if (!value) return;
+                form.setValue("rating", value === "none" ? undefined : Number(value), {
+                  shouldDirty: true,
+                });
+              }}
+            >
+              <SelectTrigger aria-label="Valoración personal">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin valorar</SelectItem>
+                {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
+                  <SelectItem key={rating} value={String(rating)}>
+                    {rating}/10
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="detail-field">
-          <span>Valoración</span>
-          <Select
-            value={watched.rating ? String(watched.rating) : "none"}
-            onValueChange={(value) => {
-              if (!value) return;
-              form.setValue("rating", value === "none" ? undefined : Number(value), {
-                shouldDirty: true,
-              });
-            }}
-          >
-            <SelectTrigger aria-label="Valoración personal">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin valorar</SelectItem>
-              {Array.from({ length: 10 }, (_, index) => index + 1).map((rating) => (
-                <SelectItem key={rating} value={String(rating)}>
-                  {rating}/10
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="slider-field">
-        <span>
-          <span>Progreso</span>
-          <output>{watched.progress ?? 0}%</output>
-        </span>
-        <Slider
-          aria-label="Progreso del juego"
-          value={[watched.progress ?? 0]}
-          min={0}
-          max={100}
-          step={1}
-          onValueChange={([progress = 0]) =>
-            form.setValue("progress", progress, { shouldDirty: true })
-          }
-        />
-      </div>
-      <div className="slider-field">
-        <span>
-          <span>Prioridad</span>
-          <output>{watched.priority ?? 0}/5</output>
-        </span>
-        <Slider
-          aria-label="Prioridad del juego"
-          value={[watched.priority ?? 0]}
-          min={0}
-          max={5}
-          step={1}
-          onValueChange={([priority = 0]) =>
-            form.setValue("priority", priority, { shouldDirty: true })
-          }
-        />
-      </div>
-      <div className="detail-form__row">
-        <label htmlFor="game-target-date">
+        <div className="slider-field">
           <span>
-            <IconCalendar size={14} /> Fecha objetivo
+            <span>Progreso</span>
+            <output>{watched.progress ?? 0}%</output>
           </span>
-          <Input id="game-target-date" type="date" {...form.register("targetDate")} />
-        </label>
-        <label htmlFor="game-estimated-minutes">
-          <span>
-            <IconClock size={14} /> Duración restante
-          </span>
-          <Input
-            id="game-estimated-minutes"
-            type="number"
-            min={1}
-            step={15}
-            placeholder="Minutos"
-            {...form.register("estimatedMinutes", {
-              setValueAs: (value) => (value === "" ? undefined : Number(value)),
-            })}
-          />
-        </label>
-      </div>
-      <label htmlFor="game-checkpoint">
-        <span>
-          <IconRoute size={14} /> ¿Por dónde lo dejaste?
-        </span>
-        <Textarea
-          id="game-checkpoint"
-          rows={3}
-          placeholder="Checkpoint, misión, zona o situación actual"
-          {...form.register("checkpoint")}
-        />
-      </label>
-      <label htmlFor="game-next-action">
-        <span>
-          <IconTargetArrow size={14} /> Próxima acción
-        </span>
-        <Input
-          id="game-next-action"
-          placeholder="La siguiente cosa concreta que quieres hacer"
-          {...form.register("nextAction")}
-        />
-      </label>
-      <label htmlFor="game-notes">
-        <span>Notas privadas</span>
-        <Textarea
-          id="game-notes"
-          rows={5}
-          placeholder="Decisiones, estrategia o contexto que quieras conservar"
-          {...form.register("notes")}
-        />
-      </label>
-      <div className="detail-toggles">
-        <div className="detail-toggle">
-          <Switch
-            aria-label="Fijar en la biblioteca"
-            checked={watched.pinned ?? false}
-            onCheckedChange={(pinned) => form.setValue("pinned", pinned, { shouldDirty: true })}
-          />
-          <span>Fijado en la biblioteca</span>
-        </div>
-        <div className="detail-toggle">
-          <Switch
-            aria-label="Seguir actualizaciones"
-            checked={watched.tracking ?? false}
-            onCheckedChange={(tracking) =>
-              form.setValue("tracking", tracking, { shouldDirty: true })
+          <Slider
+            aria-label="Progreso del juego"
+            value={[watched.progress ?? 0]}
+            min={0}
+            max={100}
+            step={1}
+            onValueChange={([progress = 0]) =>
+              form.setValue("progress", progress, { shouldDirty: true })
             }
           />
-          <span>Seguir actualizaciones</span>
         </div>
-      </div>
+        <div className="detail-toggles">
+          <div className="detail-toggle">
+            <Switch
+              aria-label="Fijar en la biblioteca"
+              checked={watched.pinned ?? false}
+              onCheckedChange={(pinned) => form.setValue("pinned", pinned, { shouldDirty: true })}
+            />
+            <span>Fijado en la biblioteca</span>
+          </div>
+        </div>
+      </fieldset>
+      <fieldset className="detail-form__group">
+        <legend>Planificación</legend>
+        <div className="slider-field">
+          <span>
+            <span>Prioridad</span>
+            <output>{watched.priority ?? 0}/5</output>
+          </span>
+          <Slider
+            aria-label="Prioridad del juego"
+            value={[watched.priority ?? 0]}
+            min={0}
+            max={5}
+            step={1}
+            onValueChange={([priority = 0]) =>
+              form.setValue("priority", priority, { shouldDirty: true })
+            }
+          />
+          <p className="detail-form__hint">De 0 (sin prisa) a 5 (lo próximo que quieres jugar).</p>
+        </div>
+        <div className="detail-form__row">
+          <label htmlFor="game-target-date">
+            <span>
+              <IconCalendar size={14} /> Fecha objetivo
+            </span>
+            <Input id="game-target-date" type="date" {...form.register("targetDate")} />
+          </label>
+          <label htmlFor="game-estimated-minutes">
+            <span>
+              <IconClock size={14} /> Duración restante
+            </span>
+            {/* La unidad viaja con el campo: un «540» a secas no dice nada, y
+                bajo el control se muestra además convertido a horas. */}
+            <span className="detail-form__measure">
+              <Input
+                id="game-estimated-minutes"
+                type="number"
+                min={1}
+                step={15}
+                placeholder="Minutos"
+                aria-describedby="game-estimated-minutes-hint"
+                {...form.register("estimatedMinutes", {
+                  setValueAs: (value) => (value === "" ? undefined : Number(value)),
+                })}
+              />
+              <em>min</em>
+            </span>
+            <small id="game-estimated-minutes-hint" className="detail-form__hint">
+              {estimatedMinutesValue
+                ? `Equivale a ${formatPlaytime(estimatedMinutesValue)}.`
+                : "En minutos. Se usa para calcular la capacidad del planificador."}
+            </small>
+          </label>
+        </div>
+        <label htmlFor="game-checkpoint">
+          <span>
+            <IconRoute size={14} /> ¿Por dónde lo dejaste?
+          </span>
+          <Textarea
+            id="game-checkpoint"
+            rows={3}
+            placeholder="Checkpoint, misión, zona o situación actual"
+            {...form.register("checkpoint")}
+          />
+          <p className="detail-form__hint">
+            Una pista breve para retomar semanas después sin releer tus notas.
+          </p>
+        </label>
+        <div className="detail-field">
+          <label htmlFor="game-next-action">
+            <span>
+              <IconTargetArrow size={14} /> Próxima acción
+            </span>
+            <Input
+              id="game-next-action"
+              maxLength={NEXT_ACTION_MAX}
+              placeholder="La siguiente cosa concreta que quieres hacer"
+              aria-invalid={Boolean(nextActionError)}
+              aria-describedby="game-next-action-meta"
+              {...form.register("nextAction")}
+            />
+          </label>
+          <FieldMeta
+            id="game-next-action-meta"
+            length={nextActionLength}
+            max={NEXT_ACTION_MAX}
+            error={nextActionError}
+          />
+        </div>
+      </fieldset>
+      <fieldset className="detail-form__group">
+        <legend>Notas y seguimiento</legend>
+        <div className="detail-field">
+          <label htmlFor="game-notes">
+            <span>Notas privadas</span>
+            <Textarea
+              id="game-notes"
+              rows={5}
+              maxLength={NOTES_MAX}
+              placeholder="Decisiones, estrategia o contexto que quieras conservar"
+              aria-invalid={Boolean(notesError)}
+              aria-describedby="game-notes-meta"
+              {...form.register("notes")}
+            />
+          </label>
+          <FieldMeta id="game-notes-meta" length={notesLength} max={NOTES_MAX} error={notesError} />
+        </div>
+        <div className="detail-toggles">
+          <div className="detail-toggle">
+            <Switch
+              aria-label="Seguir actualizaciones"
+              checked={watched.tracking ?? false}
+              onCheckedChange={(tracking) =>
+                form.setValue("tracking", tracking, { shouldDirty: true })
+              }
+            />
+            <span>Seguir actualizaciones</span>
+          </div>
+        </div>
+      </fieldset>
       {collections.some((collection) => collection.kind === "manual") && (
         <fieldset className="detail-collections">
           <legend>Colecciones manuales</legend>
@@ -925,37 +1323,290 @@ function detailToForm(detail: GameDetail): DetailValues {
 function saveFingerprint(input: UpdateGameInput): string {
   return JSON.stringify(input);
 }
-function DetailMetric({
-  label,
-  value,
-  icon,
-  action,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div>
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {action}
-    </div>
-  );
-}
+// Un campo ausente no se dibuja: nada de filas con «—» ocupando espacio.
 function InfoRow({ label, value }: { label: string; value: string | undefined }) {
+  if (!value) return null;
   return (
     <div className="info-row">
       <span>{label}</span>
-      <strong>{value || "—"}</strong>
+      <strong>{value}</strong>
     </div>
   );
 }
 
-function displayDate(value?: string): string {
-  return value ? formatDate(value) : "Sin datos";
+function FieldMeta({
+  id,
+  length,
+  max,
+  error,
+}: {
+  id: string;
+  length: number;
+  max: number;
+  error?: string | undefined;
+}) {
+  return (
+    <span className="detail-field__meta" id={id}>
+      {error ? (
+        <span className="field-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+      <span className="field-counter" data-limit-reached={length >= max || undefined}>
+        {length}/{max}
+      </span>
+    </span>
+  );
+}
+
+function displayDate(value?: string): string | undefined {
+  return value ? formatDate(value) : undefined;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Descripciones estructuradas.
+
+   El backend entrega bloques ya saneados (`heading`, `paragraph`, `list`), de
+   modo que la ficha nunca necesita `dangerouslySetInnerHTML`. Si en su lugar
+   llegase texto plano, se divide por líneas en blanco y se maqueta igual.
+   ────────────────────────────────────────────────────────────────────────── */
+
+function toDescriptionBlocks(
+  value: StructuredDescription | string | null | undefined,
+): DescriptionBlock[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    return value
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .map((text) => ({ kind: "paragraph", text }) as DescriptionBlock);
+  }
+  if (!Array.isArray(value.blocks)) return [];
+  return value.blocks.filter((block): block is DescriptionBlock => {
+    if (!block || typeof block !== "object") return false;
+    if (block.kind === "list") return Array.isArray(block.items) && block.items.length > 0;
+    return typeof block.text === "string" && block.text.trim().length > 0;
+  });
+}
+
+function blockLength(block: DescriptionBlock): number {
+  if (block.kind === "list") return block.items.join(" ").length;
+  return block.text.length;
+}
+
+// Los bloques de la tienda no traen identificador propio. En vez de usar el
+// índice del array (que reordena estado al cambiar la descripción) se deriva
+// una clave del propio contenido, con sufijo sólo cuando hay repeticiones.
+function contentKey(seen: Map<string, number>, content: string): string {
+  const base = content.slice(0, 64);
+  const repeated = seen.get(base) ?? 0;
+  seen.set(base, repeated + 1);
+  return repeated === 0 ? base : `${base}#${repeated}`;
+}
+
+function DescriptionBlocks({ blocks }: { blocks: DescriptionBlock[] }) {
+  if (!blocks.length) return null;
+  const seen = new Map<string, number>();
+  return (
+    <>
+      {blocks.map((block) => {
+        if (block.kind === "list") {
+          const key = contentKey(seen, `list:${block.items.join("|")}`);
+          const itemsSeen = new Map<string, number>();
+          const items = block.items.map((item) => (
+            <li key={contentKey(itemsSeen, item)}>{item}</li>
+          ));
+          return block.ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>;
+        }
+        const key = contentKey(seen, `${block.kind}:${block.text}`);
+        if (block.kind === "heading") return <h4 key={key}>{block.text}</h4>;
+        return <p key={key}>{block.text}</p>;
+      })}
+    </>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Especificaciones.
+   ────────────────────────────────────────────────────────────────────────── */
+
+interface SpecEntry {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  value: React.ReactNode;
+  wide?: boolean;
+}
+
+const DRM_LABEL: Record<DrmState, string> = {
+  unknown: "Sin clasificar",
+  drm_free: "Sin DRM",
+  third_party_drm: "DRM de terceros",
+  steam_drm: "Steam DRM",
+};
+
+const DRM_EXPLANATION: Record<DrmState, string> = {
+  unknown: "La tienda oficial no publica señales suficientes para clasificar la protección.",
+  drm_free:
+    "La tienda oficial no declara DRM de terceros ni cuenta externa para este juego. La marca vive aquí, nunca sobre la carátula.",
+  third_party_drm: "La tienda oficial declara un DRM o un lanzador de terceros.",
+  steam_drm: "La tienda oficial declara Steamworks DRM o el propio cliente de Steam.",
+};
+
+function readDrm(detail: EnrichedDetail): { state: DrmState; evidence: DrmEvidence[] } | undefined {
+  const state = detail.drmState ?? detail.drm?.state;
+  if (!state || !(state in DRM_LABEL)) return undefined;
+  const evidence = detail.drmEvidence ?? detail.drm?.evidence ?? [];
+  return { state, evidence: Array.isArray(evidence) ? evidence : [] };
+}
+
+function splitLanguages(value: string): string[] {
+  return value
+    .split(/[,;]/)
+    .map((language) => language.replace(/\*/g, "").trim())
+    .filter(Boolean);
+}
+
+function metacriticBand(score: number): "high" | "mid" | "low" {
+  if (score >= 75) return "high";
+  if (score >= 50) return "mid";
+  return "low";
+}
+
+function hostnameOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function readSpecs(detail: EnrichedDetail): SpecEntry[] {
+  const specs: SpecEntry[] = [];
+  const languages = detail.supportedLanguages ? splitLanguages(detail.supportedLanguages) : [];
+  if (languages.length) {
+    specs.push({
+      id: "languages",
+      label: "Idiomas",
+      icon: <IconLanguage />,
+      wide: languages.length > 4,
+      value: (
+        <span className="detail-spec__languages">
+          {languages.map((language) => (
+            <span className="detail-spec__language" key={language}>
+              {language}
+            </span>
+          ))}
+        </span>
+      ),
+    });
+  }
+  if (typeof detail.requiredAge === "number" && detail.requiredAge > 0) {
+    specs.push({
+      id: "age",
+      label: "Edad recomendada",
+      icon: <IconMoodKid />,
+      value: `${detail.requiredAge}+`,
+    });
+  }
+  if (detail.controllerSupport === "full" || detail.controllerSupport === "partial") {
+    specs.push({
+      id: "controller",
+      label: "Mando",
+      icon: <IconDeviceGamepad2 />,
+      value: detail.controllerSupport === "full" ? "Compatible completo" : "Compatible parcial",
+    });
+  }
+  if (typeof detail.metacriticScore === "number") {
+    const host = detail.metacriticUrl ? hostnameOf(detail.metacriticUrl) : undefined;
+    specs.push({
+      id: "metacritic",
+      label: "Metacritic",
+      icon: <IconStarFilled />,
+      value: (
+        <>
+          <span className="detail-spec__score" data-band={metacriticBand(detail.metacriticScore)}>
+            {detail.metacriticScore}
+            <span aria-hidden="true">/100</span>
+          </span>
+          {host ? <span className="muted-copy"> · {host}</span> : null}
+        </>
+      ),
+    });
+  }
+  const drm = readDrm(detail);
+  if (drm && (drm.state !== "unknown" || detail.drmNotice)) {
+    specs.push({
+      id: "drm",
+      label: "Protección",
+      icon: drm.state === "drm_free" ? <IconShieldCheck /> : <IconShieldLock />,
+      wide: Boolean(detail.drmNotice) || drm.evidence.length > 1,
+      value: <DrmValue state={drm.state} evidence={drm.evidence} notice={detail.drmNotice} />,
+    });
+  }
+  if (detail.websiteUrl) {
+    const host = hostnameOf(detail.websiteUrl);
+    if (host) {
+      specs.push({
+        id: "website",
+        label: "Sitio oficial",
+        icon: <IconWorld />,
+        value: host,
+      });
+    }
+  }
+  return specs;
+}
+
+function DrmValue({
+  state,
+  evidence,
+  notice,
+}: {
+  state: DrmState;
+  evidence: DrmEvidence[];
+  notice?: string | null | undefined;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="detail-drm" data-state={state}>
+          {state === "drm_free" ? <IconShieldCheck /> : <IconShieldLock />}
+          {DRM_LABEL[state]}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <span>
+          {DRM_EXPLANATION[state]}
+          {notice ? ` Aviso oficial: ${notice}` : ""}
+          {evidence.length
+            ? ` Señales: ${evidence.map((item) => `${item.source} → ${item.match}`).join("; ")}`
+            : ""}
+        </span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Medios.
+   ────────────────────────────────────────────────────────────────────────── */
+
+function readMedia(detail: EnrichedDetail | undefined): GameMediaItem[] {
+  if (!detail || !Array.isArray(detail.media)) return [];
+  return detail.media
+    .filter(
+      (item): item is GameMediaItem =>
+        Boolean(item?.mediaId) &&
+        (item.kind === "screenshot" || item.kind === "movie") &&
+        Boolean(item.thumbnailUrl),
+    )
+    .slice()
+    .sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === "screenshot" ? -1 : 1;
+      return (left.position ?? 0) - (right.position ?? 0);
+    });
 }
 
 function ownershipLabel(source: GameDetail["ownershipSource"]): string {

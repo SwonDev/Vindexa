@@ -317,4 +317,36 @@ describe("artwork local-first", () => {
       ),
     );
   });
+
+  it("reintenta al expirar la caché negativa y acaba mostrando la imagen", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.cacheGameArt
+        .mockRejectedValueOnce(new Error("red caída"))
+        .mockResolvedValueOnce({ localPath: "/cache/910010/cover.jpg" });
+      render(
+        <Artwork
+          appId={910_010}
+          src="https://steam.test/flaky.jpg"
+          title="Retry Signal"
+          priority
+        />,
+      );
+      await act(async () => {});
+      expect(mocks.cacheGameArt).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("img", { name: "Carátula de Retry Signal" })).toHaveTextContent("RS");
+
+      await act(async () => {
+        vi.advanceTimersByTime(61_000);
+      });
+      await act(async () => {});
+      expect(mocks.cacheGameArt).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("img", { name: "Carátula de Retry Signal" })).toHaveAttribute(
+        "src",
+        "asset:///cache/910010/cover.jpg",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

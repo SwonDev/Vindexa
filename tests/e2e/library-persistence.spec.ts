@@ -78,6 +78,6 @@ test("la sección de colecciones muestra organización manual e inteligente y co
   await page.reload();
   await app.navigate("Colecciones");
   await expect(page.getByRole("heading", { name: "Sesiones cortas" })).toBeVisible();
-  const headings = await page.locator(".collection-card h2").allTextContents();
+  const headings = await page.locator(".collection-tile__name").allTextContents();
   expect(headings).toEqual(["Sesiones cortas", "Favoritos"]);
 });

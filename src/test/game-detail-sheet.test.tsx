@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GameDetailSheet } from "@/features/library/GameDetailSheet";
 import { api } from "@/lib/tauri";
-import type { GameDetail } from "@/lib/types";
+import type { DlcSummary, GameDetail, PriorityExplanation } from "@/lib/types";
 import "@/index.css";
 
 vi.mock("@/components/common/Artwork", () => ({
@@ -33,6 +33,15 @@ vi.mock("@/lib/tauri", () => ({
     uninstallGame: vi.fn(),
     revealInstallation: vi.fn(),
     openStore: vi.fn(),
+    listGameDlc: vi.fn(),
+    refreshGameDlc: vi.fn(),
+    setDlcOwned: vi.fn(),
+    setDlcHidden: vi.fn(),
+    setDlcInstalled: vi.fn(),
+    dlcSummary: vi.fn(),
+    explainPriority: vi.fn(),
+    setPriorityLock: vi.fn(),
+    recomputePriorities: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "Error inesperado",
@@ -83,6 +92,34 @@ const detail = {
   activity: [],
 } as GameDetail;
 
+/** Los paneles nuevos de la ficha piden estos datos nada más abrirse. */
+const emptyDlcSummary = {
+  appId: 620,
+  total: 0,
+  owned: 0,
+  installed: 0,
+  hidden: 0,
+  free: 0,
+  pending: 0,
+  pendingCounted: 0,
+  pendingUnknownPrice: 0,
+  pendingOtherCurrency: 0,
+} as DlcSummary;
+
+const neutralPriority = {
+  appId: 620,
+  title: "Portal 2",
+  score: 40,
+  effectiveScore: 40,
+  derivedPriority: 2,
+  manualPriority: 2,
+  locked: false,
+  reason: "Sin señales que lo muevan por ahora.",
+  computedAt: "2026-08-18T09:00:00Z",
+  manualOverride: null,
+  signals: [],
+} as PriorityExplanation;
+
 function renderSheet(onOpenChange = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -129,6 +166,10 @@ describe("ficha inmersiva de juego", () => {
     mockedApi.deleteGameSession.mockResolvedValue(detail);
     mockedApi.savePersonalDates.mockResolvedValue(detail);
     mockedApi.launchGame.mockResolvedValue(undefined);
+    mockedApi.dlcSummary.mockResolvedValue(emptyDlcSummary);
+    mockedApi.listGameDlc.mockResolvedValue([]);
+    mockedApi.explainPriority.mockResolvedValue(neutralPriority);
+    mockedApi.setPriorityLock.mockResolvedValue(undefined);
   });
 
   it("muestra metadata real, hero dedicado y no inventa logros desbloqueados", async () => {
@@ -311,6 +352,19 @@ describe("ficha inmersiva de juego", () => {
     });
   });
 
+  it("conserva el color del banner durante el parallax y no lo desvanece", async () => {
+    const { container } = renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    const scroller = container.ownerDocument.querySelector(".game-detail-sheet") as HTMLDivElement;
+    const media = container.ownerDocument.querySelector<HTMLElement>(".detail-hero__media");
+    Object.defineProperty(scroller, "scrollTop", { configurable: true, value: 320 });
+    fireEvent.scroll(scroller);
+    await waitFor(() => expect(media?.style.transform).toContain("translate3d(0, 58px, 0)"));
+    // El desvanecido anterior bajaba la imagen a 0,68 de opacidad sobre el
+    // fondo del panel: era una de las causas del banner apagado.
+    expect(media?.style.opacity).toBe("");
+  });
+
   it("mantiene el hero estable cuando el sistema pide reducir el movimiento", async () => {
     const matchMedia = vi.spyOn(window, "matchMedia").mockReturnValue({
       matches: true,
@@ -360,5 +414,89 @@ describe("ficha inmersiva de juego", () => {
     expect(
       overview?.compareDocumentPosition(tabs as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("señala el borrador sin guardar cuando la validación rechaza un campo demasiado largo", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    fireEvent.change(screen.getByLabelText("Próxima acción"), {
+      target: { value: "x".repeat(501) },
+    });
+    expect(
+      await screen.findByText("Sin guardar: revisa los campos marcados", undefined, {
+        timeout: 2000,
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText("Guardado")).not.toBeInTheDocument();
+    expect(mockedApi.updateGame).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("máximo de 500 caracteres");
+  });
+
+  it("muestra contadores de caracteres en próxima acción y notas privadas", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    expect(screen.getByText("0/500")).toBeVisible();
+    expect(screen.getByText("0/20000")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Próxima acción"), { target: { value: "Hola" } });
+    expect(screen.getByText("4/500")).toBeVisible();
+  });
+
+  it("acota la descripción larga tras un toggle accesible de Mostrar más", async () => {
+    const user = userEvent.setup();
+    const longDetail = {
+      ...detail,
+      shortDescription: "Descripción extensa y legible. ".repeat(80),
+    } as GameDetail;
+    mockedApi.gameDetail.mockResolvedValueOnce(longDetail);
+    mockedApi.refreshGameMetadata.mockResolvedValueOnce(longDetail);
+    renderSheet();
+    const toggle = await screen.findByRole("button", { name: "Mostrar más" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const copy = document.getElementById("detail-description");
+    expect(copy).toHaveAttribute("data-collapsed", "true");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Mostrar menos" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(copy).not.toHaveAttribute("data-collapsed");
+  });
+
+  it("abre el plan personal con la prioridad ya explicada, no escondida en un rincón", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    // El panel vive en la pestaña por defecto: se ve sin buscarlo.
+    expect(await screen.findByRole("heading", { name: "Por qué está aquí" })).toBeVisible();
+    expect(screen.getByText("Sin señales que lo muevan por ahora.")).toBeVisible();
+    expect(screen.getByRole("switch", { name: "Anclar mi prioridad manual" })).toBeVisible();
+    const plan = document.querySelector('[data-slot="tabs-content"]') as HTMLElement;
+    const panel = document.querySelector(".priority-panel") as HTMLElement;
+    const form = document.querySelector(".detail-form") as HTMLElement;
+    expect(plan.contains(panel)).toBe(true);
+    expect(panel.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("da pestaña propia al contenido adicional y anuncia cuánto hay", async () => {
+    const user = userEvent.setup();
+    mockedApi.dlcSummary.mockResolvedValue({ ...emptyDlcSummary, total: 4, pending: 3 });
+    mockedApi.listGameDlc.mockResolvedValue([]);
+    renderSheet();
+
+    const tab = await screen.findByRole("tab", { name: /Contenido adicional/ });
+    await waitFor(() => expect(within(tab).getByText("4")).toBeVisible());
+    expect(mockedApi.listGameDlc).not.toHaveBeenCalled();
+
+    await user.click(tab);
+    expect(await screen.findByRole("region", { name: "Contenido adicional" })).toBeVisible();
+    await waitFor(() => expect(mockedApi.listGameDlc).toHaveBeenCalledWith(620, "visible"));
+    // El resumen ya estaba en caché por el contador: la pestaña no vuelve a pedirlo.
+    expect(mockedApi.dlcSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("muestra el tiempo jugado reciente de las últimas dos semanas", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+    expect(screen.getByText("Reciente (2 sem)")).toBeVisible();
+    expect(screen.getByText("20 min")).toBeVisible();
   });
 });

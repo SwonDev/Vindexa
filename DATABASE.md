@@ -1,7 +1,7 @@
 # Esquema y persistencia de Vindexa
 
 SQLite es la fuente de verdad de Vindexa. Este documento describe el esquema vigente de la
-migración **13** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
+migración **26** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
 normativa ejecutable.
 
 ## Índice
@@ -69,6 +69,14 @@ permite incorporarlo a la biblioteca personal como `family_shared`.
 | Planificación | `planner_columns`, `planner_items`, `planner_settings` | Kanban, cola, periodos, objetivos y capacidad. |
 | Historial | `game_sessions`, `activity`, `recommendation_history` | Sesiones, línea temporal y recomendaciones descartadas. |
 | Descubrimiento | `game_reminders`, `game_metadata_observations`, `discovery_events`, `steam_news_items`, `steam_news_fetch_state` | Recordatorios, cambios observados, publicaciones oficiales cacheadas y cadencia/backoff. |
+| Ficha enriquecida | `game_media` | Capturas y vídeos oficiales ordenados por juego. |
+| Contenido adicional | `game_dlc` | DLC declarados por la tienda, con propiedad e instalación derivadas de evidencia local. |
+| Listas curadas | `curated_lists`, `curated_list_items` | Selecciones editoriales propias con orden manual, nota y destacado. |
+| Deseados | `wishlist_entries`, `game_videos` | Cubos de intención de compra y vídeos asociados a un juego. |
+| Avisos | `notification_rules`, `notification_events` | Recordatorios programables y eventos oficiales derivados sin duplicar. |
+| Prioridad y gustos | `priority_signals`, `taste_weights`, `taste_feedback`, `upcoming_releases` | Puntuación explicable, modelo local de afinidad y próximos lanzamientos puntuados. |
+| Tiendas externas | `external_store_accounts`, `external_games` | Detección local de Epic y GOG, emparejado y estado DRM. |
+| Agentes | `agent_clients`, `agent_audit_log` | Clientes autorizados y registro auditable de cada acción automatizada. |
 
 ## Campos e invariantes relevantes
 
@@ -150,6 +158,17 @@ actual. Todas las ordenaciones añaden título/AppID como desempate determinista
 | 13 | `legacy_ownership_provenance` | Corrección conservadora de procedencia heredada. |
 | 14 | `metadata_enrichment_queue` | Cola persistente, prioridad y reintentos de metadatos. |
 | 15 | `discovery_signals` | Caché y estado de refresco del feed oficial de Steam. |
+| 16 | `manual_position_index` | Índice de la ordenación manual (posición, fijado, prioridad). |
+| 17 | `game_capsule_url` | URL oficial de la cápsula 616×353 para el fallback de carátulas. |
+| 18 | `drm_free_detection` | Clasificación DRM con su evidencia, derivada solo de señales oficiales. |
+| 19 | `rich_game_metadata` | Descripción estructurada, idiomas, Metacritic, arte de alta resolución y `game_media`. |
+| 20 | `game_dlc` | Catálogo de DLC por juego con propiedad, instalación y cola de refresco. |
+| 21 | `curated_lists` | Listas curadas y sus entradas con orden manual, nota y destacado. |
+| 22 | `wishlist_and_videos` | Deseados por cubo de intención y vídeos por juego. |
+| 23 | `notifications` | Reglas programables y bandeja de eventos con deduplicación estable. |
+| 24 | `priority_engine` | Puntuación de prioridad explicable, modelo de gustos y próximos lanzamientos. |
+| 25 | `external_stores` | Cuentas y juegos detectados de Epic y GOG, con emparejado y confianza. |
+| 26 | `agent_bridge` | Clientes de agente autorizados y registro auditable de sus acciones. |
 
 > [!WARNING]
 > Una migración ya publicada o aplicada es inmutable: no se edita su SQL. Una corrección se
@@ -158,6 +177,23 @@ actual. Todas las ordenaciones añaden título/AppID como desempate determinista
 La migración 13 solo demueve a `local` filas anteriores a la procedencia que carecen de toda
 señal exclusiva de `GetOwnedGames`. Una sincronización oficial posterior vuelve a promover
 el AppID a `owned`.
+
+`games.drm_state` nunca se adivina: parte de `unknown` y solo cambia con una señal oficial
+(`drm_notice`, `ext_user_account_notice`, `legal_notice` o las categorías de la tienda), que
+queda registrada en `drm_evidence_json`. La marca es un dato de ficha y no se muestra sobre
+las carátulas.
+
+`game_dlc.owned` solo puede subir desde la importación: la única prueba disponible es el
+manifiesto local de Steam, así que la ausencia de evidencia significa «sin confirmar», nunca
+«no lo tienes». Bajarlo requiere una acción manual explícita.
+
+`game_videos` guarda únicamente el identificador del proveedor. La URL de reproducción la
+construye Rust contra `youtube-nocookie.com` tras validar que el identificador cumple el
+formato exacto; el frontend jamás concatena esa dirección.
+
+`priority_signals` y `taste_weights` se calculan en local a partir del comportamiento propio
+y no salen del equipo. Una prioridad manual anclada (`priority_locked = 1`) nunca la pisa el
+cálculo derivado.
 
 `steam_news_items` solo acepta el feed `steam_community_announcements`. La tabla de estado
 conserva último intento/éxito, fallos consecutivos y próximo intento; no contiene la Web API

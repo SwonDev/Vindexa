@@ -1,53 +1,63 @@
-.game-drag-handle {
-  cursor: grab;
+/* Vindexa no dibuja ningún asa de arrastre sobre las carátulas: toda la
+   superficie de una tarjeta o de una fila es arrastrable. El activador que
+   queda aquí es exclusivamente para teclado y lectores de pantalla, de modo
+   que arrastrar siga siendo posible sin ratón sin ensuciar la portada. */
+.game-drag-activator {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.game-card {
+.game-drag-activator:focus-visible {
+  z-index: 6;
+  top: 4px;
+  left: 4px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 3px 7px;
+  overflow: visible;
+  clip-path: none;
+  border: 1px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.game-card,
+.game-row {
   position: relative;
+  cursor: grab;
+  touch-action: manipulation;
 }
 
-.game-drag-handle:active {
+.game-card:active,
+.game-row:active,
+.game-card[data-library-dragging="true"],
+.game-row[data-library-dragging="true"] {
   cursor: grabbing;
 }
 
-.game-drag-handle {
-  position: absolute;
-  z-index: 5;
-  top: 6px;
-  left: 6px;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--v-muted) 38%, transparent);
-  background: color-mix(in srgb, var(--v-deepest) 88%, transparent);
-  color: var(--v-muted);
-  opacity: 0;
-  box-shadow: 0 4px 10px rgb(0 0 0 / 32%);
-}
-
-.game-card:hover .game-drag-handle,
-.game-row:hover .game-drag-handle,
-.game-drag-handle:focus-visible,
-[data-library-dragging="true"] .game-drag-handle {
-  color: var(--v-cyan);
-  opacity: 1;
-}
-
-.game-drag-handle svg {
-  width: 14px;
-}
-
-.game-row .game-drag-handle {
-  top: 50%;
-  left: 4px;
-  width: 22px;
-  height: 28px;
-  transform: translateY(-50%);
+/* La superficie interior hereda el cursor de arrastre en lugar de imponer el
+   suyo: así el gesto se anuncia igual en cualquier punto de la carátula. */
+.game-card__target,
+.game-row__target {
+  cursor: inherit;
 }
 
 [data-library-dragging="true"] {
-  opacity: 0.38;
+  opacity: 0.34;
+  filter: saturate(0.5);
+  transition:
+    opacity 140ms var(--ease-out),
+    filter 140ms var(--ease-out);
 }
 
 .sidebar-item[data-drop-target="true"] {
@@ -99,6 +109,8 @@
   min-width: 0;
 }
 
+/* El asa de reordenación permanece invisible mientras no haga falta: la lista
+   se lee mejor sin ruido y el gesto se descubre al pasar el cursor. */
 .sidebar-collection__handle {
   display: grid;
   width: 24px;
@@ -107,13 +119,27 @@
   border: 0;
   background: transparent;
   color: color-mix(in srgb, var(--v-muted) 60%, transparent);
+  opacity: 0;
   cursor: grab;
+  transition: opacity 120ms var(--ease-out);
+}
+
+.sidebar-collection:hover .sidebar-collection__handle,
+.sidebar-collection__handle:focus-visible,
+.sidebar-collection[data-collection-sorting="true"] .sidebar-collection__handle {
+  opacity: 1;
 }
 
 .sidebar-collection__handle:hover,
 .sidebar-collection__handle:focus-visible {
   color: var(--v-cyan);
   background: color-mix(in srgb, var(--v-cyan) 8%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-collection__handle {
+    transition: none;
+  }
 }
 
 .sidebar-collection__handle:active {
@@ -149,11 +175,17 @@
   );
 }
 
-.game-card[data-position-over="true"],
+.game-card[data-position-over="true"] {
+  box-shadow:
+    inset 4px 0 0 var(--v-lime),
+    inset 0 0 0 1px color-mix(in srgb, var(--v-lime) 45%, transparent),
+    0 10px 24px rgb(0 0 0 / 34%);
+}
+
 .game-row[data-position-over="true"] {
   box-shadow:
-    inset 3px 0 var(--v-lime),
-    0 10px 24px rgb(0 0 0 / 34%);
+    inset 0 3px 0 var(--v-lime),
+    inset 0 0 0 1px color-mix(in srgb, var(--v-lime) 45%, transparent);
 }
 
 .library-drag-overlay {
@@ -245,4 +277,349 @@
   .library-drag-overlay {
     transition: none;
   }
+}
+
+/* Acompañante del cursor: la portada real del juego que se arrastra deja claro
+   qué se está moviendo sin recurrir a ningún icono decorativo. */
+.library-drag-overlay--game {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 12px 7px 7px;
+}
+
+.library-drag-overlay__cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 38px;
+  height: 57px;
+  border: 1px solid color-mix(in srgb, var(--v-cyan) 40%, transparent);
+  background: var(--background);
+}
+
+.library-drag-overlay__cover img,
+.library-drag-overlay__cover > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library-drag-overlay__count {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-width: 18px;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: var(--v-cyan-strong);
+  color: #f2f8fa;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Mientras hay un arrastre en curso la biblioteca marca con claridad qué
+   superficies aceptan el juego y cuáles no, en cualquiera de las tres vistas. */
+.game-card[data-position-drop="true"][data-position-over="true"]::after,
+.game-row[data-position-drop="true"][data-position-over="true"]::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  background: var(--v-lime);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--v-lime) 60%, transparent);
+  pointer-events: none;
+}
+
+.game-card[data-position-drop="true"][data-position-over="true"]::after {
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  width: 3px;
+}
+
+.game-row[data-position-drop="true"][data-position-over="true"]::after {
+  top: -1px;
+  right: 0;
+  left: 0;
+  height: 3px;
+}
+
+.game-row[data-compact="true"][data-position-over="true"]::after {
+  height: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-library-dragging="true"] {
+    transition: none;
+  }
+}
+
+/* ── Navegación por grupos ─────────────────────────────────────────────────
+   Con la biblioteca cortada en grupos hacen falta dos cosas que el lienzo
+   virtual no puede dar por sí solo: saber en todo momento en qué grupo se está
+   y poder saltar a otro sin arrastrar la barra de desplazamiento.            */
+
+/* Las dos anclas miden cero para no desplazar ni una fila: lo que se ve son sus
+   hijos absolutos. En las vistas tabulares cuelgan de la cabecera de columnas,
+   que ya está fijada arriba; en la rejilla no hay cabecera y se fijan solas. */
+.library-group-band {
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.library-group-rail-anchor {
+  z-index: 2;
+  overflow: visible;
+}
+
+.list-header > .library-group-band,
+.list-header > .library-group-rail-anchor {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: 0;
+}
+
+.game-browser > .library-group-band,
+.game-browser > .library-group-rail-anchor {
+  position: sticky;
+  top: 0;
+  left: 0;
+  height: 0;
+}
+
+/* Opaco y sin desenfoque: la franja y los encabezados del lienzo se relevan en
+   la misma posición, y cualquier diferencia de opacidad delataría el cambio. */
+.game-browser .library-group-header {
+  background: var(--v-surface-raised);
+  backdrop-filter: none;
+}
+
+.library-group-header--pinned {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  box-shadow: 0 6px 12px rgb(0 0 0 / 22%);
+}
+
+.library-group-rail {
+  position: absolute;
+  top: 38px;
+  right: 3px;
+  display: flex;
+  overflow-y: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  width: 20px;
+  padding: 3px 0;
+  border: 1px solid var(--border);
+  background: var(--v-surface-raised);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 26%);
+  scrollbar-width: none;
+}
+
+.library-group-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.library-group-rail button {
+  min-height: 13px;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
+  color: var(--v-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.library-group-rail button:hover {
+  background: color-mix(in srgb, var(--v-cyan) 14%, transparent);
+  color: var(--foreground);
+}
+
+.library-group-rail button[data-current="true"] {
+  background: color-mix(in srgb, var(--v-cyan) 20%, transparent);
+  color: var(--v-cyan);
+}
+
+.library-group-rail button:focus-visible {
+  outline: 1px solid var(--v-cyan);
+  outline-offset: -1px;
+}
+
+/* El raíl se apoya sobre la columna de acciones, así que las filas y la
+   cabecera le ceden ese ancho en lugar de quedar tapadas por él. */
+.game-browser[data-group-rail="true"] .list-header {
+  padding-right: 35px;
+}
+
+.game-browser[data-group-rail="true"] .virtual-canvas {
+  width: calc(100% - 26px);
+}
+
+.game-browser[data-group-rail="true"] .library-group-header--pinned {
+  padding-right: 38px;
+}
+
+/* ── Vista ultracompacta ───────────────────────────────────────────────────
+   Aquí lo único que importa es cuánta biblioteca cabe en la pantalla, así que
+   la fila renuncia a la miniatura y dibuja el progreso como número.          */
+.game-browser.game-browser--compact .game-row {
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.game-browser.game-browser--compact .game-row__identity {
+  gap: 0;
+}
+
+.game-browser.game-browser--compact .game-row__identity strong {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.game-browser.game-browser--compact .game-row__status {
+  gap: 5px;
+}
+
+.game-browser.game-browser--compact .game-row__status i {
+  width: 5px;
+  height: 5px;
+}
+
+.game-browser.game-browser--compact .game-row__progress {
+  grid-template-columns: 34px;
+  gap: 0;
+  padding-right: 10px;
+}
+
+.game-browser.game-browser--compact .game-row .game-menu {
+  width: 24px;
+  height: 20px;
+}
+
+/* ── Absorción de las carátulas bajo la barra ──────────────────────────────
+   Al desplazar, el contenido no se corta contra el borde: se disuelve. Se
+   enmascara el propio contenedor en lugar de pintar una franja encima, porque
+   una franja opaca sobre una portada se lee como una banda negra y no como
+   profundidad; la máscara deja ver el fondo real y la carátula parece entrar
+   por debajo de la barra de búsqueda.
+
+   La rampa no es lineal —25 % a mitad de recorrido, 72 % a tres cuartos— para
+   que la portada se apague deprisa al final y despacio al principio, que es lo
+   que hace que el borde se lea como profundidad y no como un recorte.
+
+   `--scroll-fade` lo escribe el manejador de desplazamiento (0 arriba del todo,
+   1 desplazado), así que el efecto no cuesta un renderizado por fotograma. Con
+   el valor a 0 todas las paradas caen en cero y la máscara queda opaca entera:
+   arriba del todo no hay ningún efecto.                                     */
+[data-library-surface="true"] {
+  --scroll-fade-height: calc(var(--scroll-fade, 0) * 38px);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgb(0 0 0 / 25%) calc(var(--scroll-fade-height) * 0.45),
+    rgb(0 0 0 / 72%) calc(var(--scroll-fade-height) * 0.75),
+    #000 var(--scroll-fade-height)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgb(0 0 0 / 25%) calc(var(--scroll-fade-height) * 0.45),
+    rgb(0 0 0 / 72%) calc(var(--scroll-fade-height) * 0.75),
+    #000 var(--scroll-fade-height)
+  );
+}
+
+/* En lista y ultracompacta las filas son bajas: la misma rampa se comería una
+   fila entera, así que el recorrido se acorta. */
+.game-browser--list,
+.game-browser--compact {
+  --scroll-fade-height: calc(var(--scroll-fade, 0) * 20px);
+}
+
+/* ── Lente del borde superior ──────────────────────────────────────────────
+   Las capas y sus máscaras las calcula `LiquidEdge.tsx`, que es donde vive la
+   progresión del desenfoque. Aquí sólo va lo que no depende del número de
+   capas: la posición de la lámina y los dos detalles que la hacen leer como
+   vidrio en lugar de como cristal esmerilado —la aberración cromática del filo
+   y la línea especular—. */
+
+/* Altura cero y `sticky` al borde: la lámina no ocupa sitio en el flujo ni
+   desplaza la primera fila. El desplazamiento negativo cancela el relleno
+   superior del contenedor, que si no dejaría el vidrio flotando por debajo de
+   la barra en lugar de pegado a ella. */
+.liquid-edge {
+  position: sticky;
+  z-index: 3;
+  top: calc(var(--library-scroll-padding, 12px) * -1);
+  height: 0;
+  margin: 0 calc(var(--library-scroll-padding, 12px) * -1);
+  pointer-events: none;
+}
+
+.liquid-edge > * {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--liquid-edge-height, 40px);
+}
+
+/* Cada capa aporta un escalón de desenfoque sobre lo que pasa por detrás. El
+   factor de `--scroll-fade` las apaga a la vez: arriba del todo no hay lente. */
+.liquid-edge__capa {
+  backdrop-filter: blur(calc(var(--capa-desenfoque, 0rem) * var(--scroll-fade, 0)));
+  -webkit-backdrop-filter: blur(calc(var(--capa-desenfoque, 0rem) * var(--scroll-fade, 0)));
+  opacity: var(--scroll-fade, 0);
+}
+
+/* Aberración cromática: el vidrio separa los colores donde más se curva, que es
+   el filo. Sin esto el efecto se lee como desenfoque, no como refracción. */
+.liquid-edge__cromatica {
+  height: var(--liquid-edge-filo, 15px);
+  opacity: calc(var(--scroll-fade, 0) * 0.6);
+  mix-blend-mode: screen;
+  background:
+    linear-gradient(to bottom, rgb(92 170 193 / 26%) 0, transparent 64%),
+    linear-gradient(to bottom, rgb(214 166 75 / 15%) 0, transparent 46%);
+  background-position:
+    -0.5px 0,
+    0.5px 0;
+  mask-image: linear-gradient(to bottom, #000 0, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, transparent 100%);
+}
+
+/* Filo: la línea de luz que da grosor al canto. Un píxel basta; más se lee como
+   un borde dibujado. */
+.liquid-edge__filo {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(255 255 255 / 10%) 12%,
+    rgb(255 255 255 / 14%) 50%,
+    rgb(255 255 255 / 10%) 88%,
+    transparent 100%
+  );
+  opacity: var(--scroll-fade, 0);
+}
+
+/* En lista y ultracompacta la lámina cuelga de la cabecera de columnas, no del
+   borde del contenedor, y se acorta para no comerse una fila entera. */
+.game-browser--list .liquid-edge,
+.game-browser--compact .liquid-edge {
+  --library-scroll-padding: 0px;
+  --liquid-edge-height: 24px;
+  --liquid-edge-filo: 10px;
+  top: var(--list-header-height, 24px);
 }

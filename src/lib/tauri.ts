@@ -1,18 +1,46 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SavedLibraryView, SaveViewInput } from "@/features/library/library-views";
+import type {
+  AgentAuditEntry,
+  AgentClientSummary,
+  AgentOutcome,
+  AgentRequest,
+  AgentScope,
+  IssuedAgentClient,
+  NewAgentClient,
+} from "@/lib/agent-types";
 import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
+  AddCuratedGameInput,
   AppBootstrap,
   AppPreferences,
+  ArchiveReport,
+  ArtCacheMaintenanceReport,
   BulkUpdateStatusInput,
   CachedArtwork,
+  CuratedList,
+  CuratedListDetail,
   DatabaseDiagnostics,
   DatabaseRecoverySnapshot,
   DiscoverySnapshot,
+  DlcFilter,
+  DlcRefreshReport,
+  DlcSummary,
+  DrmStateCounts,
+  ExternalGame,
+  ExternalGameRequest,
+  ExternalStoreAccount,
+  ExternalStoreId,
+  ExternalStoreScanReport,
   FamilyCatalogGame,
   FamilyCatalogRequest,
   GameDetail,
+  GameDlc,
   GameListRequest,
+  GamePrice,
   GameReminder,
+  GameVideo,
+  GameVideoRef,
   LibraryDropInput,
   LibraryDropReceipt,
   LibraryDropResult,
@@ -20,23 +48,53 @@ import type {
   LocalSteamImportResult,
   MetadataEnrichmentStatus,
   NewsRefreshReport,
+  NotificationInbox,
+  NotificationInboxFilter,
+  NotificationRefreshReport,
+  NotificationRule,
+  PagedArchivedGames,
+  PagedExternalGames,
   PagedFamilyCatalogGames,
   PagedGameSessions,
   PagedGames,
   PlannerOverview,
   PlannerSettings,
+  PriceHistory,
+  PriceRefreshReport,
+  PriorityExplanation,
+  PriorityRanking,
+  PriorityRecomputeReport,
   Recommendation,
+  RichGameMetadata,
   SaveCollectionInput,
+  SaveCuratedListInput,
+  SaveGameVideoInput,
+  SaveNotificationRuleInput,
   SavePersonalDatesInput,
   SavePlannerItemInput,
   SaveReminderInput,
   SaveSessionInput,
   SaveTagInput,
+  SaveWishlistEntryInput,
   SmartRule,
   SteamSyncResult,
+  SteamWishlistImportResult,
+  StoreDetection,
+  SyncRun,
   TagDefinition,
+  TasteReport,
+  TasteSurface,
+  TasteVerdict,
+  UpcomingRelease,
   UpdateCheckResult,
+  UpdateCuratedItemInput,
   UpdateGameInput,
+  VideoKind,
+  VideoProvider,
+  WishlistBucketId,
+  WishlistEntry,
+  WishlistOverview,
+  WishlistPriceStatus,
 } from "@/lib/types";
 
 export const api = {
@@ -54,9 +112,130 @@ export const api = {
     invoke<DatabaseRecoverySnapshot>("create_clean_database_after_recovery", { confirmation }),
   exportQuarantinedDatabase: () => invoke<boolean>("export_quarantined_database"),
   bootstrap: () => invoke<AppBootstrap>("bootstrap"),
+  listGameDlc: (appId: number, filter?: DlcFilter) =>
+    invoke<GameDlc[]>("list_game_dlc", { appId, filter }),
+  refreshGameDlc: (appId: number, detailBudget?: number) =>
+    invoke<DlcRefreshReport>("refresh_game_dlc", { appId, detailBudget }),
+  setDlcOwned: (appId: number, dlcAppId: number, owned: boolean) =>
+    invoke<GameDlc>("set_dlc_owned", { appId, dlcAppId, owned }),
+  setDlcHidden: (appId: number, dlcAppId: number, hidden: boolean) =>
+    invoke<GameDlc>("set_dlc_hidden", { appId, dlcAppId, hidden }),
+  setDlcInstalled: (appId: number, dlcAppId: number, installed: boolean) =>
+    invoke<GameDlc>("set_dlc_installed", { appId, dlcAppId, installed }),
+  dlcSummary: (appId: number) => invoke<DlcSummary>("get_dlc_summary", { appId }),
+  listSavedViews: () => invoke<SavedLibraryView[]>("list_saved_views"),
+  saveSavedView: (input: SaveViewInput) => invoke<SavedLibraryView>("save_saved_view", { input }),
+  deleteSavedView: (viewId: string) => invoke<void>("delete_saved_view", { viewId }),
+  reorderSavedViews: (orderedIds: string[]) => invoke<void>("reorder_saved_views", { orderedIds }),
+  markSavedViewUsed: (viewId: string) =>
+    invoke<SavedLibraryView>("mark_saved_view_used", { viewId }),
+  listCuratedLists: () => invoke<CuratedList[]>("list_curated_lists"),
+  saveCuratedList: (input: SaveCuratedListInput) =>
+    invoke<CuratedList>("save_curated_list", { input }),
+  deleteCuratedList: (listId: string) => invoke<void>("delete_curated_list", { listId }),
+  reorderCuratedLists: (orderedIds: string[]) =>
+    invoke<void>("reorder_curated_lists", { orderedIds }),
+  curatedListDetail: (listId: string, limit?: number, offset?: number) =>
+    invoke<CuratedListDetail>("get_curated_list_detail", { listId, limit, offset }),
+  addCuratedGame: (input: AddCuratedGameInput) => invoke<void>("add_curated_game", { input }),
+  updateCuratedItem: (input: UpdateCuratedItemInput) =>
+    invoke<void>("update_curated_item", { input }),
+  removeCuratedGame: (listId: string, appId: number) =>
+    invoke<void>("remove_curated_game", { listId, appId }),
+  moveCuratedItem: (listId: string, appId: number, beforeAppId?: number) =>
+    invoke<void>("move_curated_item", { listId, appId, beforeAppId }),
+  reorderCuratedItems: (listId: string, orderedAppIds: number[]) =>
+    invoke<void>("reorder_curated_items", { listId, orderedAppIds }),
+  wishlistOverview: () => invoke<WishlistOverview>("get_wishlist_overview"),
+  /**
+   * Situación de precio de cada entrada de deseados. Se pide aparte de
+   * `wishlistOverview` a propósito: el tablero se pinta con lo que ya hay
+   * guardado aunque el precio todavía no haya llegado.
+   */
+  wishlistPrices: () => invoke<WishlistPriceStatus[]>("list_wishlist_prices"),
+  gamePrices: (appId: number) => invoke<GamePrice[]>("get_game_prices", { appId }),
+  gamePriceHistory: (appId: number, currency: string, limit?: number) =>
+    invoke<PriceHistory>("get_game_price_history", { appId, currency, limit }),
+  forgetGamePrices: (appId: number) => invoke<void>("forget_game_prices", { appId }),
+  /** Única llamada que habla con la tienda: pregunta el precio de lo caducado. */
+  refreshWishlistPrices: (limit?: number) =>
+    invoke<PriceRefreshReport>("refresh_wishlist_prices", { limit }),
+  archiveGames: (appIds: number[], reason?: string) =>
+    invoke<ArchiveReport>("archive_games", { appIds, reason }),
+  unarchiveGames: (appIds: number[]) => invoke<ArchiveReport>("unarchive_games", { appIds }),
+  listArchivedGames: (limit?: number, offset?: number) =>
+    invoke<PagedArchivedGames>("list_archived_games", { limit, offset }),
+  countArchivedGames: () => invoke<number>("count_archived_games"),
+  isGameArchived: (appId: number) => invoke<boolean>("is_game_archived", { appId }),
+  saveWishlistEntry: (input: SaveWishlistEntryInput) =>
+    invoke<WishlistEntry>("save_wishlist_entry", { input }),
+  removeWishlistEntry: (appId: number) => invoke<void>("remove_wishlist_entry", { appId }),
+  moveWishlistEntry: (appId: number, bucket: WishlistBucketId, beforeAppId?: number) =>
+    invoke<void>("move_wishlist_entry", { appId, bucket, beforeAppId }),
+  reorderWishlistBucket: (bucket: WishlistBucketId, orderedAppIds: number[]) =>
+    invoke<void>("reorder_wishlist_bucket", { bucket, orderedAppIds }),
+  /**
+   * Importa la lista de deseados de Steam. No usa la clave Web API: el
+   * endpoint de deseados sólo necesita el SteamID64 ya vinculado.
+   */
+  importSteamWishlist: () => invoke<SteamWishlistImportResult>("import_steam_wishlist"),
+  detectExternalStores: () => invoke<StoreDetection[]>("detect_external_stores"),
+  listExternalStoreAccounts: () => invoke<ExternalStoreAccount[]>("list_external_store_accounts"),
+  scanExternalStore: (store: ExternalStoreId) =>
+    invoke<ExternalStoreScanReport>("scan_external_store", { store }),
+  scanExternalStores: () => invoke<ExternalStoreScanReport[]>("scan_external_stores"),
+  rematchExternalStores: () => invoke<number>("rematch_external_stores"),
+  listExternalGames: (request: ExternalGameRequest) =>
+    invoke<PagedExternalGames>("list_external_games", { request }),
+  setExternalGameMatch: (store: ExternalStoreId, externalId: string, appId: number | null) =>
+    invoke<ExternalGame>("set_external_game_match", { store, externalId, appId }),
+  clearExternalGameMatch: (store: ExternalStoreId, externalId: string) =>
+    invoke<ExternalGame>("clear_external_game_match", { store, externalId }),
+  linkExternalStore: (store: ExternalStoreId) =>
+    invoke<ExternalStoreAccount>("link_external_store", { store }),
+  unlinkExternalStore: (store: ExternalStoreId) => invoke<void>("unlink_external_store", { store }),
+  // La acción viaja explícita para que el puente IPC valide contra la
+  // allowlist del backend en vez de confiar en el nombre del comando.
+  launchExternalGame: (store: ExternalStoreId, externalId: string) =>
+    invoke<void>("launch_external_game", { store, externalId, action: "launch" }),
+  listGameVideos: (appId: number, kind?: VideoKind) =>
+    invoke<GameVideo[]>("list_game_videos", { appId, kind }),
+  saveGameVideo: (input: SaveGameVideoInput) => invoke<GameVideo>("save_game_video", { input }),
+  deleteGameVideo: (appId: number, provider: VideoProvider, videoId: string) =>
+    invoke<void>("delete_game_video", { appId, provider, videoId }),
+  reorderGameVideos: (appId: number, kind: VideoKind, ordered: GameVideoRef[]) =>
+    invoke<void>("reorder_game_videos", { appId, kind, ordered }),
   listGames: (request: GameListRequest) => invoke<PagedGames>("list_games", { request }),
   libraryFilterOptions: () => invoke<LibraryFilterOptions>("get_library_filter_options"),
   gameDetail: (appId: number) => invoke<GameDetail>("get_game_detail", { appId }),
+  richGameMetadata: (appId: number) =>
+    invoke<RichGameMetadata>("get_rich_game_metadata", { appId }),
+  drmStateCounts: () => invoke<DrmStateCounts>("get_drm_state_counts"),
+  maintainArtCache: () => invoke<ArtCacheMaintenanceReport>("maintain_art_cache"),
+  listNotificationRules: (appId?: number) =>
+    invoke<NotificationRule[]>("list_notification_rules", { appId }),
+  saveNotificationRule: (input: SaveNotificationRuleInput) =>
+    invoke<NotificationRule>("save_notification_rule", { input }),
+  deleteNotificationRule: (id: string) => invoke<void>("delete_notification_rule", { id }),
+  notificationInbox: (filter?: NotificationInboxFilter, limit?: number, offset?: number) =>
+    invoke<NotificationInbox>("get_notification_inbox", { filter, limit, offset }),
+  markNotificationRead: (id: string) => invoke<void>("mark_notification_read", { id }),
+  markAllNotificationsRead: () => invoke<number>("mark_all_notifications_read"),
+  dismissNotification: (id: string) => invoke<void>("dismiss_notification", { id }),
+  refreshNotificationEvents: () => invoke<NotificationRefreshReport>("refresh_notification_events"),
+  recomputePriorities: () => invoke<PriorityRecomputeReport>("recompute_priorities"),
+  explainPriority: (appId: number) => invoke<PriorityExplanation>("explain_priority", { appId }),
+  setPriorityLock: (appId: number, locked: boolean) =>
+    invoke<void>("set_priority_lock", { appId, locked }),
+  priorityRanking: (limit?: number) =>
+    invoke<PriorityRanking[]>("list_priority_ranking", { limit }),
+  learnTaste: () => invoke<TasteReport>("learn_taste"),
+  recordTasteFeedback: (appId: number, verdict: TasteVerdict, surface: TasteSurface) =>
+    invoke<void>("record_taste_feedback", { appId, verdict, surface }),
+  scoreUpcomingReleases: () => invoke<number>("score_upcoming_releases"),
+  upcomingReleases: (limit?: number) =>
+    invoke<UpcomingRelease[]>("list_upcoming_releases", { limit }),
+  dismissUpcomingRelease: (appId: number) => invoke<void>("dismiss_upcoming_release", { appId }),
   listTags: () => invoke<TagDefinition[]>("list_tags"),
   saveTag: (input: SaveTagInput) => invoke<TagDefinition>("save_tag", { input }),
   deleteTag: (id: string) => invoke<void>("delete_tag", { id }),
@@ -119,6 +298,7 @@ export const api = {
   deleteSteamApiKey: () => invoke<void>("delete_steam_api_key"),
   verifySavedSteamApiKey: () => invoke<boolean>("verify_saved_steam_api_key"),
   syncSteamLibrary: () => invoke<SteamSyncResult>("sync_steam_library"),
+  listSyncRuns: (limit?: number) => invoke<SyncRun[]>("list_sync_runs", { limit }),
   listFamilyCatalog: (request: FamilyCatalogRequest) =>
     invoke<PagedFamilyCatalogGames>("list_family_catalog", { request }),
   familyCatalogGame: (appId: number) =>
@@ -158,6 +338,21 @@ export const api = {
   savePreferences: (preferences: AppPreferences) =>
     invoke<void>("save_preferences", { preferences }),
   checkForUpdates: () => invoke<UpdateCheckResult>("check_for_updates"),
+  agentDispatch: (request: AgentRequest) => invoke<AgentOutcome>("agent_dispatch", { request }),
+  agentConfirm: (auditId: string, approve: boolean) =>
+    invoke<AgentOutcome>("agent_confirm", { auditId, approve }),
+  agentUndo: (undoToken: string) => invoke<AgentOutcome>("agent_undo", { undoToken }),
+  issueAgentClient: (input: NewAgentClient) =>
+    invoke<IssuedAgentClient>("issue_agent_client", { input }),
+  rotateAgentToken: (clientId: string) =>
+    invoke<IssuedAgentClient>("rotate_agent_token", { clientId }),
+  setAgentClientScopes: (clientId: string, scopes: AgentScope[]) =>
+    invoke<AgentClientSummary>("set_agent_client_scopes", { clientId, scopes }),
+  setAgentClientEnabled: (clientId: string, enabled: boolean) =>
+    invoke<AgentClientSummary>("set_agent_client_enabled", { clientId, enabled }),
+  revokeAgentClient: (clientId: string) => invoke<void>("revoke_agent_client", { clientId }),
+  listAgentClients: () => invoke<AgentClientSummary[]>("list_agent_clients"),
+  listAgentAudit: (limit: number) => invoke<AgentAuditEntry[]>("list_agent_audit", { limit }),
 };
 
 export function getErrorMessage(error: unknown): string {

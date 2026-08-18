@@ -31,8 +31,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' customprotocol: asset:; script-src 'self'; img-src 'self' asset: http://asset.localhost https://shared.steamstatic.com https://media.steampowered.com https://avatars.steamstatic.com https://avatars.fastly.steamstatic.com https://cdn.akamai.steamstatic.com https://steamcommunity.com; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'; frame-ancestors 'none'",
-      "freezePrototype": true,
+      "csp": "default-src 'self' customprotocol: asset:; script-src 'self'; img-src 'self' asset: http://asset.localhost https://shared.steamstatic.com https://shared.fastly.steamstatic.com https://cdn.cloudflare.steamstatic.com https://shared.cloudflare.steamstatic.com https://shared.akamai.steamstatic.com https://store.akamai.steamstatic.com https://media.steampowered.com https://avatars.steamstatic.com https://avatars.fastly.steamstatic.com https://cdn.akamai.steamstatic.com https://steamcommunity.com; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com; form-action 'none'; frame-ancestors 'none'",
+      "freezePrototype": false,
       "assetProtocol": {
         "enable": true,
         "scope": ["$APPCACHE/steam-art/**"]
@@ -45,7 +45,7 @@
     "category": "Entertainment",
     "shortDescription": "Tu biblioteca de Steam, organizada de verdad.",
     "longDescription": "Vindexa organiza, planifica y sigue tu biblioteca personal de Steam con datos locales persistentes.",
-    "copyright": "Copyright © 2026 Vindexa contributors",
+    "copyright": "Copyright \u00a9 2026 Vindexa contributors",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

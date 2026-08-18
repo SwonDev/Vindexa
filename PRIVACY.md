@@ -110,6 +110,41 @@ cookies; si no puede activarse, la tienda se cierra. La implementación Linux us
 todavía no se ha validado en una sesión gráfica Bazzite real. Ninguna plataforma ofrece un
 adblock completo.
 
+### Vídeos incrustados
+
+Vindexa **no consulta la API de YouTube** ni ninguna otra API de vídeo. La lista de deseados
+guarda únicamente el identificador del vídeo que la persona usuaria pega, validado en Rust
+contra el formato exacto de once caracteres.
+
+No se hace ninguna petición a Google hasta que la persona **pulsa reproducir**. En ese
+momento se carga un `iframe` de `https://www.youtube-nocookie.com`, la variante sin cookies
+de seguimiento, y es el único origen que la política de contenido de la aplicación permite
+incrustar (`frame-src`). Las miniaturas alojadas en `i.ytimg.com` se rechazan a propósito:
+pintarlas supondría una petición a Google antes de que nadie haya decidido ver nada.
+
+### Tiendas externas
+
+La detección de Epic Games Store y GOG lee **solo ficheros locales** que esos clientes ya
+escriben en el disco: sus manifiestos de instalación y la caché de biblioteca que Heroic y
+Legendary guardan tras iniciar sesión. Vindexa no pide credenciales de esas tiendas, no
+guarda tokens y no llama a sus APIs privadas. Los ficheros de sesión de esos clientes
+(`gog_store/auth.json` y `legendaryConfig/legendary/user.json`) **no se abren nunca**: sólo
+se comprueba si existen, para poder distinguir «no has iniciado sesión» de «no tienes el
+cliente». Si el cliente no está instalado, el resultado es un estado explícito de «no
+disponible», no un intento de conexión.
+
+Vindexa no implementa un inicio de sesión propio contra Epic ni contra GOG. Hacerlo
+obligaría a suplantar las credenciales OAuth de sus clientes oficiales, algo que las
+condiciones de uso de Epic no autorizan y que dejaría a Vindexa custodiando un testigo de
+acceso a la cuenta.
+
+### Modelo de gustos y prioridad
+
+La puntuación de prioridad y el modelo de afinidad por género, categoría, estudio o etiqueta
+se calculan **íntegramente en el equipo**, a partir del comportamiento local ya guardado. No
+se envían a ningún servidor, no alimentan ningún servicio remoto y se pueden borrar con la
+base de datos.
+
 ## Qué no hace Vindexa
 
 - No solicita ni almacena la contraseña de Steam.
@@ -118,6 +153,12 @@ adblock completo.
 - No ejecuta analítica, anuncios, crash reporting remoto ni telemetría.
 - No ofrece una cuenta de Vindexa ni sincronización propia en la nube.
 - No vende ni comparte datos con terceros desde el código actual.
+- No consulta la API de YouTube: el único tráfico hacia Google ocurre al pulsar reproducir un
+  vídeo, y siempre contra `youtube-nocookie.com`.
+- No pide credenciales de Epic ni de GOG, ni implementa un inicio de sesión propio contra
+  ellas: solo lee ficheros que esos clientes ya han escrito en el disco.
+- No abre los ficheros de sesión de Heroic ni de Legendary: solo comprueba si existen.
+- No envía fuera del equipo el modelo de gustos ni la puntuación de prioridad.
 - No modifica manifiestos ni archivos internos de Steam.
 - No instala ni elimina un juego por sí sola: solicita la acción al cliente oficial.
 

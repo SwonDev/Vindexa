@@ -10,6 +10,7 @@ tratamiento de datos personales, consulta [PRIVACY.md](./PRIVACY.md).
 - [Fronteras de confianza](#fronteras-de-confianza)
 - [Credenciales y autenticación](#credenciales-y-autenticación)
 - [Red y contenido remoto](#red-y-contenido-remoto)
+- [Puente para agentes externos](#puente-para-agentes-externos)
 - [Sistema, SQLite y copias](#sistema-sqlite-y-copias)
 - [Controles de la interfaz](#controles-de-la-interfaz)
 - [Dependencias, firma y actualizaciones](#dependencias-firma-y-actualizaciones)
@@ -95,31 +96,99 @@ texto plano, fuente y fecha; ni HTML ni URLs remotas llegan a la interfaz. La ca
 refresca como máximo cada seis horas por juego, en lotes de cuatro, con backoff acotado y
 solo códigos de error no sensibles persistidos.
 
-### Ventana integrada de la tienda
+### Navegador integrado de tiendas
 
-La acción **Tienda integrada** abre una ventana remota separada con estas restricciones:
+La acción **Tienda integrada** abre una ventana remota por tienda, etiquetada
+`vindexa-store-<tienda>`, con estas restricciones:
 
-- URL inicial y navegación superior limitadas al esquema HTTPS y al host exacto
-  `store.steampowered.com`;
-- modo privado, autofill general y DevTools desactivados;
-- nuevas ventanas y descargas denegadas;
-- ninguna capability Tauri ni acceso a SQLite, Keychain o comandos de Vindexa.
+- navegación superior limitada a HTTPS, puerto 443, sin credenciales en la URL y con host
+  verificado contra la lista cerrada de cada tienda: Steam (`store`, `checkout`, `login` y
+  `help`.steampowered.com, más `steamcommunity.com`), GOG (`gog.com`, `www`, `login`,
+  `auth`), Epic (`store.epicgames.com`, `www.epicgames.com`, `epicgames.com`) e itch.io
+  (`itch.io` y los subdominios de creador);
+- `steamdb.info` queda deliberadamente fuera: no es una tienda ni la opera Valve;
+- dieciocho esquemas peligrosos rechazados en navegación superior, entre ellos `file:`,
+  `javascript:`, `data:`, `blob:`, `view-source:` y `steam:` — la desinstalación tiene que
+  seguir pasando por los comandos de Vindexa, nunca por una página de la tienda;
+- verificación estructural del host, no por sufijo: `evilstore.steampowered.com.attacker.tld`
+  e `itch.io.attacker.tld` fallan, y los homógrafos internacionalizados se comparan ya en
+  punycode;
+- modo privado, autofill general, extensiones y arrastre de archivos desactivados; DevTools
+  solo en compilaciones de depuración;
+- nuevas ventanas y descargas denegadas; un `target="_blank"` legítimo se reconduce a la
+  misma ventana y vuelve a pasar por la política;
+- ninguna capability Tauri: `capabilities/store-browser.json` declara una lista de permisos
+  vacía para `vindexa-store-*`, y Tauri rechaza además cualquier invocación de origen remoto
+  sin capability `remote` explícita;
+- historial solo en memoria, borrado al cerrar la ventana. Lo único que se persiste es el
+  zoom por tienda.
 
-En macOS y Linux, WebKit abre primero `about:blank`, compila una lista nativa con timeout,
-bloquea una lista corta de hosts de analítica y oculta el popup de cookies. Solo después
-navega a Steam. macOS emplea `WKContentRuleList`; Linux instala el filtro mediante la API
-nativa de WebKitGTK. Si cualquiera de las rutas no puede instalar la regla, cierra la
-ventana y devuelve `store_protection`.
+El bloqueador nativo compila ciento siete reglas: ochenta dominios de publicidad y rastreo
+de terceros bloqueados por la URL del recurso, veintidós dominios de las tiendas y sus CDN
+protegidos con `ignore-previous-rules`, y cinco reglas cosméticas. La telemetría de primera
+parte de cada tienda **no** se bloquea: la regla crítica es que la tienda no se rompa.
 
-La ruta Linux está implementada, pero todavía no se ha validado en una sesión gráfica
-Bazzite real. El aislamiento por host, modo privado, ausencia de IPC, popups/descargas
-denegados y autofill/DevTools desactivados sigue siendo una frontera independiente.
+> [!NOTE]
+> Las reglas anteriores a esta revisión no bloqueaban nada. WebKit evalúa `if-domain` contra
+> el documento principal, no contra la URL del recurso, así que una regla con
+> `if-domain: ["*doubleclick.net"]` solo se dispara si la página **es** doubleclick.net.
+
+En macOS y Linux, WebKit compila la lista nativa antes de navegar. Si cualquiera de las
+rutas no puede instalarla, cierra la ventana y devuelve `store_protection`: falla en
+cerrado, no en silencio. En Windows no hay equivalente nativo, así que hay aislamiento por
+host, sin descargas, sin ventanas emergentes y sin IPC, **pero sin bloqueo de anuncios**.
+
+La ruta Linux está implementada pero todavía no se ha validado en una sesión gráfica Bazzite
+real.
 
 > [!IMPORTANT]
-> Es una vista limitada de la tienda, no un navegador general ni un bloqueador publicitario
-> completo. El HTML y los subrecursos siguen perteneciendo a Steam. No introduzcas
-> credenciales si una navegación requiere salir del host permitido; usa el navegador
-> oficial para iniciar sesión o gestionar la cuenta.
+> El inicio de sesión y el carrito funcionan dentro de la ventana, pero la sesión es privada
+> y no sobrevive al cierre. La barra del navegador vive en el contexto del documento remoto
+> y **no es una frontera de seguridad**: las fronteras son la política de navegación nativa,
+> la ausencia de IPC, y el bloqueo de descargas y de ventanas emergentes.
+
+### Reproductor de vídeo incrustado
+
+La lista de deseados puede incrustar un vídeo. `frame-src` admite exactamente un origen,
+`https://www.youtube-nocookie.com`, y **la URL la construye Rust** tras validar que el
+identificador cumple el formato exacto de once caracteres; el frontend nunca la concatena.
+Tauri inyecta su puente IPC solo en el marco principal, así que el iframe no lo recibe, y la
+lista de control rechaza cualquier invocación de origen remoto. El bloqueador de contenido
+**no** cubre ese iframe: vive en la ventana principal, no en una ventana de tienda.
+
+### Puente para agentes externos
+
+Un agente externo puede conducir Vindexa a través de un catálogo **cerrado y tipado** de
+dieciocho intenciones. La especificación completa está en `docs/AGENT_BRIDGE.md`.
+
+- **Autenticación por token** con hash y sal (`pbkdf2-sha256`, 120 000 iteraciones, sal única
+  por cliente). El token se entrega una sola vez y solo se guarda su resumen. El secreto trae
+  256 bits de entropía del generador del sistema.
+- **Ámbitos por cliente**, conjunto cerrado y sin comodín, verificados **antes** de resolver
+  nombres o escribir. Un ámbito desconocido deja el cliente sin ninguno.
+- **Confirmación humana obligatoria** para quitar juegos de una colección y para cualquier
+  acción que afecte a más de cinco juegos. La confirma la persona desde Vindexa, **sin token
+  de agente**: si el agente pudiera aprobarse a sí mismo, la barrera no existiría.
+- **Deshacer** con recibo que guarda el estado anterior y el aplicado. Al deshacer se
+  comprueba que la base sigue siendo exactamente lo aplicado; si no, se rechaza en vez de
+  pisar ediciones posteriores. Token de un solo uso.
+- **Auditoría completa**: una fila por petición, con la intención, la frase original, los
+  argumentos, el resultado y los juegos afectados. El cambio y su fila viajan en la misma
+  transacción. El token nunca aparece en el registro.
+- **Límite de frecuencia** por cliente, aplicado antes de autenticar para proteger también la
+  derivación de clave.
+- **Sin puerto de red.** El puente es una API de proceso: se invoca por comando Tauri. Un
+  socket TCP en el bucle local sería accesible para cualquier proceso local y para cualquier
+  página web capaz de pedirle; si algún día hiciera falta salir del proceso, la única forma
+  compatible sería un socket de dominio Unix con permisos `0600` bajo el directorio de datos.
+- **El agente crea y organiza, no destruye.** No existe intención para borrar colecciones,
+  listas, juegos ni estados.
+
+> [!IMPORTANT]
+> La implementación criptográfica es propia y no ha sido auditada por terceros. Está
+> verificada contra los vectores oficiales de FIPS 180-4, RFC 4231 y RFC 7914, y lo que
+> domina el coste de un ataque es la entropía del secreto, no la función de derivación. Aun
+> así, sustituirla por `argon2` es trabajo pendiente y está anotado como tal.
 
 ## Sistema, SQLite y copias
 

@@ -1,0 +1,198 @@
+/* Vistas guardadas de biblioteca.
+   Vive fuera de `index.css` para que la barra pueda evolucionar sin tocar la
+   hoja compartida. */
+
+/* Sólo existe cuando hay vistas guardadas o se está nombrando una: una fila
+   permanentemente vacía costaría altura de listado a cambio de nada. */
+.saved-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-views__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-views__list > li {
+  display: flex;
+  align-items: stretch;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--v-surface-raised) 55%, transparent);
+  transition: background 140ms var(--ease-out);
+}
+
+.saved-views__list > li:hover {
+  background: var(--v-surface-raised);
+}
+
+.saved-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 2px 0 0 2px;
+  background: transparent;
+  color: var(--v-muted);
+  font-size: 11.5px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  /* El borde inferior es el único elemento que cambia al activarse, para que la
+     ficha no se mueva ni un píxel al alternarla. */
+  border-bottom: 2px solid transparent;
+  transition:
+    color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
+}
+
+.saved-view:hover {
+  color: var(--foreground);
+}
+
+.saved-view[data-active="true"] {
+  color: var(--foreground);
+  border-bottom-color: var(--v-cyan);
+}
+
+.saved-view[data-active="true"][data-accent="lime"] {
+  border-bottom-color: var(--v-lime);
+}
+.saved-view[data-active="true"][data-accent="amber"] {
+  border-bottom-color: var(--v-warning);
+}
+.saved-view[data-active="true"][data-accent="rose"] {
+  border-bottom-color: var(--v-error);
+}
+.saved-view[data-active="true"][data-accent="teal"] {
+  border-bottom-color: var(--v-success);
+}
+.saved-view[data-active="true"][data-accent="blue"],
+.saved-view[data-active="true"][data-accent="violet"] {
+  border-bottom-color: var(--v-surface-selected);
+}
+.saved-view[data-active="true"][data-accent="slate"] {
+  border-bottom-color: var(--v-status-muted);
+}
+
+.saved-view__name {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Con una sola vista aplicada el número sobra; sólo aparece al apilar, que es
+   cuando el orden decide quién gana los campos incompatibles. */
+.saved-view__order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--v-surface-selected);
+  color: var(--foreground);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-view__menu {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+  color: var(--v-subtle);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms var(--ease-out);
+}
+
+.saved-views__list > li:hover .saved-view__menu,
+.saved-view__menu:focus-visible {
+  opacity: 1;
+}
+
+.saved-view__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  min-width: 200px;
+  padding: 4px;
+}
+
+.saved-view__actions button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.saved-view__actions button:hover:not(:disabled) {
+  background: var(--v-surface-raised);
+}
+
+.saved-view__actions button:disabled {
+  color: var(--v-subtle);
+  cursor: default;
+}
+
+.saved-view__actions .saved-view__danger:hover {
+  color: var(--v-error);
+}
+
+.saved-view__summary {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-views__form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.saved-views__form input {
+  width: 180px;
+  height: 26px;
+  font-size: 12px;
+}
+
+.saved-views__conflicts {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--v-warning);
+}
+
+.saved-views__conflicts svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}

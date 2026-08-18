@@ -39,6 +39,7 @@ vi.mock("@tanstack/react-virtual", () => ({
       })),
     getTotalSize: () => count * 58,
     measure: vi.fn(),
+    scrollToIndex: vi.fn(),
   }),
 }));
 
@@ -141,7 +142,11 @@ describe("ventana virtual para bibliotecas grandes", () => {
 
     expect(container.querySelector(".game-browser--compact")).toBeInTheDocument();
     expect(container.querySelectorAll(".game-row")).toHaveLength(VISIBLE_WINDOW);
-    expect(container.querySelectorAll("img")).toHaveLength(VISIBLE_WINDOW);
+    // La ultracompacta cambia la carátula y la barra dibujada por texto: es lo
+    // que le permite bajar de 38 a 26 px por fila.
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-slot='progress']")).toHaveLength(0);
+    expect(container.querySelectorAll(".game-row__progress span")[0]).toHaveTextContent("0%");
     expect(screen.getByRole("button", { name: /Juego 0001, Sin clasificar/ })).toBeVisible();
   });
 

@@ -162,6 +162,22 @@ La interfaz es oscura por defecto. Los cambios de profundidad se expresan con ca
 - **On Surface Muted (#ABB7B5):** metadatos y texto secundario.
 - **Error (#D85C5C):** errores y acciones destructivas con icono y texto.
 
+### Colores definidos por la persona usuaria
+
+Los estados, las colecciones y las etiquetas llevan un color que elige quien usa la
+aplicación. Ese color **no forma parte de la paleta del sistema**: identifica una entidad
+concreta y puede ser cualquiera.
+
+Reglas que sí se aplican a esos colores:
+
+- se usan como **marca de identidad** —un cuadrado de 6 px, una barra de 3 px, el trazo de un
+  icono—, nunca como fondo de un bloque de texto, para que jamás comprometan el contraste;
+- el texto que los acompaña usa siempre los tokens del sistema (`--foreground`, `--v-muted`,
+  `--v-subtle`), que tienen contraste garantizado;
+- el color **no codifica significado**: el tipo de una colección (manual o inteligente) se
+  distingue por la forma de su barra, no por su tono, porque el tono ya está ocupado por la
+  identidad.
+
 ## Typography
 
 Se usa **Inter Variable** incluida en el paquete para aproximar la compacidad humanista de una aplicación de biblioteca sin depender de la tipografía propietaria de Steam. Los títulos son contenidos; el cuerpo normal es de 13–14 px y los metadatos de 11–12 px. Las cifras usan `tnum` para evitar saltos durante sincronizaciones y recuentos.

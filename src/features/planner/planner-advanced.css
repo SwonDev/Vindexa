@@ -49,11 +49,19 @@
   background: #5caac1;
 }
 
+/* Sin `flex-shrink: 0` la barra comprime estos grupos cuando el periodo es
+   largo o aparece el aviso de sobrecarga, y las etiquetas acaban montándose
+   unas sobre otras en lugar de reservar su ancho. */
 .planner-toolbar__period,
 .planner-toolbar__actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 5px;
+}
+
+.planner-toolbar__actions > * {
+  white-space: nowrap;
 }
 
 .planner-toolbar__period strong {
@@ -153,15 +161,8 @@
   -webkit-line-clamp: 2;
 }
 
-.planner-item-summary [data-slot="progress"] {
-  width: min(360px, 100%);
-  height: 3px;
-  border-radius: 0;
-  background: #35404b;
-}
-
-.planner-item-summary [data-slot="progress-indicator"] {
-  background: #a4d007;
+.planner-item-summary .progress-meter {
+  max-width: 400px;
 }
 
 .planner-item-summary > div {
@@ -387,4 +388,42 @@
     width: 36px;
     height: 42px;
   }
+}
+
+/* La tarjeta del plan se arrastra desde cualquier punto, igual que en la
+   biblioteca: no hay asa dibujada. Este activador sólo lo alcanza el teclado. */
+.planner-drag-activator {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.planner-drag-activator:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 2px 6px;
+  overflow: visible;
+  clip-path: none;
+  border: 1px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.planner-card {
+  position: relative;
+  cursor: grab;
+}
+
+.planner-card:active,
+[data-dragging="true"] .planner-card {
+  cursor: grabbing;
 }

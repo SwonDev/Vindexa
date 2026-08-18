@@ -8,8 +8,11 @@ const STEAM_DERIVED_QUERY_KEYS = [
   ["game"],
   ["metadata-enrichment"],
   ["discovery"],
+  ["upcoming-releases"],
+  ["notification-rules"],
   ["planner-overview"],
   ["planner-add"],
+  ["sync-runs"],
 ] as const;
 
 /**

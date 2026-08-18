@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
+import { ProgressMeter } from "@/components/common/ProgressMeter";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +21,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { formatDate, formatPlaytime } from "@/lib/format";
 import type { PlannerSettings, SavePlannerItemInput } from "@/lib/types";
 import type { PlannerMetricItem, PlannerPeriodResult } from "./planner-periods";
@@ -307,7 +307,7 @@ export function PlannerQueueView({
       {items.map((item, index) => (
         <li key={item.appId} className="planner-queue__item">
           <data value={index + 1}>{String(index + 1).padStart(2, "0")}</data>
-          <Artwork appId={item.appId} src={item.coverUrl} title={item.title} kind="icon" />
+          <Artwork appId={item.appId} src={item.coverUrl} title={item.title} kind="cover" />
           <PlannerItemSummary item={item} />
           <div className="planner-queue__actions">
             <Button
@@ -341,9 +341,8 @@ function PlannerItemSummary({ item }: { item: PlannerMetricItem }) {
     <div className="planner-item-summary">
       <strong>{item.title}</strong>
       {item.objective && <p>{item.objective}</p>}
-      <Progress value={item.progress} aria-label={`Progreso ${item.progress}%`} />
+      <ProgressMeter value={item.progress} label={`Progreso de ${item.title}`} />
       <div>
-        <span>{item.progress}%</span>
         {item.estimatedMinutes !== undefined && (
           <span>
             <IconClock /> {formatPlaytime(item.estimatedMinutes)}

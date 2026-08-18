@@ -13,6 +13,8 @@ import { buildWeekSegments } from "@/features/planner/planner-periods";
 
 vi.mock("@/components/common/Artwork", () => ({
   Artwork: ({ title }: { title: string }) => <span aria-hidden="true">{title.slice(0, 1)}</span>,
+  // La precarga es una mejora de tiempos: en pruebas basta con que exista.
+  prefetchArtwork: () => undefined,
 }));
 
 const games: PlannerViewItem[] = [

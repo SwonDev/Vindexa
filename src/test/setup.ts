@@ -50,3 +50,24 @@ Object.defineProperty(Element.prototype, "scrollIntoView", {
   writable: true,
   value: () => undefined,
 });
+
+// jsdom de vitest no expone localStorage en este entorno; polyfill en memoria
+// para las pruebas de persistencia de sesión.
+if (typeof window !== "undefined" && typeof window.localStorage === "undefined") {
+  const store = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key) => (store.has(key) ? (store.get(key) as string) : null),
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(window, "localStorage", { writable: true, value: storage });
+}

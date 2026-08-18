@@ -1,4 +1,5 @@
 import {
+  type Announcements,
   closestCenter,
   DndContext,
   type DragEndEvent,
@@ -6,6 +7,7 @@ import {
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  type ScreenReaderInstructions,
   useDroppable,
   useSensor,
   useSensors,
@@ -19,10 +21,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   IconAlertTriangle,
+  IconArrowBackUp,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
-  IconGripVertical,
   IconLayoutKanban,
   IconPlus,
   IconRefresh,
@@ -33,6 +35,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingState } from "@/components/common/LoadingState";
+import { MetricStrip } from "@/components/common/MetricStrip";
+import { PageHeader } from "@/components/common/PageHeader";
+import { ProgressMeter } from "@/components/common/ProgressMeter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +49,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, formatPlaytime } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
@@ -111,6 +115,12 @@ export function PlannerScreen({
   const [columns, setColumns] = useState<PlannerColumn[]>(sourceColumns);
   const [activeItem, setActiveItem] = useState<PlannerItem>();
   const [message, setMessage] = useState<string>();
+  const [lastMove, setLastMove] = useState<{
+    appId: number;
+    columnId: string;
+    position: number;
+    title: string;
+  }>();
   useEffect(() => {
     setColumns(sourceColumns);
   }, [sourceColumns]);
@@ -186,6 +196,12 @@ export function PlannerScreen({
     [anchorIso, columns, mode],
   );
   const plannedIds = useMemo(() => new Set(allItems.map((item) => item.appId)), [allItems]);
+  // El destino por defecto del botón principal es la primera columna: es la
+  // más inmediata del tablero y la que la persona mira al entrar.
+  const firstColumn = columns[0];
+  const planSummaryDetail = `${metrics.totalGames} ${
+    metrics.totalGames === 1 ? "juego en el plan" : "juegos en el plan"
+  } · ${formatPlaytime(metrics.remainingMinutes)} restantes en total · ${metrics.averageProgress} % de progreso medio`;
   const saveItem = async (input: SavePlannerItemInput) => itemMutation.mutateAsync(input);
   const saveCapacity = async (next: PlannerSettings) => {
     await capacityMutation.mutateAsync(next);
@@ -196,6 +212,68 @@ export function PlannerScreen({
     itemMutation.isPending ||
     capacityMutation.isPending;
 
+  const findItemColumn = (id: unknown) =>
+    columns.find((column) => column.items.some((item) => String(item.appId) === String(id)));
+  const plannerInstructions: ScreenReaderInstructions = {
+    draggable:
+      "Para mover la tarjeta, pulsa espacio o intro para levantarla, usa las flechas para cambiar de columna o de posición y vuelve a pulsar espacio o intro para soltarla. Escape cancela.",
+  };
+  const plannerAnnouncements: Announcements = {
+    onDragStart({ active }) {
+      const item = allItems.find((entry) => String(entry.appId) === String(active.id));
+      const column = findItemColumn(active.id);
+      return item ? `Levantado ${item.title}${column ? ` desde ${column.name}` : ""}.` : undefined;
+    },
+    onDragOver({ active, over }) {
+      if (!over) return undefined;
+      const item = allItems.find((entry) => String(entry.appId) === String(active.id));
+      const overColumn =
+        columns.find((column) => String(column.id) === String(over.id)) ?? findItemColumn(over.id);
+      return item && overColumn ? `${item.title} sobre la columna ${overColumn.name}.` : undefined;
+    },
+    onDragEnd({ active, over }) {
+      const item = allItems.find((entry) => String(entry.appId) === String(active.id));
+      if (!item) return undefined;
+      if (!over) return `Movimiento de ${item.title} cancelado.`;
+      const overColumn =
+        columns.find((column) => String(column.id) === String(over.id)) ?? findItemColumn(over.id);
+      return `${item.title} soltado en ${overColumn?.name ?? "el plan"}.`;
+    },
+    onDragCancel() {
+      return "Movimiento cancelado; la tarjeta vuelve a su sitio.";
+    },
+  };
+  const applyOptimisticMove = (
+    appId: number,
+    destinationId: string,
+    position: number,
+    movingItem: PlannerItem,
+  ) => {
+    setColumns((current) =>
+      current.map((column) => ({
+        ...column,
+        items:
+          column.id === destinationId
+            ? [
+                ...column.items.filter((item) => item.appId !== appId).slice(0, position),
+                movingItem,
+                ...column.items.filter((item) => item.appId !== appId).slice(position),
+              ].filter(Boolean)
+            : column.items.filter((item) => item.appId !== appId),
+      })),
+    );
+  };
+  const undoLastMove = () => {
+    if (!lastMove) return;
+    const item = allItems.find((entry) => entry.appId === lastMove.appId);
+    if (item) applyOptimisticMove(lastMove.appId, lastMove.columnId, lastMove.position, item);
+    mutation.mutate({
+      appId: lastMove.appId,
+      columnId: lastMove.columnId,
+      position: lastMove.position,
+    });
+    setLastMove(undefined);
+  };
   const onDragStart = ({ active }: DragStartEvent) =>
     setActiveItem(allItems.find((item) => String(item.appId) === String(active.id)));
   const onDragEnd = ({ active, over }: DragEndEvent) => {
@@ -214,20 +292,28 @@ export function PlannerScreen({
     const position = targetIndex >= 0 ? targetIndex : destination.items.length;
     const movingItem = activeItem ?? allItems.find((item) => item.appId === appId);
     if (!movingItem) return;
-    setColumns((current) =>
-      current.map((column) => ({
-        ...column,
-        items:
-          column.id === destination.id
-            ? [
-                ...column.items.filter((item) => item.appId !== appId).slice(0, position),
-                movingItem,
-                ...column.items.filter((item) => item.appId !== appId).slice(position),
-              ].filter(Boolean)
-            : column.items.filter((item) => item.appId !== appId),
-      })),
+    const originColumn = findItemColumn(appId);
+    const originPosition = originColumn
+      ? originColumn.items.findIndex((item) => item.appId === appId)
+      : 0;
+    applyOptimisticMove(appId, destination.id, position, movingItem);
+    mutation.mutate(
+      { appId, columnId: destination.id, position },
+      {
+        onSuccess: () =>
+          setLastMove(
+            originColumn
+              ? {
+                  appId,
+                  columnId: originColumn.id,
+                  position: Math.max(0, originPosition),
+                  title: movingItem.title,
+                }
+              : undefined,
+          ),
+        onError: () => setLastMove(undefined),
+      },
     );
-    mutation.mutate({ appId, columnId: destination.id, position });
   };
 
   if ((loading || overview.isPending) && !bootstrap)
@@ -252,37 +338,50 @@ export function PlannerScreen({
   }
   return (
     <section className="planner-screen">
-      <header className="screen-heading">
-        <div>
-          <p className="eyebrow">PLAN DE JUEGO</p>
-          <h1>Planificador</h1>
-          <p>Convierte el backlog en una secuencia asumible y concreta.</p>
-        </div>
-        <div className="planner-summary">
-          <div>
-            <span>EN PLAN</span>
-            <strong>{metrics.totalGames}</strong>
-          </div>
-          <div>
-            <span>TIEMPO RESTANTE</span>
-            <strong>{formatPlaytime(metrics.remainingMinutes)}</strong>
-          </div>
-          <div>
-            <span>PROGRESO MEDIO</span>
-            <strong>{metrics.averageProgress}%</strong>
-          </div>
-          <div data-overloaded={metrics.weekOverloadMinutes > 0}>
-            <span>PLAN SEMANAL</span>
-            <strong>
-              {formatPlaytime(metrics.weekPlannedMinutes)} /{" "}
-              {formatPlaytime(metrics.weekCapacityMinutes)}
-            </strong>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="PLAN DE JUEGO"
+        title="Planificador"
+        actions={
+          <>
+            {/* Una sola cifra en el encabezado: la que decide si el jueves cabe
+                otra partida. El resto del agregado —cuántos juegos hay en plan
+                y cuánto queda en total— vive en el título del propio recuadro,
+                y el progreso medio de diez juegos distintos ya no se muestra:
+                no responde a ninguna pregunta que se haga desde esta pantalla. */}
+            <MetricStrip
+              className="planner-summary"
+              label="Resumen del plan"
+              items={[
+                {
+                  id: "week",
+                  label: "Plan semanal",
+                  title: planSummaryDetail,
+                  alert: metrics.weekOverloadMinutes > 0,
+                  value: `${formatPlaytime(metrics.weekPlannedMinutes)} / ${formatPlaytime(
+                    metrics.weekCapacityMinutes,
+                  )}`,
+                },
+              ]}
+            />
+            {firstColumn ? (
+              <PlannerAddGame column={firstColumn} plannedIds={plannedIds} label="Añadir juego" />
+            ) : null}
+          </>
+        }
+      />
       {message && (
         <p className="operation-message planner-message" role="status">
           {isSaving ? "Guardando plan…" : message}
+          {lastMove && !isSaving && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={undoLastMove}
+              aria-label={`Deshacer el movimiento de ${lastMove.title}`}
+            >
+              <IconArrowBackUp /> Deshacer
+            </Button>
+          )}
         </p>
       )}
       <Tabs
@@ -341,6 +440,10 @@ export function PlannerScreen({
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
+              accessibility={{
+                announcements: plannerAnnouncements,
+                screenReaderInstructions: plannerInstructions,
+              }}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onDragCancel={() => setActiveItem(undefined)}
@@ -415,12 +518,16 @@ function PlannerLane({
           {column.items.map((item) => (
             <SortablePlannerCard key={item.appId} item={item} onEdit={onEdit} />
           ))}
-          {column.items.length === 0 && (
-            <div className="lane-empty">
-              <IconTargetArrow size={20} />
-              <span>Añade o suelta aquí un juego</span>
-            </div>
-          )}
+          {/* La zona de destino se muestra siempre: una columna con hueco
+              tiene que anunciar que acepta juegos, no solo cuando está vacía. */}
+          <div className="lane-empty" data-populated={column.items.length > 0}>
+            <IconTargetArrow size={20} />
+            <span>
+              {column.items.length === 0
+                ? "Añade o suelta aquí un juego"
+                : "Suelta aquí para añadir a esta columna"}
+            </span>
+          </div>
         </div>
       </SortableContext>
     </section>
@@ -430,9 +537,12 @@ function PlannerLane({
 function PlannerAddGame({
   column,
   plannedIds,
+  label,
 }: {
   column: PlannerColumn;
   plannedIds: Set<number>;
+  /** Con etiqueta es la acción principal del encabezado; sin ella, el «+» de la columna. */
+  label?: string;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -460,9 +570,17 @@ function PlannerAddGame({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={`Añadir juego a ${column.name}`}>
-          <IconPlus />
-        </Button>
+        {label ? (
+          // El nombre accesible contiene el texto visible y además dice a qué
+          // columna cae el juego: la acción no puede ser un salto a ciegas.
+          <Button aria-label={`${label} a ${column.name}`}>
+            <IconPlus /> {label}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon-xs" aria-label={`Añadir juego a ${column.name}`}>
+            <IconPlus />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="end" className="planner-add-popover">
         <Command shouldFilter={false}>
@@ -520,6 +638,8 @@ function SortablePlannerCard({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-dragging={isDragging}
+      // El gesto de puntero vive en el contenedor: toda la tarjeta arrastra.
+      onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLDivElement>}
     >
       <PlannerCard item={item} dragProps={{ ...attributes, ...listeners }} onEdit={onEdit} />
     </div>
@@ -539,24 +659,23 @@ function PlannerCard({
 }) {
   return (
     <article className="planner-card" data-overlay={overlay}>
-      <Artwork appId={item.appId} src={item.coverUrl} title={item.title} kind="icon" />
+      <Artwork appId={item.appId} src={item.coverUrl} title={item.title} kind="cover" />
       <div className="planner-card__content">
         <div>
           <strong>{item.title}</strong>
+          {/* Sin asa dibujada: la tarjeta entera arrastra con el puntero y este
+              activador sólo existe para teclado y lectores de pantalla. */}
           <button
             type="button"
-            className="drag-handle"
+            className="planner-drag-activator"
             aria-label={`Mover ${item.title}`}
             {...dragProps}
-          >
-            <IconGripVertical size={16} />
-          </button>
+          />
           {!overlay && <PlannerItemEditor item={item as PlannerViewItem} onSave={onEdit} />}
         </div>
         {item.objective && <p className="planner-card__objective">{item.objective}</p>}
-        <Progress value={item.progress} aria-label={`Progreso ${item.progress}%`} />
+        <ProgressMeter value={item.progress} label={`Progreso de ${item.title}`} />
         <div className="planner-card__meta">
-          <span>{item.progress}%</span>
           {item.estimatedMinutes && <span>{formatPlaytime(item.estimatedMinutes)}</span>}
           {item.targetDate && (
             <span>

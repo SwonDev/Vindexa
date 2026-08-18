@@ -16,7 +16,6 @@ export default defineConfig(() => ({
             {
               name: "vendor",
               test: /node_modules[\\/]/,
-              maxSize: 240_000,
               priority: 10,
             },
           ],

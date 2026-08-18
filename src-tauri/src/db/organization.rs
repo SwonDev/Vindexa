@@ -1030,6 +1030,13 @@ pub fn save_preferences(
             "El criterio de ordenación de la biblioteca no es válido.",
         ));
     }
+    if preferences.art_cache_mib < crate::models::MIN_ART_CACHE_MIB
+        || preferences.art_cache_mib > crate::models::MAX_ART_CACHE_MIB
+    {
+        return Err(AppError::validation(
+            "El presupuesto de la caché de arte debe estar entre 128 MiB y 8 GiB.",
+        ));
+    }
     validate_shortcuts(&preferences.shortcuts)?;
     let shortcuts = serde_json::to_string(&preferences.shortcuts).map_err(|_| {
         AppError::validation("Los atajos no se pudieron serializar de forma segura.")
@@ -1046,6 +1053,7 @@ pub fn save_preferences(
             preferences.confirm_uninstall.to_string(),
         ),
         ("library_sort", preferences.library_sort.clone()),
+        ("art_cache_mib", preferences.art_cache_mib.to_string()),
         ("shortcuts", shortcuts),
     ] {
         transaction.execute(
@@ -1085,6 +1093,12 @@ pub fn load_preferences(connection: &Connection) -> AppResult<AppPreferences> {
             ));
         }
     };
+    let art_cache_mib = value("art_cache_mib", "512")?.parse().map_err(|_| {
+        AppError::new(
+            "database_data",
+            "El presupuesto guardado de la caché de arte no es válido.",
+        )
+    })?;
     let library_sort = value("library_sort", "manual")?;
     if !crate::models::is_valid_game_sort(&library_sort) {
         return Err(AppError::new(
@@ -1105,6 +1119,7 @@ pub fn load_preferences(connection: &Connection) -> AppResult<AppPreferences> {
         periodic_sync_minutes,
         confirm_uninstall,
         library_sort,
+        art_cache_mib,
         shortcuts,
     })
 }
@@ -1115,6 +1130,7 @@ fn validate_shortcuts(shortcuts: &crate::models::ShortcutBindings) -> AppResult<
     let bindings = [
         &shortcuts.library,
         &shortcuts.planner,
+        &shortcuts.wishlist,
         &shortcuts.collections,
         &shortcuts.tracking,
         &shortcuts.search,
@@ -1165,6 +1181,9 @@ fn is_valid_shortcut(binding: &str) -> bool {
                 | "Enter"
                 | "Backspace"
                 | "Delete"
+                | "Insert"
+                | "Home"
+                | "End"
                 | "Space"
                 | "Comma"
                 | "Slash"
@@ -1187,7 +1206,25 @@ fn is_valid_shortcut(binding: &str) -> bool {
         );
     modifiers_valid
         && key_valid
-        && (!modifiers.is_empty() || key == "Escape" || key.starts_with('F'))
+        // `Intro`, `Espacio`, las flechas, `Inicio`, `Fin`, `Insert` y `Supr`
+        // valen por sí solas: la interfaz sólo las dispara dentro de la rejilla
+        // de la biblioteca, nunca sobre el control que tenga el foco.
+        && (!modifiers.is_empty()
+            || matches!(
+                key,
+                "Escape"
+                    | "Enter"
+                    | "Space"
+                    | "Delete"
+                    | "Insert"
+                    | "Home"
+                    | "End"
+                    | "ArrowUp"
+                    | "ArrowDown"
+                    | "ArrowLeft"
+                    | "ArrowRight"
+            )
+            || key.starts_with('F'))
 }
 
 fn find_status(connection: &Connection, status_id: &str) -> AppResult<StatusDefinition> {
@@ -1491,7 +1528,10 @@ fn load_game_facts(connection: &Connection) -> AppResult<Vec<GameFacts>> {
                 p.priority, p.rating, p.estimated_minutes, p.target_date,
                 g.is_free, g.last_played_at, g.imported_at, g.updated_at,
                 g.steam_deck_status, g.achievements_unlocked, g.achievements_total
-           FROM games g JOIN game_personal p ON p.app_id = g.app_id",
+           FROM games g JOIN game_personal p ON p.app_id = g.app_id
+          WHERE NOT EXISTS (
+                SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id
+          )",
     )?;
     let rows = statement.query_map([], |row| {
         let genres_json: String = row.get(4)?;
@@ -2383,6 +2423,7 @@ mod tests {
             periodic_sync_minutes: 60,
             confirm_uninstall: false,
             library_sort: "lastPlayed".into(),
+            art_cache_mib: crate::models::DEFAULT_ART_CACHE_MIB,
             shortcuts: Default::default(),
         };
         save_preferences(&mut connection, &preferences).expect("guardar preferencias");
@@ -2411,6 +2452,7 @@ mod tests {
             periodic_sync_minutes: 0,
             confirm_uninstall: true,
             library_sort: "manual".into(),
+            art_cache_mib: crate::models::DEFAULT_ART_CACHE_MIB,
             shortcuts: Default::default(),
         };
         preferences.shortcuts.planner = preferences.shortcuts.library.clone();

@@ -52,7 +52,34 @@ todavía no se ha importado una biblioteca real.
 - Planificador persistente con Kanban, cola, semana, mes, objetivos, capacidad y límites
   WIP.
 - Colecciones manuales e inteligentes respaldadas por reglas validadas en Rust y vista
-  previa antes de guardar.
+  previa antes de guardar, con mosaico de portadas y detalle en la misma pantalla.
+- Listas curadas: selecciones editoriales propias con orden manual, nota y destacado por
+  entrada, independientes de las colecciones.
+- Lista de deseados en cuatro cubos de intención, con precio objetivo agregado por moneda y
+  vídeos por juego. El importe se presenta como «al menos» cuando hay entradas sin precio, y
+  nunca se suman monedas distintas.
+- Gestión de contenido adicional por juego. La propiedad se deriva del manifiesto local: lo
+  que no puede demostrarse aparece como «sin confirmar», con el motivo exacto, nunca como
+  ausente.
+- Prioridad dinámica explicable: terminar un juego baja su puntuación aunque se siga jugando,
+  y la ficha muestra qué señales la mueven y cuánto aporta cada una. Una prioridad manual
+  anclada nunca la pisa el cálculo.
+- Marca de juegos sin DRM derivada de señales oficiales, con su evidencia. Es un dato de
+  ficha: no aparece sobre las carátulas.
+- Tiendas externas en Ajustes: detección local de Epic Games Store y GOG leyendo solo los
+  ficheros que esos clientes ya escriben en disco, sin credenciales ni APIs privadas. Si has
+  iniciado sesión en Heroic Games Launcher o en Legendary, se lee su caché de biblioteca y
+  aparece tu catálogo **completo**, no solo lo instalado. El escaneo se lanza a mano, la
+  pantalla distingue «no tienes el cliente» de «lo tienes y no has iniciado sesión», enumera
+  las rutas exactas donde ha buscado cuando no encuentra nada, y el emparejado con tu
+  biblioteca de Steam se puede corregir. Lo detectado vive en ese panel: todavía no aparece
+  en la biblioteca, ni en colecciones, ni en el planificador.
+- Avisos programables y bandeja de eventos oficiales derivados de las señales que Vindexa ya
+  observa, con deduplicación estable.
+- Agrupación de la biblioteca por inicial, estado, género, año, estudio o antigüedad de la
+  última sesión, con encabezado y recuento por grupo.
+- Puente para agentes externos con intenciones tipadas, ámbitos, confirmación humana de lo
+  destructivo, deshacer y registro auditable. Ver [`docs/AGENT_BRIDGE.md`](./docs/AGENT_BRIDGE.md).
 - Seguimiento con recordatorios, olvidados, casi terminados, próximos lanzamientos,
   publicaciones recientes del feed oficial de Steam y relaciones por estudio/editor
   verificables. El método público no expone importancia y Vindexa no inventa esa clasificación.
@@ -61,7 +88,10 @@ todavía no se ha importado una biblioteca real.
 - Diagnóstico persistente del último fallo de Steam, con código y mensaje seguro hasta que
   una sincronización posterior termina correctamente.
 - Acciones controladas para jugar, instalar, solicitar desinstalación, revelar una carpeta
-  validada y abrir la tienda oficial en una ventana remota aislada.
+  validada y clic derecho con acciones rápidas sobre cualquier juego.
+- Navegador integrado de tiendas con historial, zoom por tienda y bloqueo de publicidad y
+  rastreo, limitado a Steam, GOG, Epic e itch.io, en ventana privada sin acceso a la
+  aplicación.
 - Caché local validada de portadas, cabeceras e iconos oficiales, con carga diferida y
   fallback accesible.
 - SQLite con WAL, durabilidad `FULL`, claves foráneas, migraciones, búsqueda FTS5, índices,
@@ -142,6 +172,7 @@ notas, checkpoints y demás datos personales en texto legible dentro de SQLite.
 - [Sistema de diseño](./DESIGN.md)
 - [Guía de contribución](./CONTRIBUTING.md)
 - [Decisiones arquitectónicas](./docs/adr/README.md)
+- [Puente para agentes externos](./docs/AGENT_BRIDGE.md)
 - [Registro de cambios](./CHANGELOG.md)
 - [Licencia MIT](./LICENSE)
 - [Brief maestro](./VINDEXA_DESIGN_BRIEF.md)

@@ -17,6 +17,8 @@ vi.mock("@/lib/tauri", () => ({
 
 vi.mock("@/components/common/Artwork", () => ({
   Artwork: ({ title }: { title: string }) => <span data-testid="artwork">{title}</span>,
+  // La precarga es una mejora de tiempos: en pruebas basta con que exista.
+  prefetchArtwork: () => undefined,
 }));
 
 vi.mock("@tanstack/react-virtual", () => ({
@@ -142,11 +144,11 @@ describe("catálogo familiar Steam-like", () => {
   });
 
   it.each([
-    { density: "compact" as const, bodyHeight: 156, rowHeight: 426 },
-    { density: "comfortable" as const, bodyHeight: 166, rowHeight: 436 },
+    { density: "compact" as const, bodyHeight: 156 },
+    { density: "comfortable" as const, bodyHeight: 166 },
   ])(
     "reserva la altura completa de tres filas $density sin solapar tarjetas",
-    ({ density, bodyHeight, rowHeight }) => {
+    ({ density, bodyHeight }) => {
       const manyGames = Array.from({ length: 11 }, (_, index) => ({
         ...games[index % games.length],
         appId: 100 + index,
@@ -159,12 +161,17 @@ describe("catálogo familiar Steam-like", () => {
 
       expect(rows).toHaveLength(3);
       expect(rows.map((row) => row.dataset.index)).toEqual(["0", "1", "2"]);
-      expect(rows.map((row) => row.style.transform)).toEqual([
-        "translateY(0px)",
-        `translateY(${rowHeight}px)`,
-        `translateY(${rowHeight * 2}px)`,
-      ]);
-      expect(canvas?.style.height).toBe(`${rowHeight * 3}px`);
+      // La altura concreta depende del ritmo de la retícula, que se ajusta; lo
+      // que no puede cambiar es que las filas queden contiguas y sin solape.
+      const offsets = rows.map((row) =>
+        Number.parseFloat(row.style.transform.replace(/[^\d.-]/g, "")),
+      );
+      const [first, second, third] = offsets as [number, number, number];
+      const step = second - first;
+      expect(first).toBe(0);
+      expect(step).toBeGreaterThan(0);
+      expect(third).toBe(step * 2);
+      expect(canvas?.style.height).toBe(`${step * 3}px`);
       expect(canvas?.style.getPropertyValue("--family-grid-body-height")).toBe(`${bodyHeight}px`);
       expect(canvas?.style.getPropertyValue("--family-grid-row-gap")).toBe(
         density === "compact" ? "10px" : "14px",

@@ -1,0 +1,891 @@
+/* Vindexa · Pantalla de Colecciones
+ *
+ * Sustituye por completo el bloque «Collections» de `src/index.css`: allí las
+ * tarjetas eran dos rectángulos de texto sobre un océano vacío. Aquí la
+ * pantalla se divide en dos zonas que siempre están llenas —el tablero de
+ * colecciones arriba y el detalle de la seleccionada abajo— y cada tarjeta
+ * enseña las carátulas reales de lo que contiene.
+ *
+ * Reglas de `DESIGN.md` que gobiernan este archivo: radios de 0 a 4 px, sin
+ * ningún círculo; solo variables ya definidas; densidad alta; cifras con
+ * `tabular-nums`; movimiento de 120 a 260 ms con `--ease-out` y únicamente
+ * sobre `transform` y `opacity`.
+ *
+ * La especificidad de los selectores que pisan reglas heredadas se eleva con
+ * `[data-layout="split"]`, de modo que el orden de carga de las hojas no
+ * decide el resultado.
+ */
+
+/* --- Marco de la pantalla ------------------------------------------------ */
+
+.collections-screen[data-layout="split"] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.collections-heading__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.collections-heading__meta b {
+  color: var(--v-muted);
+  font-weight: 600;
+}
+
+/* Columna flexible, no rejilla de filas fijas, por dos motivos: el aviso vive
+   en una región `sr-only` fuera de flujo cuando no hay mensaje y el acompañante
+   de arrastre de `@dnd-kit` aparece y desaparece, de modo que la colocación
+   automática en rejilla dejaría el detalle en la fila equivocada; y porque en
+   ventanas bajas hace falta que el tablero ceda altura al detalle en vez de
+   ahogarlo. Aquí el tablero encoge —y se desplaza por dentro— hasta que el
+   contenido de la colección tiene sitio suficiente. */
+.collections-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.collections-message {
+  flex: none;
+}
+
+/* --- Tablero de colecciones --------------------------------------------- */
+
+.collections-board {
+  flex: 0 1 auto;
+  min-height: 88px;
+  max-height: min(46vh, 420px);
+  padding: 12px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.collections-board__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.collection-tile {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: grab;
+  touch-action: manipulation;
+}
+
+.collection-tile:active,
+.collection-tile[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.collection-tile[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--v-cyan) 62%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--v-cyan) 34%, transparent);
+}
+
+.collection-tile[data-dragging="true"] {
+  z-index: 3;
+  opacity: 0.34;
+  filter: saturate(0.5);
+}
+
+/* La franja de 3 px codifica el TIPO, nunca la identidad. El color personal de
+   una colección es decoración libre y, usado aquí, colisionaba con las familias
+   semánticas del sistema —lima de progreso, ámbar de aviso, verde de éxito— y
+   llegaba a repetirse entre dos colecciones distintas. Ahora hay dos valores y
+   solo dos: cian para lo que se mantiene solo, gris apagado para lo que
+   mantiene una persona. La textura —continua o segmentada— repite la misma
+   información sin depender del color. */
+.collection-tile__accent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  width: 3px;
+  background: var(--v-status-muted);
+  pointer-events: none;
+}
+
+.collection-tile[data-kind="smart"] .collection-tile__accent {
+  background: repeating-linear-gradient(180deg, var(--v-cyan) 0 7px, transparent 7px 12px);
+}
+
+/* Una sola columna acotada a cero. Sin ella, el nombre más largo o la etiqueta
+   del pie fijan el ancho de la tarjeta por su tamaño mínimo de contenido y el
+   mosaico se sale por la derecha. */
+.collection-tile__surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  text-align: left;
+}
+
+/* --- Mosaico de carátulas ------------------------------------------------ */
+
+.collection-tile__mosaic {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  padding: 7px 8px 7px 10px;
+  background: color-mix(in srgb, var(--background) 62%, var(--card));
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+/* `min-width` y `min-height` a cero son obligatorios: la carátula es un ítem de
+   rejilla, y con el mínimo automático una portada cuyo original no sea 2:3
+   estiraría su celda y rompería la alineación de toda la fila. */
+.collection-tile__cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 2 / 3;
+  border-radius: 2px;
+  background: var(--background);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 34%);
+}
+
+.collection-tile__cover--empty {
+  border: 1px dashed color-mix(in srgb, var(--border) 82%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Una colección sin juegos no puede parecerse a una llena. En vez de cinco
+   huecos punteados —que se leen como «todavía cargando»— ocupa el mosaico un
+   bloque que dice lo que pasa y cómo se arregla. */
+.collection-tile[data-empty="true"] {
+  border-style: dashed;
+}
+
+.collection-tile__vacant {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  aspect-ratio: 5 / 1.5;
+  min-height: 0;
+  border: 1px dashed color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 2px;
+  color: var(--v-subtle);
+  font-size: 11px;
+  text-align: center;
+}
+
+.collection-tile__vacant svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collection-tile__badge {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--v-status-muted) 46%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  color: var(--v-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+.collection-tile__badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.collection-tile[data-kind="smart"] .collection-tile__badge {
+  border-color: color-mix(in srgb, var(--v-cyan) 56%, transparent);
+  color: var(--v-cyan);
+}
+
+/* --- Cuerpo de la tarjeta ------------------------------------------------ */
+
+.collection-tile__body {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 7px;
+  padding: 8px 10px 8px 12px;
+}
+
+.collection-tile__icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--v-subtle);
+}
+
+.collection-tile[data-kind="smart"] .collection-tile__icon {
+  color: var(--v-cyan);
+}
+
+.collection-tile__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.collection-tile__name {
+  overflow: hidden;
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Enlace extendido: el botón vive dentro del título por accesibilidad, pero su
+   zona sensible cubre la tarjeta entera. Así toda la superficie selecciona sin
+   anidar controles ni perder la estructura de encabezados. */
+.collection-tile__target {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: inherit;
+}
+
+.collection-tile__target::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.collection-tile__target:focus-visible {
+  outline: none;
+}
+
+.collection-tile__target:focus-visible::after {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: -2px;
+}
+
+.collection-tile__count {
+  color: var(--v-muted);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.collection-tile__summary {
+  grid-column: 2 / -1;
+  min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.collection-tile__summary[data-tone="rules"] {
+  color: var(--v-muted);
+}
+
+/* --- Acciones: invisibles en reposo ------------------------------------- */
+
+.collection-tile__footer {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--background) 42%, transparent);
+}
+
+.collection-tile__chip {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Los controles flotan sobre el extremo derecho del pie en vez de ocupar un
+   hueco permanente: en reposo la etiqueta dispone del ancho completo y no se
+   trunca, y al pasar el cursor aparecen sobre un fundido que mantiene legible
+   lo que haya debajo. */
+.collection-tile__actions {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-left: 20px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--background) 42%, var(--card)) 22%
+  );
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 140ms var(--ease-out);
+}
+
+.collection-tile:hover .collection-tile__actions,
+.collection-tile:focus-within .collection-tile__actions {
+  opacity: 1;
+}
+
+/* El activador de arrastre no se dibuja: la tarjeta entera es el asa. Este
+   botón existe solo para teclado y lectores de pantalla, igual que en la
+   biblioteca (`.game-drag-activator`). */
+.collection-drag-activator {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.collection-drag-activator:focus-visible {
+  z-index: 6;
+  top: 4px;
+  left: 6px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 3px 7px;
+  overflow: visible;
+  clip-path: none;
+  border: 1px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* --- Acompañante del cursor --------------------------------------------- */
+
+.collection-drag-ghost {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 208px;
+  max-width: 300px;
+  min-height: 44px;
+  padding: 8px 12px 8px 14px;
+  border: 1px solid var(--v-cyan);
+  background: color-mix(in srgb, var(--v-surface-raised) 96%, transparent);
+  color: var(--foreground);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 48%);
+  cursor: grabbing;
+}
+
+.collection-drag-ghost__accent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+}
+
+.collection-drag-ghost svg {
+  width: 16px;
+  height: 16px;
+  color: var(--v-cyan);
+}
+
+.collection-drag-ghost strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-drag-ghost data {
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Panel de detalle ---------------------------------------------------- */
+
+.collection-detail {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: min(220px, 40vh);
+  overflow: hidden;
+  background: var(--card);
+}
+
+.collection-detail__head {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 16px 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--v-surface-raised) 70%, var(--card)),
+    var(--card)
+  );
+}
+
+.collection-detail__accent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--v-status-muted);
+}
+
+.collection-detail[data-kind="smart"] .collection-detail__accent {
+  background: repeating-linear-gradient(180deg, var(--v-cyan) 0 7px, transparent 7px 12px);
+}
+
+.collection-detail__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--v-status-muted) 52%, transparent);
+  border-radius: 2px;
+  color: var(--v-subtle);
+}
+
+.collection-detail[data-kind="smart"] .collection-detail__icon {
+  border-color: color-mix(in srgb, var(--v-cyan) 52%, transparent);
+  color: var(--v-cyan);
+}
+
+.collection-detail__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.collection-detail__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.collection-detail__title strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-detail__title data {
+  color: var(--v-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collection-detail__meta {
+  grid-column: 2 / 3;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.collection-detail__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--v-status-muted) 44%, transparent);
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.collection-detail[data-kind="smart"] .collection-detail__kind {
+  border-color: color-mix(in srgb, var(--v-cyan) 54%, transparent);
+  color: var(--v-cyan);
+}
+
+.collection-detail__kind svg {
+  width: 11px;
+  height: 11px;
+}
+
+.collection-detail__actions {
+  grid-row: 1 / 3;
+  grid-column: 3 / 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collection-detail__body {
+  min-height: 0;
+  padding: 12px 12px 16px;
+  overflow-y: auto;
+}
+
+/* --- Rejilla de juegos de la colección ---------------------------------- */
+
+.collection-games {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Toda la cadena declara una columna acotada a cero: sin ella, la línea de
+   estado —que no puede partirse— ensancha la celda, arrastra la carátula con
+   ella y la fila entera pierde la alineación. */
+.collection-games__item {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.collection-games__open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collection-games__cover {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--background);
+}
+
+.collection-games__open:focus-visible {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: 2px;
+}
+
+.collection-games__title {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-games__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 18px;
+  color: var(--v-subtle);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.collection-games__meta span {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-games__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+.collection-games__remove {
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 140ms var(--ease-out);
+}
+
+.collection-games__item:hover .collection-games__remove,
+.collection-games__item:focus-within .collection-games__remove {
+  opacity: 1;
+}
+
+.collection-detail__more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--v-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.collection-detail__empty {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 6px;
+  min-height: 140px;
+  padding: 16px 18px;
+  border: 1px dashed var(--border);
+  color: var(--v-subtle);
+  font-size: 12px;
+}
+
+.collection-detail__empty strong {
+  color: var(--v-muted);
+  font-size: 13px;
+}
+
+/* --- Estado vacío con plantillas ---------------------------------------- */
+
+/* El estado vacío se compone centrado en el espacio disponible: apoyado en el
+   borde superior parecería lo mismo que se quiso corregir —contenido huérfano
+   sobre un vacío enorme— en vez de una propuesta deliberada. */
+.collections-onboarding {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  width: min(1180px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 24px 20px;
+  overflow-y: auto;
+}
+
+.collections-onboarding__intro {
+  display: grid;
+  gap: 4px;
+  max-width: 62ch;
+}
+
+.collections-onboarding__intro h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.collections-onboarding__intro p {
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.collections-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collections-templates > li {
+  display: grid;
+  min-width: 0;
+}
+
+.collection-template {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 104px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--v-status-muted);
+  background: var(--v-surface-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collection-template:hover {
+  border-color: color-mix(in srgb, var(--v-cyan) 52%, var(--border));
+  background: color-mix(in srgb, var(--v-cyan) 8%, var(--v-surface-raised));
+}
+
+.collection-template:focus-visible {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: 1px;
+}
+
+.collection-template[data-kind="smart"] {
+  border-left-color: var(--v-cyan);
+}
+
+.collection-template__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--v-subtle);
+}
+
+.collection-template[data-kind="smart"] .collection-template__icon {
+  color: var(--v-cyan);
+}
+
+.collection-template__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.collection-template__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 7px;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.collection-template__badge {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--v-status-muted) 44%, transparent);
+  border-radius: 2px;
+  color: var(--v-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.collection-template[data-kind="smart"] .collection-template__badge {
+  border-color: color-mix(in srgb, var(--v-cyan) 54%, transparent);
+  color: var(--v-cyan);
+}
+
+.collection-template__hint {
+  grid-column: 2 / 3;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* --- Esqueletos con la geometría real ----------------------------------- */
+
+.collection-tile--skeleton {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 168px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.collection-tile--skeleton .collection-tile__mosaic {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.collection-tile--skeleton .collection-tile__body {
+  align-content: center;
+  gap: 6px;
+}
+
+.collection-games__item--skeleton {
+  display: grid;
+  gap: 5px;
+}
+
+/* --- Preferencia de movimiento ------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .collection-tile__actions,
+  .collection-games__remove {
+    transition: none;
+  }
+}

@@ -1,4 +1,11 @@
-import { IconLayoutGrid, IconList, IconListDetails, IconSearch, IconX } from "@tabler/icons-react";
+import {
+  IconBookmarkPlus,
+  IconLayoutGrid,
+  IconList,
+  IconListDetails,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +25,7 @@ import type {
   LibraryFilterOptions,
   LibraryFilters,
 } from "@/features/library/library-filters";
+import { LIBRARY_GROUPINGS, type LibraryGrouping } from "@/features/library/library-grouping";
 import type { GameSort, LibraryView } from "@/lib/types";
 
 export type ExtraFilters = LibraryFilters;
@@ -32,11 +40,17 @@ interface LibraryToolbarProps {
   onSortChange: (value: GameSort) => void;
   view: LibraryView;
   onViewChange: (view: LibraryView) => void;
+  grouping?: LibraryGrouping | undefined;
+  onGroupingChange?: ((grouping: LibraryGrouping) => void) | undefined;
   filters: LibraryFilters;
   onFiltersChange: (filters: LibraryFilters) => void;
   statuses?: FilterChoice[] | undefined;
   collections?: FilterChoice[] | undefined;
   filterOptions?: LibraryFilterOptions | undefined;
+  /** Congela la consulta actual como vista con nombre. */
+  onSaveView?: (() => void) | undefined;
+  /** Rótulo del botón: cambia al apilar varias vistas. */
+  saveViewLabel?: string | undefined;
 }
 
 const sortGroups = [
@@ -159,6 +173,44 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
               ))}
             </SelectContent>
           </Select>
+        )}
+        {/* El encabezado ocupa una fila entera del lienzo y el grupo siguiente
+            arranca en la columna cero, así que la rejilla admite los mismos
+            cortes que las listas sin romper ninguna fila. */}
+        {!familyMode && props.onGroupingChange && (
+          <Select
+            value={props.grouping ?? "none"}
+            onValueChange={(value) => props.onGroupingChange?.(value as LibraryGrouping)}
+          >
+            <SelectTrigger className="grouping-select" aria-label="Agrupar biblioteca">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="library-sort-menu">
+              <SelectGroup>
+                <SelectLabel>AGRUPAR POR</SelectLabel>
+                {LIBRARY_GROUPINGS.map((option) => (
+                  <SelectItem key={option.id} value={option.id} title={option.hint}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        {!familyMode && props.onSaveView && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={props.saveViewLabel ?? "Guardar esta vista"}
+                onClick={props.onSaveView}
+              >
+                <IconBookmarkPlus />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{props.saveViewLabel ?? "Guardar esta vista"}</TooltipContent>
+          </Tooltip>
         )}
         {!familyMode && (
           <fieldset className="view-switcher">

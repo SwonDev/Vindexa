@@ -19,6 +19,8 @@ interface ArtworkProps {
 const NEGATIVE_CACHE_MS = 60_000;
 const MAX_MEMORY_ENTRIES = 10_000;
 const localArtwork = new Map<string, string>();
+/** Tamaño real del archivo cacheado, para reservar el hueco sin salto. */
+const artworkSize = new Map<string, { width: number; height: number }>();
 const pendingArtwork = new Map<string, Promise<string>>();
 const unavailableArtwork = new Map<string, number>();
 let cacheGeneration = 0;
@@ -26,6 +28,7 @@ let cacheGeneration = 0;
 function resetArtworkMemoryCache() {
   cacheGeneration += 1;
   localArtwork.clear();
+  artworkSize.clear();
   pendingArtwork.clear();
   unavailableArtwork.clear();
 }
@@ -63,12 +66,13 @@ function requestLocalArtwork(
   const generation = cacheGeneration;
   const request = api
     .cacheGameArt(appId, kind, sourceUrl)
-    .then(({ localPath }) => {
+    .then(({ localPath, width, height }) => {
       if (generation !== cacheGeneration) {
         throw new Error("artwork_cache_reset");
       }
       const localUrl = convertFileSrc(localPath);
       storeBounded(localArtwork, cacheKey, localUrl);
+      if (width && height) storeBounded(artworkSize, cacheKey, { width, height });
       unavailableArtwork.delete(cacheKey);
       return localUrl;
     })
@@ -94,6 +98,61 @@ function accessibleLabel(kind: ArtworkKind, title: string): string {
   return `Icono de ${title}`;
 }
 
+/**
+ * Cuántas peticiones de precarga viajan a la vez.
+ *
+ * Cada una cruza el puente hacia Rust; sin límite, precargar una página entera
+ * ahogaría las peticiones de las tarjetas que la persona **sí** está mirando,
+ * que son las que importan.
+ */
+const PREFETCH_CONCURRENCY = 6;
+let prefetchInFlight = 0;
+const prefetchQueue: (() => void)[] = [];
+
+function runNextPrefetch() {
+  if (prefetchInFlight >= PREFETCH_CONCURRENCY) return;
+  const next = prefetchQueue.shift();
+  if (!next) return;
+  prefetchInFlight += 1;
+  next();
+}
+
+/**
+ * Adelanta a la caché las carátulas que aún no están resueltas.
+ *
+ * La tarjeta pide su imagen al montarse, y con una lista virtualizada eso
+ * ocurre justo cuando entra en pantalla: por eso las portadas «aparecían» al
+ * desplazarse. Resolviéndolas antes, cuando la tarjeta se monta la URL local ya
+ * está en memoria y se pinta en el primer fotograma, sin petición ni espera.
+ *
+ * Lo ya resuelto o en vuelo no se vuelve a pedir, y los fallos se ignoran a
+ * propósito: esto es una mejora de tiempos, no una fuente de errores. Si algo
+ * falla aquí, la tarjeta lo reintentará por su cuenta al montarse.
+ */
+export function prefetchArtwork(
+  entries: readonly { appId: number; src?: string | undefined }[],
+  kind: ArtworkKind = "cover",
+): void {
+  for (const entry of entries) {
+    if (!entry.appId || !entry.src) continue;
+    const cacheKey = `${entry.appId}:${kind}:${entry.src}`;
+    if (localArtwork.has(cacheKey) || pendingArtwork.has(cacheKey)) continue;
+    if ((unavailableArtwork.get(cacheKey) ?? 0) > Date.now()) continue;
+    const { appId, src } = entry;
+    prefetchQueue.push(() => {
+      requestLocalArtwork(appId, kind, src, cacheKey)
+        .catch(() => undefined)
+        .finally(() => {
+          prefetchInFlight -= 1;
+          runNextPrefetch();
+        });
+    });
+  }
+  for (let slot = prefetchInFlight; slot < PREFETCH_CONCURRENCY; slot += 1) {
+    runNextPrefetch();
+  }
+}
+
 export function Artwork({
   appId,
   src,
@@ -111,6 +170,25 @@ export function Artwork({
     cacheKey ? localArtwork.get(cacheKey) : src,
   );
   const [imageFailed, setImageFailed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const retryTimer = useRef<number | undefined>(undefined);
+
+  // Un fallo (red o CDN) nunca es terminal: al expirar la caché negativa se
+  // reprograma un intento sin desmontar la tarjeta.
+  const scheduleRetry = (delayMs: number) => {
+    window.clearTimeout(retryTimer.current);
+    retryTimer.current = window.setTimeout(
+      () => setRetryNonce((nonce) => nonce + 1),
+      Math.max(250, delayMs),
+    );
+  };
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(retryTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleCacheClear = () => {
@@ -145,6 +223,7 @@ export function Artwork({
     return () => observer.disconnect();
   }, [isPriority]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce es una señal de reprogramación deliberada y scheduleRetry solo toca refs/estado estable
   useEffect(() => {
     if (observedCacheGeneration !== cacheGeneration) return;
     setImageFailed(false);
@@ -157,12 +236,15 @@ export function Artwork({
         if (active) setResolvedSrc(localUrl);
       })
       .catch(() => {
-        if (active) setResolvedSrc(undefined);
+        if (!active) return;
+        setResolvedSrc(undefined);
+        const retryIn = (unavailableArtwork.get(cacheKey) ?? 0) - Date.now();
+        if (retryIn > 0) scheduleRetry(retryIn + 75);
       });
     return () => {
       active = false;
     };
-  }, [appId, cacheKey, isVisible, kind, observedCacheGeneration, src]);
+  }, [appId, cacheKey, isVisible, kind, observedCacheGeneration, retryNonce, src]);
 
   if (!resolvedSrc || imageFailed) {
     return (
@@ -175,11 +257,17 @@ export function Artwork({
         role="img"
         aria-label={accessibleLabel(kind, title)}
       >
-        <span>{initials(title)}</span>
+        {/* El hueco de una carátula ausente tiene que decir de qué juego se
+            trata: un rectángulo mudo obliga a abrir la ficha para saberlo. */}
+        <span aria-hidden="true">{initials(title)}</span>
+        {kind === "cover" && <em className="artwork__title">{title}</em>}
       </div>
     );
   }
 
+  // Las dimensiones reales llegan del backend: declararlas evita que la
+  // maquetación salte cuando el archivo termina de decodificarse.
+  const intrinsic = cacheKey ? artworkSize.get(cacheKey) : undefined;
   return (
     <img
       ref={(element) => {
@@ -187,6 +275,8 @@ export function Artwork({
       }}
       className={cn("artwork", `artwork--${kind}`, className)}
       src={resolvedSrc}
+      width={intrinsic?.width}
+      height={intrinsic?.height}
       alt={accessibleLabel(kind, title)}
       loading={isPriority ? "eager" : "lazy"}
       decoding="async"
@@ -197,6 +287,7 @@ export function Artwork({
           storeBounded(unavailableArtwork, cacheKey, Date.now() + NEGATIVE_CACHE_MS);
         }
         setImageFailed(true);
+        scheduleRetry(NEGATIVE_CACHE_MS + 75);
       }}
     />
   );

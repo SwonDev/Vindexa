@@ -1,6 +1,8 @@
 use crate::db::{Database, MetadataJob};
 use crate::error::{AppError, AppResult};
-use crate::steam::store_api::{self, StoreMetadataFailure, StoreMetadataOutcome};
+use crate::steam::store_api::{
+    self, StoreBundleOutcome, StoreMetadataFailure, StoreMetadataOutcome,
+};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -37,6 +39,17 @@ impl MetadataEnrichmentCoordinator {
     }
 
     pub async fn fetch(&self, app_id: u32) -> Result<StoreMetadataOutcome, StoreMetadataFailure> {
+        Ok(match self.fetch_bundle(app_id).await? {
+            StoreBundleOutcome::Found(bundle) => StoreMetadataOutcome::Found(Box::new(bundle.metadata)),
+            StoreBundleOutcome::Unavailable => StoreMetadataOutcome::Unavailable,
+        })
+    }
+
+    /// Igual que `fetch`, pero conserva los metadatos enriquecidos de ficha.
+    pub async fn fetch_bundle(
+        &self,
+        app_id: u32,
+    ) -> Result<StoreBundleOutcome, StoreMetadataFailure> {
         let _slot = self
             .request_slots
             .acquire()
@@ -55,7 +68,7 @@ impl MetadataEnrichmentCoordinator {
         }
         *next_request_at = Instant::now() + MIN_REQUEST_INTERVAL;
         drop(next_request_at);
-        store_api::fetch_with_retry_hint(app_id).await
+        store_api::fetch_bundle_with_retry_hint(app_id).await
     }
 }
 
