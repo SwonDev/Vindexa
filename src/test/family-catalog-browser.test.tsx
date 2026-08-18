@@ -107,12 +107,13 @@ describe("catálogo familiar Steam-like", () => {
     const { props } = renderBrowser({ view: "list" });
 
     // Sólo el comprobado abre ficha: del otro no hay evidencia local, así que
-    // ofrecer su ficha personal sería dar por hecho que se puede jugar.
-    expect(screen.getByRole("button", { name: "Abrir ficha de Confirmado" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Abrir ficha de Pendiente" })).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Abrir ficha de Confirmado" }));
+    // ofrecer su ficha personal sería dar por hecho que se puede jugar, y lo
+    // que hace es llevar a la tienda.
+    await user.click(screen.getByRole("button", { name: "Abrir Confirmado" }));
     expect(props.onOpenConfirmed).toHaveBeenCalledWith(10);
+
+    await user.click(screen.getByRole("button", { name: "Abrir Pendiente" }));
+    expect(props.onOpenConfirmed).toHaveBeenCalledTimes(1);
   });
 
   it("marca sólo lo comprobado y no rotula el resto", () => {
@@ -130,8 +131,8 @@ describe("catálogo familiar Steam-like", () => {
   it("renderiza una fila densa por juego en vista ultracompacta", () => {
     const { container } = renderBrowser({ view: "compact" });
 
-    expect(container.querySelector(".family-catalog-browser--compact")).toBeInTheDocument();
-    expect(container.querySelectorAll(".family-game-row")).toHaveLength(2);
+    expect(container.querySelector(".catalog-browser--compact")).toBeInTheDocument();
+    expect(container.querySelectorAll(".catalog-row")).toHaveLength(2);
     expect(screen.getAllByTestId("artwork")).toHaveLength(2);
   });
 
@@ -171,7 +172,7 @@ describe("catálogo familiar Steam-like", () => {
   it("vuelve al inicio al cambiar filtro u orden aunque el offset persistido ya sea cero", () => {
     const onScrollOffsetChange = vi.fn();
     const result = renderBrowser({ initialScrollOffset: 0, onScrollOffsetChange });
-    const browser = result.container.querySelector<HTMLElement>(".family-catalog-browser");
+    const browser = result.container.querySelector<HTMLElement>(".catalog-browser");
     expect(browser).not.toBeNull();
     if (!browser) return;
 
@@ -192,7 +193,7 @@ describe("catálogo familiar Steam-like", () => {
 
   it("vuelve al inicio cuando cambia la búsqueda efectiva", () => {
     const result = renderBrowser({ initialScrollOffset: 0 });
-    const browser = result.container.querySelector<HTMLElement>(".family-catalog-browser");
+    const browser = result.container.querySelector<HTMLElement>(".catalog-browser");
     expect(browser).not.toBeNull();
     if (!browser) return;
     browser.scrollTop = 220;

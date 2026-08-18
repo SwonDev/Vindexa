@@ -3,6 +3,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   IconBook2,
+  IconBuildingStore,
   IconChevronDown,
   IconDeviceGamepad2,
   IconFolder,
@@ -22,8 +23,16 @@ import {
 import type { AppBootstrap } from "@/lib/types";
 import { collectionDropId, collectionOrderDragId, statusDropId } from "./library-dnd";
 
+/** Tiendas que pueden aparecer como ámbito, con el nombre que se les enseña. */
+const EXTERNAL_STORES = [
+  { id: "epic", label: "Epic Games", icon: IconBuildingStore },
+  { id: "gog", label: "GOG", icon: IconBuildingStore },
+  { id: "itch", label: "itch.io", icon: IconBuildingStore },
+] as const;
+
 export interface LibraryScope {
-  kind: "all" | "installed" | "family" | "status" | "collection";
+  kind: "all" | "installed" | "family" | "store" | "status" | "collection";
+  /** Identificador del estado, la colección o la tienda. */
   id?: string;
   label: string;
 }
@@ -79,6 +88,21 @@ export function LibrarySidebar({
           count={bootstrap?.stats.familyCatalogGames}
           onClick={() => onScopeChange({ kind: "family", label: "Steam Family" })}
         />
+        {/* Cada tienda vinculada es un ámbito más de la biblioteca, no un panel
+            de Ajustes: sus juegos se miran igual que los demás. Sólo aparece la
+            que tiene algo que enseñar. */}
+        {EXTERNAL_STORES.map((store) =>
+          (bootstrap?.stats.externalStoreGames?.[store.id] ?? 0) > 0 ? (
+            <SidebarItem
+              key={store.id}
+              active={scope.kind === "store" && scope.id === store.id}
+              icon={store.icon}
+              label={store.label}
+              count={bootstrap?.stats.externalStoreGames?.[store.id]}
+              onClick={() => onScopeChange({ kind: "store", id: store.id, label: store.label })}
+            />
+          ) : null,
+        )}
       </div>
       <div className="sidebar-section">
         <button

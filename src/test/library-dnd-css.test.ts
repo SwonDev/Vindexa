@@ -11,31 +11,43 @@ describe("espacio reservado para la selección flotante", () => {
 });
 
 /**
- * Paridad visual entre la biblioteca y el catálogo de Steam Family.
+ * Un solo listado para los catálogos que no son la biblioteca.
  *
- * El catálogo tiene su propio componente porque su tarjeta dice otras cosas
- * —de quién viene el juego, si Steam lo ha confirmado—, pero el listado en sí
- * tiene que comportarse igual: mismas columnas, mismo fundido al desplazar y
- * las portadas resueltas por delante. Cuando cada uno traía su propia
- * aritmética, a igual ancho salían tarjetas de otro tamaño.
+ * El catálogo de Steam Family y el de las tiendas vinculadas enseñan juegos que
+ * no son propiedad de quien usa Vindexa, pero tienen que navegarse igual que la
+ * biblioteca: cambiar de sección no puede cambiar cómo se mueve uno. Cuando cada
+ * uno traía su propia rejilla, el de Family calculaba las columnas con una
+ * fórmula que la biblioteca ya había abandonado, no pintaba el fundido de borde
+ * y pedía cada portada al montar su tarjeta.
+ *
+ * Esta prueba vigila que ese listado siga siendo uno solo y que conserve las
+ * tres piezas compartidas.
  */
-describe("el catálogo de Family se comporta como la biblioteca", () => {
+describe("los catálogos usan el mismo listado que la biblioteca", () => {
+  const catalogo = readFileSync("src/features/library/CatalogBrowser.tsx", "utf8");
   const familia = readFileSync("src/features/library/FamilyCatalogBrowser.tsx", "utf8");
 
   it("calcula las columnas con la misma función que la biblioteca", () => {
-    expect(familia).toContain("getGridColumns(");
+    expect(catalogo).toContain("getGridColumns(");
     // La cuenta antigua no descontaba los huecos entre columnas.
-    expect(familia).not.toMatch(/Math\.floor\(\(width - \d+\) \/ \d+\)/);
+    expect(catalogo).not.toMatch(/Math\.floor\(\(width - \d+\) \/ \d+\)/);
   });
 
   it("pinta el fundido de borde y lo alimenta al desplazar", () => {
-    expect(familia).toContain("<LiquidEdge />");
-    expect(familia).toContain("applyScrollEdgeFade(");
+    expect(catalogo).toContain("<LiquidEdge />");
+    expect(catalogo).toContain("applyScrollEdgeFade(");
     // Sin esta marca el contenedor no recibe la altura del fundido.
-    expect(familia).toContain('data-library-surface="true"');
+    expect(catalogo).toContain('data-library-surface="true"');
   });
 
   it("resuelve las portadas por delante en lugar de al montar cada tarjeta", () => {
-    expect(familia).toContain("prefetchArtwork(");
+    expect(catalogo).toContain("prefetchArtwork(");
+  });
+
+  it("cada catálogo sólo traduce sus datos, no rehace el listado", () => {
+    // Si un catálogo vuelve a montar su propia rejilla, esto lo detecta antes de
+    // que las dos versiones empiecen a separarse.
+    expect(familia).toContain("<CatalogBrowser");
+    expect(familia).not.toContain("useVirtualizer");
   });
 });

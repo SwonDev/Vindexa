@@ -96,6 +96,19 @@ const GAME_SELECT: &str = "
       )";
 
 pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
+    // Los juegos de tiendas externas se cuentan aparte: son otra tabla y otra
+    // procedencia, y meterlos en la consulta principal obligaría a un `LEFT
+    // JOIN` que no aporta nada al resto de las cifras.
+    let mut external_store_games = std::collections::BTreeMap::new();
+    {
+        let mut statement =
+            connection.prepare("SELECT store, COUNT(*) FROM external_games GROUP BY store")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            external_store_games.insert(row.get::<_, String>(0)?, row.get::<_, i64>(1)?);
+        }
+    }
+
     connection
         .query_row(
             "SELECT COUNT(*),
@@ -127,6 +140,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     total_playtime_minutes: row.get(5)?,
                     archived_games: row.get(6)?,
                     family_catalog_games: row.get(7)?,
+                    external_store_games: external_store_games.clone(),
                 })
             },
         )

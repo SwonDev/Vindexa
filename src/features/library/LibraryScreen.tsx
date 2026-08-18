@@ -78,6 +78,7 @@ import {
   toggleViewInStack,
 } from "@/features/library/library-views";
 import { SavedViewsBar } from "@/features/library/SavedViewsBar";
+import { StoreCatalogBrowser } from "@/features/library/StoreCatalogBrowser";
 import {
   gameContextShortcuts,
   type LibraryContextSnapshot,
@@ -92,6 +93,7 @@ import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   AppBootstrap,
   ArchiveScope,
+  ExternalStoreId,
   FamilyCatalogAvailability,
   FamilyCatalogSort,
   GameListRequest,
@@ -272,6 +274,20 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
     enabled: scope.kind !== "family",
   });
+  const storeQuery = useInfiniteQuery({
+    queryKey: ["store-catalog", scope.kind === "store" ? scope.id : undefined, debouncedQuery],
+    queryFn: ({ pageParam }) =>
+      api.listExternalGames({
+        ...(scope.kind === "store" && scope.id ? { store: scope.id as ExternalStoreId } : {}),
+        ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
+        limit: 240,
+        offset: pageParam,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
+    enabled: scope.kind === "store",
+  });
   const familyQuery = useInfiniteQuery({
     queryKey: ["family-catalog", debouncedQuery, familyAvailability, familySort],
     queryFn: ({ pageParam }) =>
@@ -309,7 +325,13 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     [familyQuery.data],
   );
   const familyTotal = familyQuery.data?.pages[0]?.total ?? 0;
-  const visibleTotal = scope.kind === "family" ? familyTotal : total;
+  const storeGames = useMemo(
+    () => storeQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [storeQuery.data],
+  );
+  const storeTotal = storeQuery.data?.pages[0]?.total ?? 0;
+  const visibleTotal =
+    scope.kind === "family" ? familyTotal : scope.kind === "store" ? storeTotal : total;
   const activeFilters =
     scope.kind === "family"
       ? Boolean(debouncedQuery || familyAvailability !== "all")
@@ -1370,6 +1392,20 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 </p>
               )}
             </div>
+          ) : scope.kind === "store" ? (
+            <StoreCatalogBrowser
+              store={(scope.id ?? "epic") as ExternalStoreId}
+              storeLabel={scope.label}
+              games={storeGames}
+              view={view}
+              queryKey={debouncedQuery.trim()}
+              hasMore={Boolean(storeQuery.hasNextPage)}
+              loadingMore={storeQuery.isFetchingNextPage}
+              initialScrollOffset={readLibraryScroll(scope)}
+              onScrollOffsetChange={(offset) => writeLibraryScroll(scope, offset)}
+              onLoadMore={() => storeQuery.fetchNextPage()}
+              onOpenMatched={setDetailId}
+            />
           ) : scope.kind === "family" ? (
             <FamilyCatalogBrowser
               games={familyGames}

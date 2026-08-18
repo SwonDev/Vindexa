@@ -146,6 +146,14 @@ export interface LibraryStats {
    * Family» sin número y parecía que esos juegos no estaban.
    */
   familyCatalogGames: number;
+  /**
+   * Juegos por tienda vinculada, indexados por su identificador.
+   *
+   * Igual que el catálogo de Family, no se suman a `totalGames`: son juegos de
+   * otra tienda, no de la biblioteca de Steam. Pero el recuento viaja siempre
+   * para que la barra lateral pueda enseñar dónde están sin tener que entrar.
+   */
+  externalStoreGames: Partial<Record<ExternalStoreId, number>>;
 }
 
 export interface AppPreferences {
@@ -1240,7 +1248,13 @@ export interface UpcomingRelease {
 // --- Tiendas externas (Epic Games Store y GOG) ------------------------------
 
 /** Allowlist cerrada: coincide con el `CHECK` de la migración 025. */
-export type ExternalStoreId = "epic" | "gog";
+/**
+ * Tiendas externas que Vindexa reconoce.
+ *
+ * `itch` estaba fuera de este tipo aunque la aplicación ya guardaba sus juegos
+ * con ese valor: el tipo se quedó atrás cuando se añadió la tienda.
+ */
+export type ExternalStoreId = "epic" | "gog" | "itch";
 
 export type ExternalScanStatus = "success" | "failed" | "unavailable";
 

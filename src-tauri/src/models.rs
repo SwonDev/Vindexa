@@ -140,6 +140,12 @@ pub struct LibraryStats {
     /// la barra lateral enseñaba «Steam Family» sin número y parecía que esos
     /// juegos no estaban, cuando estaban a un clic.
     pub family_catalog_games: i64,
+    /// Juegos por tienda vinculada, indexados por su identificador.
+    ///
+    /// Igual que el catálogo de Family, no se suman a `total_games`: son juegos
+    /// de otra tienda. El recuento viaja siempre para que la barra lateral pueda
+    /// enseñar dónde están sin obligar a entrar en cada sección.
+    pub external_store_games: std::collections::BTreeMap<String, i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

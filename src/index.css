@@ -1292,7 +1292,7 @@ kbd {
    conserva la proporción 2:3 del resto de la aplicación en vez de recortarla
    en un cuadrado. Cambia la caja, no la imagen que se pide. */
 .game-row .artwork--icon,
-.family-game-row .artwork--icon {
+.catalog-row .artwork--icon {
   width: 24px;
   height: 36px;
 }
@@ -1468,7 +1468,7 @@ kbd {
   color: #95a3ab;
   font-size: 10px;
 }
-.family-catalog-browser {
+.catalog-browser {
   padding-top: 0;
 }
 .family-catalog-sticky {
@@ -1552,12 +1552,13 @@ kbd {
   width: 11px;
   flex: 0 0 auto;
 }
-/* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
-   instalado en la biblioteca: no puede robarle sitio a la portada. */
-.family-game-card {
+/* La acción secundaria va en la esquina de la portada, como el distintivo de
+   instalado en la biblioteca: no puede robarle sitio a la imagen ni empujar el
+   cuerpo de la tarjeta, que mide lo que mide en la biblioteca. */
+.catalog-card {
   position: relative;
 }
-.family-game-card__store {
+.catalog-card__corner {
   position: absolute;
   top: 4px;
   right: 4px;
@@ -1565,51 +1566,18 @@ kbd {
   opacity: 0;
   transition: opacity 120ms var(--ease-out);
 }
-.family-game-card:hover .family-game-card__store,
-.family-game-card__store:focus-visible {
+.catalog-card:hover .catalog-card__corner,
+.catalog-card__corner:focus-visible {
   opacity: 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  .family-game-card__store {
+  .catalog-card__corner {
     transition: none;
   }
 }
 
-.family-game-card__actions {
-  display: grid;
-  gap: 5px;
-}
-.family-catalog-browser--grid /* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
-   instalado en la biblioteca: no puede robarle sitio a la portada. */
-.family-game-card {
-  position: relative;
-}
-.family-game-card__store {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 120ms var(--ease-out);
-}
-.family-game-card:hover .family-game-card__store,
-.family-game-card__store:focus-visible {
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .family-game-card__store {
-    transition: none;
-  }
-}
-
-.family-game-card__actions {
-  margin-top: auto;
-}
-.family-game-card__actions button {
-  width: 100%;
-}
-.family-list-header,
-.family-game-row {
+.catalog-list-header,
+.catalog-row {
   display: grid;
   grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 0.8fr) minmax(125px, 0.7fr) minmax(
       220px,
@@ -1617,7 +1585,7 @@ kbd {
     );
   align-items: center;
 }
-.family-list-header {
+.catalog-list-header {
   height: 28px;
   padding: 0 9px;
   border-bottom: 1px solid var(--background);
@@ -1627,10 +1595,10 @@ kbd {
   font-weight: 700;
   letter-spacing: 0.08em;
 }
-.family-catalog-browser--list .virtual-canvas {
+.catalog-browser--list .virtual-canvas {
   margin-top: 0;
 }
-.family-game-row {
+.catalog-row {
   position: absolute;
   top: 0;
   left: 0;
@@ -1642,94 +1610,64 @@ kbd {
   color: var(--muted-foreground);
   font-size: 11px;
 }
-.family-game-row:nth-child(even) {
+.catalog-row:nth-child(even) {
   background: color-mix(in srgb, var(--card) 88%, var(--background));
 }
-.family-game-row__identity {
+.catalog-row__identity {
   display: flex;
   align-items: center;
   min-width: 0;
   gap: 9px;
 }
-.family-game-row__identity > div {
+.catalog-row__identity > div {
   min-width: 0;
 }
-.family-game-row__identity strong,
-.family-game-row__identity span {
+.catalog-row__identity strong,
+.catalog-row__identity span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.family-game-row__identity strong {
+.catalog-row__identity strong {
   color: var(--foreground);
   font-size: 12px;
 }
-.family-game-row__identity span,
-.family-game-row time {
+.catalog-row__identity span,
+.catalog-row time {
   color: var(--v-status-muted);
   font-size: 11px;
 }
-.family-game-row .family-availability {
+.catalog-row .family-availability {
   position: static;
   justify-self: start;
   width: max-content;
   max-width: 100%;
   color: var(--v-cyan);
 }
-.family-game-row .family-availability[data-state="confirmed"] {
+.catalog-row .family-availability[data-state="confirmed"] {
   color: var(--v-lime);
 }
-.family-game-row /* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
-   instalado en la biblioteca: no puede robarle sitio a la portada. */
-.family-game-card {
-  position: relative;
-}
-.family-game-card__store {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 120ms var(--ease-out);
-}
-.family-game-card:hover .family-game-card__store,
-.family-game-card__store:focus-visible {
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .family-game-card__store {
-    transition: none;
-  }
-}
+.catalog-row /* La acción secundaria va en la esquina de la portada, como el distintivo de
+   instalado en la biblioteca: no puede robarle sitio a la imagen ni empujar el
+   cuerpo de la tarjeta, que mide lo que mide en la biblioteca. */
 
-.family-game-card__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 5px;
-}
-.family-game-row .family-game-card__actions button {
-  width: auto;
-}
-.family-catalog-browser--compact .family-list-header,
-.family-catalog-browser--compact .family-game-row {
+.catalog-browser--compact .catalog-list-header,
+.catalog-browser--compact .catalog-row {
   grid-template-columns: minmax(220px, 1.5fr) minmax(125px, 0.7fr) minmax(110px, 0.6fr) minmax(
       92px,
       auto
     );
 }
-.family-catalog-browser--compact .family-list-header {
+.catalog-browser--compact .catalog-list-header {
   height: 24px;
 }
-.family-catalog-browser--compact .family-game-row {
+.catalog-browser--compact .catalog-row {
   height: 38px;
 }
-.family-catalog-browser--compact .family-game-row .artwork--icon {
+.catalog-browser--compact .catalog-row .artwork--icon {
   width: 18px;
   height: 27px;
-}
-.family-catalog-browser--compact .family-game-card__actions > :first-child {
-  padding-inline: 7px;
 }
 .app-shell[data-density="comfortable"] .family-catalog-controls {
   min-height: 48px;
@@ -1739,10 +1677,10 @@ kbd {
 .app-shell[data-density="comfortable"] .family-catalog-controls [data-slot="select-trigger"] {
   height: 34px;
 }
-.app-shell[data-density="comfortable"] .family-game-row {
+.app-shell[data-density="comfortable"] .catalog-row {
   height: 70px;
 }
-.app-shell[data-density="comfortable"] .family-catalog-browser--compact .family-game-row {
+.app-shell[data-density="comfortable"] .catalog-browser--compact .catalog-row {
   height: 44px;
 }
 .game-browser--list {
@@ -3786,8 +3724,8 @@ kbd {
    una fila entera, así que se acorta. */
 .game-browser--list,
 .game-browser--compact,
-.family-catalog-browser--list,
-.family-catalog-browser--compact {
+.catalog-browser--list,
+.catalog-browser--compact {
   --scroll-fade-height: calc(var(--scroll-fade, 0) * 18px);
 }
 

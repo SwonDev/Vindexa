@@ -526,6 +526,7 @@ export function createTestState(scenario: VindexaScenario): TestBackendState {
       backlogGames: scenarioGames.filter((item) => item.progress < 100).length,
       trackedGames: scenarioGames.filter((item) => item.tracking).length,
       familyCatalogGames: 0,
+      externalStoreGames: {},
       totalPlaytimeMinutes: scenarioGames.reduce((sum, item) => sum + item.playtimeMinutes, 0),
     },
     statuses: structuredClone(

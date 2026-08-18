@@ -6,7 +6,7 @@ import { LibrarySidebar } from "@/features/library/LibrarySidebar";
 import type { AppBootstrap } from "@/lib/types";
 
 const bootstrap = {
-  stats: { totalGames: 2, installedGames: 1, familyCatalogGames: 17 },
+  stats: { totalGames: 2, installedGames: 1, familyCatalogGames: 17, externalStoreGames: {} },
   statuses: [
     {
       id: "playing",
