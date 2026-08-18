@@ -143,12 +143,9 @@ describe("catálogo familiar Steam-like", () => {
     expect(screen.getAllByTestId("artwork")).toHaveLength(2);
   });
 
-  it.each([
-    { density: "compact" as const, bodyHeight: 156 },
-    { density: "comfortable" as const, bodyHeight: 166 },
-  ])(
+  it.each([{ density: "compact" as const }, { density: "comfortable" as const }])(
     "reserva la altura completa de tres filas $density sin solapar tarjetas",
-    ({ density, bodyHeight }) => {
+    ({ density }) => {
       const manyGames = Array.from({ length: 11 }, (_, index) => ({
         ...games[index % games.length],
         appId: 100 + index,
@@ -172,10 +169,10 @@ describe("catálogo familiar Steam-like", () => {
       expect(step).toBeGreaterThan(0);
       expect(third).toBe(step * 2);
       expect(canvas?.style.height).toBe(`${step * 3}px`);
-      expect(canvas?.style.getPropertyValue("--family-grid-body-height")).toBe(`${bodyHeight}px`);
-      expect(canvas?.style.getPropertyValue("--family-grid-row-gap")).toBe(
-        density === "compact" ? "10px" : "14px",
-      );
+      // La altura de fila la fija ahora la misma geometría que la biblioteca:
+      // el catálogo dejó de reservarse un cuerpo propio de ciento sesenta
+      // píxeles para dos botones y dos párrafos que ya no están.
+      expect(canvas?.style.getPropertyValue("--family-grid-body-height")).toBe("");
     },
   );
 

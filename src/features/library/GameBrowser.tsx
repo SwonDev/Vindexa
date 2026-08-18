@@ -43,7 +43,7 @@ import {
   GroupStickyHeader,
   groupRailVisible,
 } from "@/features/library/group-rail";
-import { LiquidEdge } from "@/features/library/LiquidEdge";
+import { applyScrollEdgeFade, LiquidEdge } from "@/features/library/LiquidEdge";
 import { collectionPositionDropId, manualPositionDropId } from "@/features/library/library-dnd";
 import {
   groupLibrary,
@@ -78,13 +78,6 @@ function pointerDragListener(
   listeners: DraggableListeners,
 ): React.PointerEventHandler<HTMLElement> | undefined {
   return listeners?.onPointerDown as React.PointerEventHandler<HTMLElement> | undefined;
-}
-
-const SCROLL_FADE_DISTANCE = 52;
-
-function applyScrollEdgeFade(node: HTMLElement) {
-  const progress = Math.min(1, Math.max(0, node.scrollTop / SCROLL_FADE_DISTANCE));
-  node.style.setProperty("--scroll-fade", progress.toFixed(3));
 }
 
 /** Operaciones de organización que el menú contextual puede ejecutar. */

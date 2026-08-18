@@ -1552,32 +1552,57 @@ kbd {
   width: 11px;
   flex: 0 0 auto;
 }
-.family-game-card__copy {
-  min-height: 26px;
-  margin: 5px 0 3px;
-  color: var(--v-status-muted);
-  font-size: 11px;
-  line-height: 1.4;
+/* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
+   instalado en la biblioteca: no puede robarle sitio a la portada. */
+.family-game-card {
+  position: relative;
 }
-.family-catalog-browser--grid .virtual-grid-row {
-  gap: var(--family-grid-row-gap);
-  padding-bottom: var(--family-grid-row-gap);
+.family-game-card__store {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
 }
-.family-catalog-browser--grid .family-game-card .game-card__body {
-  display: flex;
-  height: var(--family-grid-body-height);
-  flex-direction: column;
+.family-game-card:hover .family-game-card__store,
+.family-game-card__store:focus-visible {
+  opacity: 1;
 }
-.family-game-card__freshness {
-  margin: 0 0 8px;
-  color: var(--v-status-muted);
-  font-size: 11px;
+@media (prefers-reduced-motion: reduce) {
+  .family-game-card__store {
+    transition: none;
+  }
 }
+
 .family-game-card__actions {
   display: grid;
   gap: 5px;
 }
-.family-catalog-browser--grid .family-game-card__actions {
+.family-catalog-browser--grid /* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
+   instalado en la biblioteca: no puede robarle sitio a la portada. */
+.family-game-card {
+  position: relative;
+}
+.family-game-card__store {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+.family-game-card:hover .family-game-card__store,
+.family-game-card__store:focus-visible {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .family-game-card__store {
+    transition: none;
+  }
+}
+
+.family-game-card__actions {
   margin-top: auto;
 }
 .family-game-card__actions button {
@@ -1655,7 +1680,30 @@ kbd {
 .family-game-row .family-availability[data-state="confirmed"] {
   color: var(--v-lime);
 }
-.family-game-row .family-game-card__actions {
+.family-game-row /* El acceso a la tienda va en la esquina de la tarjeta, como el distintivo de
+   instalado en la biblioteca: no puede robarle sitio a la portada. */
+.family-game-card {
+  position: relative;
+}
+.family-game-card__store {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+.family-game-card:hover .family-game-card__store,
+.family-game-card__store:focus-visible {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .family-game-card__store {
+    transition: none;
+  }
+}
+
+.family-game-card__actions {
   display: flex;
   justify-content: flex-end;
   gap: 5px;
@@ -3737,7 +3785,9 @@ kbd {
 /* En lista y ultracompacta las filas son bajas: el mismo desvanecido se comería
    una fila entera, así que se acorta. */
 .game-browser--list,
-.game-browser--compact {
+.game-browser--compact,
+.family-catalog-browser--list,
+.family-catalog-browser--compact {
   --scroll-fade-height: calc(var(--scroll-fade, 0) * 18px);
 }
 

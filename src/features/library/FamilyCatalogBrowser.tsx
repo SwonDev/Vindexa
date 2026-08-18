@@ -10,7 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Artwork } from "@/components/common/Artwork";
+import { Artwork, prefetchArtwork } from "@/components/common/Artwork";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,8 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { applyScrollEdgeFade, LiquidEdge } from "@/features/library/LiquidEdge";
 import {
   DENSITY_METRICS,
+  getGridColumns,
   getVirtualGridGeometry,
   useInterfaceDensity,
 } from "@/features/shell/interface-density";
@@ -52,11 +54,6 @@ interface Props {
   onOpenConfirmed: (appId: number) => void;
 }
 
-const FAMILY_GRID_METRICS = {
-  compact: { bodyHeight: 156, rowGap: 10 },
-  comfortable: { bodyHeight: 166, rowGap: 14 },
-} as const;
-
 export function FamilyCatalogBrowser(props: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const density = useInterfaceDensity();
@@ -73,8 +70,11 @@ export function FamilyCatalogBrowser(props: Props) {
   const measuredLayoutRef = useRef<string | undefined>(undefined);
   const grid = props.view === "grid";
   const compact = props.view === "compact";
-  const columns = Math.max(2, Math.floor((width - 28) / 170));
   const densityMetrics = DENSITY_METRICS[density];
+  // La misma cuenta que la biblioteca. La que había aquí no descontaba los
+  // huecos entre columnas, así que a igual ancho salían tarjetas de otro tamaño
+  // y el catálogo no se parecía al resto de la aplicación.
+  const columns = getGridColumns(width + densityMetrics.gridPadding, density);
   // ResizeObserver reports the content box, while the shared geometry helper
   // accepts the scroll container's outer width and subtracts its padding.
   const geometry = getVirtualGridGeometry(
@@ -83,13 +83,10 @@ export function FamilyCatalogBrowser(props: Props) {
     props.games.length,
     density,
   );
-  const familyGridMetrics = FAMILY_GRID_METRICS[density];
-  const familyGridRowHeight =
-    geometry.rowHeight -
-    densityMetrics.gridBody +
-    familyGridMetrics.bodyHeight +
-    familyGridMetrics.rowGap +
-    2; // top and bottom card borders
+  // La fila mide lo que mide en la biblioteca. Antes el catálogo se reservaba
+  // ciento sesenta píxeles de cuerpo para dos botones y dos párrafos, y por eso
+  // sus tarjetas no se parecían a las de al lado.
+  const familyGridRowHeight = geometry.rowHeight;
   const rowHeight = compact ? densityMetrics.compactRow : densityMetrics.listRow;
   const virtualLayoutKey = JSON.stringify([
     props.view,
@@ -103,13 +100,20 @@ export function FamilyCatalogBrowser(props: Props) {
     getScrollElement: () => parentRef.current,
     estimateSize: () => (grid ? familyGridRowHeight : rowHeight),
     measureElement: (element) => Math.ceil(element.getBoundingClientRect().height),
-    overscan: grid ? 2 : 8,
+    overscan: grid ? 4 : 8,
   });
   const rows = virtualizer.getVirtualItems();
   const virtualCount = grid ? geometry.rowCount : props.games.length;
   const loadMoreThreshold = grid ? 2 : 12;
   const lastVirtualIndex = rows.at(-1)?.index;
 
+  useEffect(() => {
+    if (props.games.length === 0) return;
+    prefetchArtwork(
+      props.games.map((game) => ({ appId: game.appId, src: game.coverUrl })),
+      "cover",
+    );
+  }, [props.games]);
   useEffect(() => {
     const node = parentRef.current;
     if (!node) return;
@@ -173,9 +177,14 @@ export function FamilyCatalogBrowser(props: Props) {
             ? " family-catalog-browser--list family-catalog-browser--compact"
             : " family-catalog-browser--list"
       }`}
+      data-library-surface="true"
       ref={parentRef}
-      onScroll={(event) => props.onScrollOffsetChange?.(event.currentTarget.scrollTop)}
+      onScroll={(event) => {
+        applyScrollEdgeFade(event.currentTarget);
+        props.onScrollOffsetChange?.(event.currentTarget.scrollTop);
+      }}
     >
+      <LiquidEdge />
       <div className="family-catalog-sticky">
         <div className="family-catalog-notice">
           <IconAlertCircle aria-hidden="true" />
@@ -187,16 +196,7 @@ export function FamilyCatalogBrowser(props: Props) {
         <FamilyCatalogControls {...props} />
       </div>
       {grid ? (
-        <div
-          className="virtual-canvas"
-          style={
-            {
-              height: virtualizer.getTotalSize(),
-              "--family-grid-body-height": `${familyGridMetrics.bodyHeight}px`,
-              "--family-grid-row-gap": `${familyGridMetrics.rowGap}px`,
-            } as React.CSSProperties
-          }
-        >
+        <div className="virtual-canvas" style={{ height: virtualizer.getTotalSize() }}>
           {rows.map((row) => (
             <div
               key={row.key}
@@ -361,29 +361,57 @@ function FamilyViewButton({
 }
 
 function FamilyGameCard({ game, opening, onOpenConfirmed, onOpenStore }: FamilyGameItemProps) {
+  const confirmado = game.availability === "confirmed";
   return (
     <article className="game-card family-game-card">
-      <div className="game-card__cover">
-        <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
-        <FamilyAvailability game={game} compact={false} />
-      </div>
-      <div className="game-card__body">
-        <div className="game-card__title-row">
-          <h3 title={game.title}>{game.title}</h3>
+      {/* La tarjeta entera abre: la ficha si Steam confirmó el juego, y si no la
+          tienda, que es lo único que se puede hacer con él. Igual que en la
+          biblioteca, donde el botón es la tarjeta y no un rótulo dentro. */}
+      <button
+        type="button"
+        className="game-card__target"
+        disabled={opening}
+        aria-label={
+          confirmado ? `Abrir ficha de ${game.title}` : `Abrir ${game.title} en la tienda`
+        }
+        onClick={() => (confirmado ? onOpenConfirmed(game.appId) : onOpenStore(game))}
+      >
+        <div className="game-card__cover">
+          <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
+          <FamilyAvailability game={game} compact={false} />
         </div>
-        <p className="family-game-card__copy">
-          {game.availability === "confirmed"
-            ? "Detectado por el cliente de Steam."
-            : "Steam comprobará si puede compartirse."}
-        </p>
-        <p className="family-game-card__freshness">Comprobado: {formatDate(game.updatedAt)}</p>
-        <FamilyGameActions
-          game={game}
-          opening={opening}
-          onOpenConfirmed={onOpenConfirmed}
-          onOpenStore={onOpenStore}
-        />
-      </div>
+        <div className="game-card__body">
+          <div className="game-card__title-row">
+            <h3 title={game.title}>{game.title}</h3>
+          </div>
+          {/* Una sola línea, como la biblioteca. Lo que decían los dos párrafos
+              que había aquí ya lo dice el distintivo de la portada. */}
+          <div className="game-card__meta">
+            <span>{confirmado ? "Compartido" : "Por confirmar"}</span>
+            <span>·</span>
+            <time dateTime={game.updatedAt}>{formatDate(game.updatedAt)}</time>
+          </div>
+        </div>
+      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            className="family-game-card__store"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`Abrir ${game.title} en la tienda integrada`}
+            disabled={opening}
+            onClick={() => onOpenStore(game)}
+          >
+            {opening ? (
+              <IconLoader2 className="is-spinning" />
+            ) : (
+              <IconBrandSteam aria-hidden="true" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Tienda integrada</TooltipContent>
+      </Tooltip>
     </article>
   );
 }

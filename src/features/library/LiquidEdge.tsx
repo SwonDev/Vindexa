@@ -87,3 +87,22 @@ export function LiquidEdge() {
     </div>
   );
 }
+
+/** Distancia de desplazamiento en la que el fundido llega a su intensidad plena. */
+const SCROLL_FADE_DISTANCE = 52;
+
+/**
+ * Alimenta el fundido con el desplazamiento del contenedor.
+ *
+ * Se escribe directamente en el nodo, sin estado de React: si pasara por un
+ * renderizado, el fundido iría un fotograma por detrás del dedo y se notaría.
+ *
+ * Vive junto al componente del efecto para que cualquier listado que lo pinte
+ * use el mismo cálculo. Tenerlo dentro de un navegador concreto fue lo que hizo
+ * que el catálogo de Family se desplazara sin fundido mientras la biblioteca sí
+ * lo tenía.
+ */
+export function applyScrollEdgeFade(node: HTMLElement) {
+  const progress = Math.min(1, Math.max(0, node.scrollTop / SCROLL_FADE_DISTANCE));
+  node.style.setProperty("--scroll-fade", progress.toFixed(3));
+}

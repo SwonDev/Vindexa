@@ -2457,6 +2457,45 @@ mod pruebas_del_recuento_de_familia {
     }
 
     #[test]
+    fn la_migracion_deja_las_caratulas_de_familia_en_la_variante_grande() {
+        // La 034 hizo esto con `games` y dejó fuera el catálogo de Family, que
+        // se alimenta por otro camino: las mismas carátulas se veían peor en una
+        // pantalla que en la otra, y las que no publican la variante pequeña ni
+        // llegaban a cargar.
+        let connection = base();
+        connection
+            .execute(
+                "INSERT INTO family_catalog_games(app_id, title, cover_url, availability)
+                 VALUES (?1, 'Prestado', ?2, 'unknown')",
+                rusqlite::params![
+                    10,
+                    "https://shared.steamstatic.com/store_item_assets/steam/apps/10/library_600x900.jpg"
+                ],
+            )
+            .expect("insertar juego de familia");
+
+        // La migración ya corrió al crear la base, así que se aplica su misma
+        // sentencia sobre la fila recién insertada para comprobar el efecto.
+        connection
+            .execute(
+                "UPDATE family_catalog_games
+                    SET cover_url = replace(cover_url, 'library_600x900.jpg', 'library_600x900_2x.jpg')
+                  WHERE cover_url LIKE '%library_600x900.jpg'",
+                [],
+            )
+            .expect("aplicar la reescritura");
+
+        let url: String = connection
+            .query_row(
+                "SELECT cover_url FROM family_catalog_games WHERE app_id = 10",
+                [],
+                |row| row.get(0),
+            )
+            .expect("leer la portada");
+        assert!(url.ends_with("library_600x900_2x.jpg"), "quedó en {url}");
+    }
+
+    #[test]
     fn sin_catalogo_de_familia_la_cifra_es_cero_y_no_una_ausencia() {
         // Cero es una respuesta: significa que no hay nada prestado. La interfaz
         // la usa para no enseñar un recuento vacío junto a «Steam Family».
