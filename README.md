@@ -120,7 +120,7 @@ total que no existe.
 | **Avisos** | Reglas programables sobre lo que Vindexa ya observa, con bandeja y deduplicación. |
 | **Modo sofá** | Interfaz para mirar a dos metros, navegable con mando, que detecta si el juego es compatible con tu sistema antes de ofrecerte instalarlo. |
 | **Paleta de comandos** | `⌘K` y ya está: juegos, secciones, vistas y acciones. |
-| **Navegador integrado** | Las tiendas oficiales en una ventana aislada, con bloqueo de publicidad y rastreo. |
+| **Navegador integrado** | Las tiendas oficiales en una ventana aislada, sin acceso a la aplicación. En macOS y Linux, además, con bloqueo nativo de publicidad y rastreo. |
 | **Deshacer de verdad** | Una sola pila para arrastres, reordenaciones y ediciones. `⌘Z` y vuelve. |
 
 <div align="center">
@@ -300,6 +300,12 @@ descubras.
   borra archivos ni afirma que la tienda haya terminado.
 - El navegador integrado sólo navega por los hosts oficiales de las cuatro
   tiendas. No es un navegador general ni un bloqueador de publicidad completo.
+- **El bloqueo nativo de publicidad y rastreo funciona en macOS y en Linux, no en
+  Windows.** WKWebView y WebKitGTK saben instalar una lista de contenido; WebView2
+  todavía no ofrece nada equivalente. En Windows siguen en pie las demás fronteras
+  —aislamiento por host y por almacén de datos, descargas y ventanas emergentes
+  denegadas, y ninguna vía de comunicación con la aplicación—, pero la publicidad
+  se carga.
 - **Buscar actualizaciones** no descarga nada: falta el punto de publicación y la
   clave pública de firma.
 - Steam Deck aparece como **Sin datos** mientras no exista una API pública

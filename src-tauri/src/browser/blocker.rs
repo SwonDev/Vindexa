@@ -32,6 +32,11 @@ use tauri::Url;
 ///
 /// Cambiarlo obliga a WebKit a recompilar la lista en lugar de reutilizar una
 /// versión anterior almacenada en caché.
+// El bloqueador nativo sólo existe donde el motor web sabe instalar una
+// lista de contenido: WKWebView en macOS y WebKitGTK en Linux. WebView2 no
+// ofrece nada equivalente todavía, así que en Windows estas reglas no
+// tendrían quién las aplicase y el módulo no las compila.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub const BLOCKER_ID: &str = "io.vindexa.browser-protection.v2";
 
 /// Dominio de red bloqueado, con el motivo documentado.
@@ -561,6 +566,7 @@ pub const COSMETIC_RULES: &[CosmeticRule] = &[
 ];
 
 /// Escapa un dominio para insertarlo en un `url-filter`.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn escaped_domain(domain: &str) -> String {
     domain.replace('.', r"\.")
 }
@@ -570,6 +576,7 @@ fn escaped_domain(domain: &str) -> String {
 /// Anclado al principio de la URL y cerrado por un delimitador, de modo que
 /// `doubleclick\.net` no coincide con `evildoubleclick.net` ni con
 /// `doubleclick.net.attacker.tld`.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn host_url_filter(domain: &str) -> String {
     format!(
         r"^https?://([a-z0-9_.-]+\.)?{}([/:?&#].*)?$",
@@ -616,6 +623,7 @@ pub fn is_blocked_request(url: &Url) -> bool {
 }
 
 /// Construye la lista de reglas en el orden exigido por WebKit.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn rules() -> Vec<Value> {
     let mut rules =
         Vec::with_capacity(BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len());
@@ -662,6 +670,7 @@ fn rules() -> Vec<Value> {
 }
 
 /// Lista de contenido compilable, en JSON.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn content_rule_list_json() -> String {
     serde_json::to_string(&Value::Array(rules()))
         .expect("las reglas del bloqueador siempre serializan")
@@ -669,6 +678,7 @@ pub fn content_rule_list_json() -> String {
 
 /// Número total de reglas generadas. Útil para vigilar el tamaño de la lista.
 #[allow(dead_code)]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn rule_count() -> usize {
     BLOCKED_DOMAINS.len() + ALLOWED_DOMAINS.len() + COSMETIC_RULES.len()
 }
@@ -845,6 +855,7 @@ mod tests {
         assert!(is_allowed_asset_host("video.akamai.steamstatic.com"));
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn url_filters_are_anchored_and_escaped() {
         let filter = host_url_filter("doubleclick.net");
@@ -869,6 +880,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn the_compiled_list_is_valid_json_with_the_expected_shape() {
         let compiled = content_rule_list_json();
@@ -921,6 +933,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn the_identifier_is_versioned() {
         assert_eq!(BLOCKER_ID, "io.vindexa.browser-protection.v2");

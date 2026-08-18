@@ -20,11 +20,13 @@
 //! | `enable_clipboard_access` | no se activa | La página no lee el portapapeles por su cuenta. |
 //! | Capabilities Tauri | ninguna | Sin `invoke`; la ACL rechaza todo origen remoto. |
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::browser::blocker;
 use crate::browser::chrome::messages;
 use crate::browser::policy::{ControlCommand, NavigationVerdict, RejectionReason};
 use crate::browser::session::WindowState;
 use crate::browser::stores::StoreProfile;
-use crate::browser::{blocker, chrome, policy, prefs, session, stores};
+use crate::browser::{chrome, policy, prefs, session, stores};
 use crate::error::{AppError, AppResult};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -540,6 +542,9 @@ async fn install_native_content_blocker<R: Runtime>(window: &WebviewWindow<R>) -
 }
 
 /// Cierra la ventana y olvida su estado cuando la protección no se pudo activar.
+///
+/// Sólo hay a qué reaccionar donde existe un bloqueador nativo que pueda fallar.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn close_after_protection_failure<R: Runtime>(window: &WebviewWindow<R>) {
     let label = window.label().to_string();
     let _ = window.close();
@@ -550,17 +555,25 @@ fn store_protection_error() -> AppError {
     AppError::new("store_protection", messages::BLOCKER_UNAVAILABLE)
 }
 
+/// Aviso de que la instalación del filtro terminó.
+///
+/// `webkit2gtk` avisa por una llamada de vuelta de C, que puede ejecutarse una
+/// sola vez o ninguna. De ahí el envoltorio: el `Option` permite consumir el
+/// emisor, y el `Mutex` cruzar la frontera con C sin exigir `&mut`.
+#[cfg(target_os = "linux")]
+type LinuxFilterSender = std::sync::Arc<std::sync::Mutex<Option<LinuxFilterChannel>>>;
+
+#[cfg(target_os = "linux")]
+type LinuxFilterChannel = tokio::sync::oneshot::Sender<Result<(), ()>>;
+
 #[cfg(target_os = "linux")]
 struct LinuxFilterInstallState {
     manager: webkit2gtk::glib::WeakRef<webkit2gtk::UserContentManager>,
-    sender: std::sync::Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Result<(), ()>>>>>,
+    sender: LinuxFilterSender,
 }
 
 #[cfg(target_os = "linux")]
-fn send_linux_filter_result(
-    sender: &std::sync::Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Result<(), ()>>>>>,
-    result: Result<(), ()>,
-) {
+fn send_linux_filter_result(sender: &LinuxFilterSender, result: Result<(), ()>) {
     if let Some(sender) = sender.lock().ok().and_then(|mut sender| sender.take()) {
         let _ = sender.send(result);
     }

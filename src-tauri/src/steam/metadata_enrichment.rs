@@ -1,6 +1,7 @@
 use crate::db::{Database, MetadataJob};
 use crate::error::{AppError, AppResult};
 use crate::steam::store_api::{self, StoreBundleOutcome, StoreMetadataFailure};
+use chrono::Utc;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -178,12 +179,27 @@ async fn process_job(
     let result = match coordinator.fetch_bundle(job.app_id).await {
         Ok(StoreBundleOutcome::Found(bundle)) => {
             let database = database.clone();
+            let app_id = job.app_id;
             run_database_unlocked(move || {
                 database.complete_metadata_enrichment_bundle(
-                    job.app_id,
+                    app_id,
                     &bundle.metadata,
                     &bundle.rich,
-                )
+                )?;
+                // El precio venía en la misma respuesta, así que ya está
+                // pagado con la petición. Registrarlo aquí hace que la lista de
+                // deseados encuentre precio de los juegos que además se poseen
+                // sin volver a preguntar. Un fallo al guardarlo no invalida los
+                // metadatos, que es lo que pedía este trabajo.
+                if let Some(observation) = bundle.price.as_ref()
+                    && let Err(error) = database.record_price_observation(observation, Utc::now())
+                {
+                    eprintln!(
+                        "Vindexa no pudo guardar el precio del AppID {app_id}: {}",
+                        error.code
+                    );
+                }
+                Ok(())
             })
             .await
         }

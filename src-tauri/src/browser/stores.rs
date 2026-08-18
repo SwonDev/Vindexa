@@ -81,6 +81,11 @@ impl StoreProfile {
     }
 
     /// Identificador binario del almacén de datos aislado de esta tienda.
+    ///
+    /// Sólo lo consume `WKWebsiteDataStore` de WKWebView, que es la única API de
+    /// las tres que identifica el almacén por UUID. En Windows y en Linux el
+    /// aislamiento se consigue con un directorio de datos distinto por tienda.
+    #[cfg(target_os = "macos")]
     pub fn session_store_id(&self) -> Option<[u8; 16]> {
         uuid::Uuid::parse_str(self.session_store)
             .ok()

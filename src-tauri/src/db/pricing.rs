@@ -57,7 +57,13 @@ pub const STALE_HOURS: i64 = 24 * 7;
 /// Puntos que devuelve como máximo una serie histórica.
 pub const MAX_HISTORY_POINTS: u32 = 400;
 /// Juegos que un solo barrido de actualización puede pedir a la tienda.
-pub const MAX_REFRESH_BATCH: u32 = 200;
+///
+/// Doscientos era el tope cuando cada juego costaba una petición: más habría
+/// tardado demasiado y habría tentado al límite de la tienda. Ahora los precios
+/// se piden de cien en cien, así que dos mil juegos son veinte peticiones y unos
+/// quince segundos. El tope existe para que un barrido siga siendo una acción
+/// acotada, no para racionar peticiones.
+pub const MAX_REFRESH_BATCH: u32 = 2_000;
 
 /// Vigencia de una observación. Es una palabra, no un booleano, porque la
 /// interfaz necesita distinguir «recién mirado» de «hace días» sin inventarse

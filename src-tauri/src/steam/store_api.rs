@@ -304,13 +304,34 @@ async fn fetch_from_endpoint(
     endpoint: &str,
     app_id: u32,
 ) -> Result<StoreBundleOutcome, StoreMetadataFailure> {
-    let mut response = client
-        .get(endpoint)
-        .query(&[
+    let bytes = descargar(
+        client,
+        endpoint,
+        &[
             ("appids", app_id.to_string()),
             ("l", "spanish".to_string()),
             ("cc", STORE_COUNTRY.to_string()),
-        ])
+        ],
+    )
+    .await?;
+    parse_store_bundle(app_id, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Pide una URL de la tienda y devuelve su cuerpo, con todas las salvaguardas:
+/// redirección, límite de peticiones con su `Retry-After`, estado, tipo de
+/// contenido y tamaño máximo.
+///
+/// Existe como función aparte porque la ficha completa y el lote de precios
+/// hablan con el mismo endpoint y necesitan exactamente las mismas
+/// comprobaciones; duplicarlas garantizaba que una de las dos se quedase atrás.
+async fn descargar(
+    client: &Client,
+    endpoint: &str,
+    parametros: &[(&str, String)],
+) -> Result<Vec<u8>, StoreMetadataFailure> {
+    let mut response = client
+        .get(endpoint)
+        .query(parametros)
         .send()
         .await
         .map_err(|error| StoreMetadataFailure::from(classify_store_error(error)))?;
@@ -376,7 +397,129 @@ async fn fetch_from_endpoint(
         }
         bytes.extend_from_slice(&chunk);
     }
-    parse_store_bundle(app_id, &bytes).map_err(StoreMetadataFailure::from)
+    Ok(bytes)
+}
+
+// ---------------------------------------------------------------------------
+// Precios por lotes
+// ---------------------------------------------------------------------------
+
+/// AppID por petición al pedir sólo el precio.
+///
+/// El endpoint acepta más —se ha comprobado con 120 y devuelve los 120—, pero
+/// cien mantiene la respuesta en unos pocos kilobytes y deja margen para que
+/// Steam cambie de opinión. Una lista de deseados de mil quinientos juegos pasa
+/// de mil quinientas peticiones a quince.
+pub const MAX_PRICE_BATCH: usize = 100;
+
+/// Lo que un lote de precios deja claro de cada AppID pedido.
+///
+/// Los tres casos se separan porque significan cosas distintas y la interfaz
+/// los presenta distinto. Meterlos en un `Option` los confundiría, y un precio
+/// desconocido no es un precio de cero.
+#[derive(Debug, Default, PartialEq)]
+pub struct PriceBatch {
+    /// Precio observado.
+    pub prices: Vec<PriceObservation>,
+    /// La tienda respondió por el juego pero sin bloque de precio: gratuito,
+    /// sin publicar o retirado.
+    pub without_price: Vec<u32>,
+    /// La tienda no reconoció el AppID o no lo devolvió.
+    pub unavailable: Vec<u32>,
+}
+
+/// Precios de varios juegos en una sola petición.
+///
+/// El lote se pide con `filters=price_overview`, así que la respuesta trae sólo
+/// el bloque de precio y no la ficha entera. Un AppID repetido se pide una vez.
+pub async fn fetch_prices(app_ids: &[u32]) -> Result<PriceBatch, StoreMetadataFailure> {
+    let mut pedidos: Vec<u32> = Vec::with_capacity(app_ids.len().min(MAX_PRICE_BATCH));
+    let mut vistos = HashSet::new();
+    for app_id in app_ids {
+        if *app_id == 0 {
+            return Err(AppError::validation("El AppID de Steam no es válido.").into());
+        }
+        if vistos.insert(*app_id) {
+            pedidos.push(*app_id);
+        }
+    }
+    if pedidos.is_empty() {
+        return Ok(PriceBatch::default());
+    }
+    if pedidos.len() > MAX_PRICE_BATCH {
+        return Err(AppError::validation(format!(
+            "Un lote de precios admite como máximo {MAX_PRICE_BATCH} juegos."
+        ))
+        .into());
+    }
+
+    let lista = pedidos
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let bytes = descargar(
+        store_client().map_err(StoreMetadataFailure::from)?,
+        STORE_DETAILS_ENDPOINT,
+        &[
+            ("appids", lista),
+            ("filters", "price_overview".to_string()),
+            ("cc", STORE_COUNTRY.to_string()),
+            ("l", "spanish".to_string()),
+        ],
+    )
+    .await?;
+    parse_price_batch(&pedidos, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Sobre de una respuesta con `filters=price_overview`.
+///
+/// `data` es un valor libre a propósito: con precio llega un objeto, y sin
+/// precio Steam devuelve **un array vacío**, no `null`. Tipar `data` como
+/// objeto haría fallar el análisis de todo el lote por culpa de un juego
+/// gratuito.
+#[derive(Debug, Deserialize)]
+struct PriceEnvelope {
+    #[serde(default)]
+    success: bool,
+    #[serde(default)]
+    data: Option<serde_json::Value>,
+}
+
+fn parse_price_batch(pedidos: &[u32], bytes: &[u8]) -> AppResult<PriceBatch> {
+    let sobres: HashMap<String, PriceEnvelope> = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_store_response",
+            "Steam devolvió un lote de precios que Vindexa no pudo interpretar.",
+        )
+    })?;
+    let mut lote = PriceBatch::default();
+    for app_id in pedidos {
+        let Some(sobre) = sobres.get(&app_id.to_string()) else {
+            lote.unavailable.push(*app_id);
+            continue;
+        };
+        if !sobre.success {
+            lote.unavailable.push(*app_id);
+            continue;
+        }
+        let bloque = sobre
+            .data
+            .as_ref()
+            .and_then(|data| data.get("price_overview"));
+        match bloque {
+            Some(valor) => {
+                match pricing::parse_store_price_overview(*app_id, Some(STORE_COUNTRY), valor)? {
+                    Some(observacion) => lote.prices.push(observacion),
+                    // El bloque existe pero no se puede leer como precio. No se
+                    // adivina: cuenta como sin precio.
+                    None => lote.without_price.push(*app_id),
+                }
+            }
+            None => lote.without_price.push(*app_id),
+        }
+    }
+    Ok(lote)
 }
 
 fn parse_retry_after(value: Option<&header::HeaderValue>) -> Option<Duration> {
@@ -1353,9 +1496,9 @@ fn classify_store_error(error: reqwest::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        StoreBundleOutcome, StoreMetadataBundle, StoreMetadataOutcome, parse_retry_after,
-        parse_store_bundle, parse_store_response, sanitize_hero_url, sanitize_store_text,
-        sanitize_website_url, structure_store_html,
+        StoreBundleOutcome, StoreMetadataBundle, StoreMetadataOutcome, parse_price_batch,
+        parse_retry_after, parse_store_bundle, parse_store_response, sanitize_hero_url,
+        sanitize_store_text, sanitize_website_url, structure_store_html,
     };
     use crate::db::rich_metadata::{DescriptionBlock, DrmState, GameMediaKind};
     use reqwest::header::HeaderValue;
@@ -1936,5 +2079,69 @@ mod tests {
         let outcome =
             parse_store_bundle(10, br#"{"10":{"success":false}}"#).expect("interpretar ausencia");
         assert!(matches!(outcome, StoreBundleOutcome::Unavailable));
+    }
+
+    // ── Precios por lotes ──────────────────────────────────────────────────
+    //
+    // Las respuestas de estas pruebas son las que devuelve de verdad
+    // `store.steampowered.com/api/appdetails?filters=price_overview&cc=ES`,
+    // recortadas. La forma importa: un juego gratuito llega con `"data": []`,
+    // un array, no un objeto ni `null`.
+
+    #[test]
+    fn un_lote_separa_precio_de_gratuito_y_de_desconocido() {
+        let payload = br#"{
+          "1245620": {"success": true, "data": {"price_overview": {
+            "currency": "EUR", "initial": 5999, "final": 4199, "discount_percent": 30}}},
+          "440": {"success": true, "data": []},
+          "999999999": {"success": false}
+        }"#;
+        let lote =
+            parse_price_batch(&[1245620, 440, 999999999], payload).expect("interpretar lote");
+
+        assert_eq!(lote.prices.len(), 1, "sólo un juego tiene precio");
+        let precio = &lote.prices[0];
+        assert_eq!(precio.app_id, 1245620);
+        assert_eq!(precio.currency, "EUR");
+        assert_eq!(precio.final_cents, 4199);
+        assert_eq!(precio.initial_cents, 5999);
+        assert_eq!(precio.discount_percent, 30);
+        assert_eq!(precio.country_code.as_deref(), Some("ES"));
+
+        // Gratuito y desconocido no se mezclan: el primero es un hecho de la
+        // tienda, el segundo es que la tienda no ha dicho nada.
+        assert_eq!(lote.without_price, vec![440]);
+        assert_eq!(lote.unavailable, vec![999999999]);
+    }
+
+    #[test]
+    fn un_appid_que_falta_en_la_respuesta_cuenta_como_desconocido() {
+        // Steam puede omitir una clave que se le pidió. Omitirla no es decir
+        // que sea gratis.
+        let payload = br#"{"10": {"success": true, "data": {"price_overview": {
+            "currency": "EUR", "initial": 999, "final": 999, "discount_percent": 0}}}}"#;
+        let lote = parse_price_batch(&[10, 20], payload).expect("interpretar lote");
+        assert_eq!(lote.prices.len(), 1);
+        assert_eq!(lote.unavailable, vec![20]);
+        assert!(lote.without_price.is_empty());
+    }
+
+    #[test]
+    fn un_lote_ilegible_falla_en_lugar_de_devolver_precios_vacios() {
+        let error = parse_price_batch(&[10], b"no es json").expect_err("debe fallar");
+        assert_eq!(error.code, "steam_store_response");
+    }
+
+    #[test]
+    fn el_orden_del_lote_se_conserva() {
+        // La interfaz empareja por AppID, pero conservar el orden hace que un
+        // fallo sea reproducible en lugar de depender del recorrido del mapa.
+        let payload = br#"{
+          "30": {"success": false},
+          "20": {"success": false},
+          "10": {"success": false}
+        }"#;
+        let lote = parse_price_batch(&[10, 20, 30], payload).expect("interpretar lote");
+        assert_eq!(lote.unavailable, vec![10, 20, 30]);
     }
 }

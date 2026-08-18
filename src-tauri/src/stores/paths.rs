@@ -331,7 +331,7 @@ pub(crate) fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ReadOutcome, canonical_install_directory, is_contained_in, is_real_directory, is_real_file,
+        ReadOutcome, canonical_install_directory, is_contained_in, is_real_directory,
         list_files_with_extension, list_subdirectories, read_text_file, resolve_executable_within,
     };
     use std::fs;
@@ -361,6 +361,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_symlinked_manifest_is_never_followed() {
+        // Se importa aquí porque sólo esta prueba lo necesita, y sólo existe
+        // enlace simbólico que seguir en los sistemas tipo Unix.
+        use super::is_real_file;
+
         let directory = TempDir::new().expect("crear temporal");
         let secret = directory.path().join("secreto.txt");
         fs::write(&secret, "token=fixture-secret").expect("escribir secreto");

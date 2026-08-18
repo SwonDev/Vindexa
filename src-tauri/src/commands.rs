@@ -1178,6 +1178,13 @@ pub async fn forget_game_prices(state: State<'_, AppState>, app_id: u32) -> AppR
 /// Es la única puerta que habla con la tienda. El ritmo y el respeto al
 /// `Retry-After` viven aquí; `db::pricing` sólo persiste lo que se le entrega,
 /// que es lo que permite probar el modelo entero sin red.
+///
+/// Se pregunta **por lotes**. Antes se pedía la ficha completa de un juego por
+/// petición, con tres cuartos de segundo entre una y otra: una lista de mil
+/// quinientos deseados tardaba casi veinte minutos y en la práctica nadie
+/// llegaba a ver un precio. El endpoint de la tienda acepta cien AppID de una
+/// vez cuando se le pide sólo el bloque de precio, así que la misma lista son
+/// quince peticiones.
 #[tauri::command]
 pub async fn refresh_wishlist_prices(
     state: State<'_, AppState>,
@@ -1192,13 +1199,23 @@ pub async fn refresh_wishlist_prices(
     .await?;
 
     let mut report = PriceRefreshReport::default();
-    for (index, app_id) in candidates.into_iter().enumerate() {
-        if index > 0 {
+    for (indice, lote) in candidates
+        .chunks(steam::store_api::MAX_PRICE_BATCH)
+        .enumerate()
+    {
+        if indice > 0 {
             sleep(PRICE_REQUEST_INTERVAL).await;
         }
-        match steam::store_api::fetch_bundle_with_retry_hint(app_id).await {
-            Ok(steam::store_api::StoreBundleOutcome::Found(bundle)) => match bundle.price {
-                Some(observation) => {
+        match steam::store_api::fetch_prices(lote).await {
+            Ok(precios) => {
+                // Los tres desenlaces del lote se cuentan por separado: un
+                // precio desconocido no es un precio de cero, y un AppID que la
+                // tienda no reconoce tampoco es un juego gratuito.
+                report.without_price = report
+                    .without_price
+                    .saturating_add(precios.without_price.len() as u32)
+                    .saturating_add(precios.unavailable.len() as u32);
+                for observation in precios.prices {
                     let observed_at = Utc::now();
                     let recorded = database_read(&state, move |database| {
                         database.record_price_observation(&observation, observed_at)
@@ -1212,17 +1229,14 @@ pub async fn refresh_wishlist_prices(
                         report.alerts = report.alerts.saturating_add(1);
                     }
                 }
-                // Ficha sin bloque de precio: gratuito, sin publicar o
-                // retirado. No se sabe el precio, y así se cuenta.
-                None => report.without_price = report.without_price.saturating_add(1),
-            },
-            Ok(steam::store_api::StoreBundleOutcome::Unavailable) => {
-                report.without_price = report.without_price.saturating_add(1);
             }
             Err(failure) => {
-                report.failed = report.failed.saturating_add(1);
+                // Falla el lote entero, así que suman todos sus juegos: decir
+                // que ha fallado uno cuando han quedado cien sin consultar
+                // sería mentir sobre el alcance del problema.
+                report.failed = report.failed.saturating_add(lote.len() as u32);
                 // Steam ha pedido esperar: se espera. Insistir sólo empeora el
-                // límite para el resto del lote.
+                // límite para el resto de los lotes.
                 if let Some(delay) = failure.retry_after {
                     sleep(delay).await;
                 }
