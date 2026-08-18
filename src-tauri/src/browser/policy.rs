@@ -524,3 +524,50 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod pruebas_de_paginas_de_sesion {
+    use super::{NavigationVerdict, evaluate};
+    use crate::browser::stores;
+    use tauri::Url;
+
+    /// La página de la que se lee el testigo de sesión de Steam tiene que ser
+    /// navegable: si la política la rechazase, el catálogo de Familia no podría
+    /// obtenerse y el fallo aparecería sólo en tiempo de ejecución, con un
+    /// mensaje que no explicaría nada.
+    #[test]
+    fn la_pagina_del_testigo_de_steam_es_navegable() {
+        let steam = stores::store_by_id("steam").expect("la tienda de Steam existe");
+        let destino = crate::steam::family_session::token_page_url();
+        assert!(
+            matches!(evaluate(steam, &destino), NavigationVerdict::Allowed(_)),
+            "la política rechaza la página del testigo: {destino}"
+        );
+    }
+
+    /// Y la de la lista de deseados, por el mismo motivo.
+    #[test]
+    fn la_pagina_de_deseados_es_navegable() {
+        let steam = stores::store_by_id("steam").expect("la tienda de Steam existe");
+        let destino = crate::steam::wishlist_session::wishlist_page_url();
+        assert!(
+            matches!(evaluate(steam, &destino), NavigationVerdict::Allowed(_)),
+            "la política rechaza la lista de deseados: {destino}"
+        );
+    }
+
+    /// Un dominio que sólo *parece* de Steam sigue rechazándose. Sin esto, la
+    /// prueba de arriba se podría satisfacer aflojando la allowlist.
+    #[test]
+    fn un_dominio_parecido_sigue_rechazandose() {
+        let steam = stores::store_by_id("steam").expect("la tienda de Steam existe");
+        let impostor = Url::parse(
+            "https://store.steampowered.com.example.com/pointssummary/ajaxgetasyncconfig",
+        )
+        .expect("URL de prueba válida");
+        assert!(matches!(
+            evaluate(steam, &impostor),
+            NavigationVerdict::Rejected(_)
+        ));
+    }
+}

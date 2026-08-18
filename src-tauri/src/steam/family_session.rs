@@ -54,17 +54,31 @@ const MAX_TOKEN_CHARS: usize = 1_000;
 
 /// Lee el cuerpo de la página, que es JSON plano.
 ///
-/// `innerText` en lugar de `textContent`: WebKit envuelve el JSON en un `<pre>`
-/// y `innerText` devuelve lo que se ve, sin los adornos del visor.
+/// `innerText` primero porque WebKit envuelve el JSON en un `<pre>` y devuelve
+/// lo que se ve, sin los adornos del visor; `textContent` como respaldo por si
+/// el motor lo presenta de otra forma.
+///
+/// El guion vuelve a comprobar el destino antes de tocar el documento: entre el
+/// sondeo y la evaluación la página pudo cambiar, y es la segunda de las tres
+/// comprobaciones que se hacen sobre dónde se está leyendo.
+///
+/// Devuelve `SIN_CUERPO` cuando el documento no tiene nada legible. Sin ese
+/// aviso, un cuerpo vacío se confundiría con «no has iniciado sesión», que es
+/// un diagnóstico distinto y manda a arreglar algo que no está roto.
 const READ_TOKEN_SCRIPT: &str = r#"
 (function () {
   if (location.host !== "store.steampowered.com") return "";
   if (location.pathname !== "/pointssummary/ajaxgetasyncconfig") return "";
   var cuerpo = document.body;
-  if (!cuerpo) return "";
-  return (cuerpo.innerText || "").slice(0, 65536);
+  if (!cuerpo) return "SIN_CUERPO";
+  var texto = cuerpo.innerText || cuerpo.textContent || "";
+  if (!texto.trim()) return "SIN_CUERPO";
+  return texto.slice(0, 65536);
 })()
 "#;
+
+/// Marca que el guion devuelve cuando la página no tiene cuerpo legible.
+const SIN_CUERPO: &str = "SIN_CUERPO";
 
 /// URL de la página del testigo.
 pub fn token_page_url() -> Url {
@@ -111,6 +125,12 @@ pub fn parse_token_payload(raw: &str) -> AppResult<SessionToken> {
     let raw = raw.trim();
     if raw.is_empty() {
         return Err(not_signed_in());
+    }
+    if raw == SIN_CUERPO {
+        return Err(AppError::new(
+            "steam_family_empty_page",
+            "Steam devolvió una página vacía en el navegador integrado. Recárgala y vuelve a intentarlo.",
+        ));
     }
     if raw.len() > MAX_PAYLOAD_BYTES {
         return Err(AppError::new(
@@ -216,6 +236,14 @@ mod tests {
         let vacio = parse_token_payload(r#"{"success":1,"data":{"webapi_token":""}}"#)
             .expect_err("debe fallar");
         assert_eq!(vacio.code, "steam_family_signed_out");
+    }
+
+    #[test]
+    fn una_pagina_sin_cuerpo_no_se_confunde_con_sesion_cerrada() {
+        // Son dos problemas distintos: uno se arregla iniciando sesión y el otro
+        // recargando. Decir el equivocado manda a arreglar algo que no falla.
+        let error = parse_token_payload("SIN_CUERPO").expect_err("debe fallar");
+        assert_eq!(error.code, "steam_family_empty_page");
     }
 
     #[test]
