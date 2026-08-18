@@ -26,7 +26,12 @@ import type {
   LibraryFilters,
 } from "@/features/library/library-filters";
 import { LIBRARY_GROUPINGS, type LibraryGrouping } from "@/features/library/library-grouping";
-import type { GameSort, LibraryView } from "@/lib/types";
+import type {
+  FamilyCatalogAvailability,
+  FamilyCatalogSort,
+  GameSort,
+  LibraryView,
+} from "@/lib/types";
 
 export type ExtraFilters = LibraryFilters;
 
@@ -51,6 +56,14 @@ interface LibraryToolbarProps {
   onSaveView?: (() => void) | undefined;
   /** Rótulo del botón: cambia al apilar varias vistas. */
   saveViewLabel?: string | undefined;
+  /* --- Catálogo de Steam Family ------------------------------------------
+     El catálogo filtra y ordena por cosas distintas —no tiene estados ni
+     colecciones— pero lo hace desde esta misma barra. Cuando tenía la suya, la
+     sección gastaba tres filas de encabezado donde la biblioteca gasta una. */
+  familyAvailability?: FamilyCatalogAvailability | undefined;
+  onFamilyAvailabilityChange?: ((value: FamilyCatalogAvailability) => void) | undefined;
+  familySort?: FamilyCatalogSort | undefined;
+  onFamilySortChange?: ((value: FamilyCatalogSort) => void) | undefined;
 }
 
 const sortGroups = [
@@ -174,6 +187,52 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             </SelectContent>
           </Select>
         )}
+        {familyMode && props.onFamilyAvailabilityChange && (
+          <Select
+            value={props.familyAvailability ?? "all"}
+            onValueChange={(value) =>
+              value && props.onFamilyAvailabilityChange?.(value as FamilyCatalogAvailability)
+            }
+          >
+            <SelectTrigger className="sort-select" aria-label="Filtrar el catálogo de Steam Family">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="library-sort-menu">
+              <SelectGroup>
+                <SelectLabel>DISPONIBILIDAD</SelectLabel>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="confirmed" title="Vindexa ha visto este juego en tu equipo">
+                  Comprobados
+                </SelectItem>
+                <SelectItem value="unknown" title="Steam decidirá al abrirlos">
+                  Sin comprobar
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        {familyMode && props.onFamilySortChange && (
+          <Select
+            value={props.familySort ?? "availability"}
+            onValueChange={(value) =>
+              value && props.onFamilySortChange?.(value as FamilyCatalogSort)
+            }
+          >
+            <SelectTrigger className="sort-select" aria-label="Ordenar el catálogo de Steam Family">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="library-sort-menu">
+              <SelectGroup>
+                <SelectLabel>ORDENAR POR</SelectLabel>
+                <SelectItem value="availability">Comprobados primero</SelectItem>
+                <SelectItem value="alphabetical">Título: A–Z</SelectItem>
+                <SelectItem value="alphabeticalDesc">Título: Z–A</SelectItem>
+                <SelectItem value="updatedDesc">Actualizados recientemente</SelectItem>
+                <SelectItem value="discoveredDesc">Descubiertos recientemente</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
         {/* El encabezado ocupa una fila entera del lienzo y el grupo siguiente
             arranca en la columna cero, así que la rejilla admite los mismos
             cortes que las listas sin romper ninguna fila. */}
@@ -212,56 +271,56 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             <TooltipContent>{props.saveViewLabel ?? "Guardar esta vista"}</TooltipContent>
           </Tooltip>
         )}
-        {!familyMode && (
-          <fieldset className="view-switcher">
-            <legend className="sr-only">Vista de biblioteca</legend>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  data-active={props.view === "grid"}
-                  aria-label="Vista de cuadrícula"
-                  aria-pressed={props.view === "grid"}
-                  onClick={() => props.onViewChange("grid")}
-                >
-                  <IconLayoutGrid />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Cuadrícula</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  data-active={props.view === "list"}
-                  aria-label="Vista de lista"
-                  aria-pressed={props.view === "list"}
-                  onClick={() => props.onViewChange("list")}
-                >
-                  <IconList />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Lista</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  data-active={props.view === "compact"}
-                  aria-label="Vista ultracompacta"
-                  aria-pressed={props.view === "compact"}
-                  onClick={() => props.onViewChange("compact")}
-                >
-                  <IconListDetails />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Ultracompacta</TooltipContent>
-            </Tooltip>
-          </fieldset>
-        )}
+        <fieldset className="view-switcher">
+          <legend className="sr-only">
+            {familyMode ? "Vista del catálogo de Steam Family" : "Vista de biblioteca"}
+          </legend>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                data-active={props.view === "grid"}
+                aria-label="Vista de cuadrícula"
+                aria-pressed={props.view === "grid"}
+                onClick={() => props.onViewChange("grid")}
+              >
+                <IconLayoutGrid />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Cuadrícula</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                data-active={props.view === "list"}
+                aria-label="Vista de lista"
+                aria-pressed={props.view === "list"}
+                onClick={() => props.onViewChange("list")}
+              >
+                <IconList />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Lista</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                data-active={props.view === "compact"}
+                aria-label="Vista ultracompacta"
+                aria-pressed={props.view === "compact"}
+                onClick={() => props.onViewChange("compact")}
+              >
+                <IconListDetails />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Ultracompacta</TooltipContent>
+          </Tooltip>
+        </fieldset>
       </div>
     </div>
   );

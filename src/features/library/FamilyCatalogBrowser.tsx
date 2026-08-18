@@ -3,22 +3,12 @@ import {
   IconBrandSteam,
   IconCircleCheck,
   IconExternalLink,
-  IconLayoutGrid,
-  IconList,
-  IconListDetails,
   IconLoader2,
 } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Artwork, prefetchArtwork } from "@/components/common/Artwork";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { applyScrollEdgeFade, LiquidEdge } from "@/features/library/LiquidEdge";
 import {
@@ -185,16 +175,6 @@ export function FamilyCatalogBrowser(props: Props) {
       }}
     >
       <LiquidEdge />
-      <div className="family-catalog-sticky">
-        <div className="family-catalog-notice">
-          <IconAlertCircle aria-hidden="true" />
-          <p>
-            Este catálogo combina los juegos visibles de tu grupo. Steam decide la elegibilidad al
-            iniciar y puede excluir títulos aunque aparezcan aquí.
-          </p>
-        </div>
-        <FamilyCatalogControls {...props} />
-      </div>
       {grid ? (
         <div className="virtual-canvas" style={{ height: virtualizer.getTotalSize() }}>
           {rows.map((row) => (
@@ -261,105 +241,6 @@ export function FamilyCatalogBrowser(props: Props) {
   );
 }
 
-function FamilyCatalogControls(props: Props) {
-  return (
-    <div className="family-catalog-controls">
-      <span className="family-catalog-count" role="status">
-        {props.total.toLocaleString("es-ES")} {props.total === 1 ? "juego" : "juegos"} del grupo
-      </span>
-      <Select
-        value={props.availability}
-        onValueChange={(value) =>
-          value && props.onAvailabilityChange(value as FamilyCatalogAvailability)
-        }
-      >
-        <SelectTrigger aria-label="Filtrar catálogo familiar">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos</SelectItem>
-          <SelectItem value="confirmed">Confirmados localmente</SelectItem>
-          <SelectItem value="unknown">Por confirmar</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select
-        value={props.sort}
-        onValueChange={(value) => value && props.onSortChange(value as FamilyCatalogSort)}
-      >
-        <SelectTrigger aria-label="Ordenar catálogo familiar">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="availability">Confirmados primero</SelectItem>
-          <SelectItem value="alphabetical">Título: A–Z</SelectItem>
-          <SelectItem value="alphabeticalDesc">Título: Z–A</SelectItem>
-          <SelectItem value="updatedDesc">Actualizados recientemente</SelectItem>
-          <SelectItem value="discoveredDesc">Descubiertos recientemente</SelectItem>
-        </SelectContent>
-      </Select>
-      <fieldset className="view-switcher family-view-switcher">
-        <legend className="sr-only">Vista del catálogo familiar</legend>
-        <FamilyViewButton
-          active={props.view === "grid"}
-          label="Vista familiar de cuadrícula"
-          tooltip="Cuadrícula"
-          onClick={() => props.onViewChange("grid")}
-        >
-          <IconLayoutGrid />
-        </FamilyViewButton>
-        <FamilyViewButton
-          active={props.view === "list"}
-          label="Vista familiar de lista"
-          tooltip="Lista"
-          onClick={() => props.onViewChange("list")}
-        >
-          <IconList />
-        </FamilyViewButton>
-        <FamilyViewButton
-          active={props.view === "compact"}
-          label="Vista familiar ultracompacta"
-          tooltip="Ultracompacta"
-          onClick={() => props.onViewChange("compact")}
-        >
-          <IconListDetails />
-        </FamilyViewButton>
-      </fieldset>
-    </div>
-  );
-}
-
-function FamilyViewButton({
-  active,
-  label,
-  tooltip,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  label: string;
-  tooltip: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          data-active={active}
-          aria-label={label}
-          aria-pressed={active}
-          onClick={onClick}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 function FamilyGameCard({ game, opening, onOpenConfirmed, onOpenStore }: FamilyGameItemProps) {
   const confirmado = game.availability === "confirmed";
   return (
@@ -386,8 +267,10 @@ function FamilyGameCard({ game, opening, onOpenConfirmed, onOpenStore }: FamilyG
           </div>
           {/* Una sola línea, como la biblioteca. Lo que decían los dos párrafos
               que había aquí ya lo dice el distintivo de la portada. */}
+          {/* Una sola línea, como en la biblioteca. El estado no se repite
+              aquí: quien lo tiene comprobado ya lleva su marca en la portada. */}
           <div className="game-card__meta">
-            <span>{confirmado ? "Compartido" : "Por confirmar"}</span>
+            <span>Compartido</span>
             <span>·</span>
             <time dateTime={game.updatedAt}>{formatDate(game.updatedAt)}</time>
           </div>
@@ -460,12 +343,25 @@ function FamilyGameRow({
   );
 }
 
+/**
+ * Marca los juegos que Vindexa ha visto de verdad en este equipo.
+ *
+ * Sólo aparece en esos. Antes se rotulaban las dos caras —«confirmado
+ * localmente» y «por confirmar»— sobre todas las carátulas, y con mil
+ * ochocientos juegos prestados eso no era información: era ruido sobre cada
+ * portada. Lo normal en un catálogo de Family es no tener la evidencia local,
+ * así que lo que merece marca es la excepción, igual que «INSTALADO» en la
+ * biblioteca.
+ */
 function FamilyAvailability({ game, compact }: { game: FamilyCatalogGame; compact: boolean }) {
-  const confirmed = game.availability === "confirmed";
+  if (game.availability !== "confirmed") return null;
   return (
-    <span className="family-availability" data-state={game.availability} data-compact={compact}>
-      {confirmed ? <IconCircleCheck aria-hidden="true" /> : <IconAlertCircle aria-hidden="true" />}
-      {confirmed ? (compact ? "Confirmado" : "Confirmado localmente") : "Por confirmar"}
+    <span
+      className="installed-marker"
+      data-compact={compact}
+      title="Vindexa ha visto este juego en tu equipo"
+    >
+      <IconCircleCheck size={12} aria-hidden="true" /> COMPROBADO
     </span>
   );
 }

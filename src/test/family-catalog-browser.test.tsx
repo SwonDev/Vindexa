@@ -102,37 +102,29 @@ describe("catálogo familiar Steam-like", () => {
     openStore.mockResolvedValue(undefined);
   });
 
-  it("expone filtro, orden y las tres vistas como controles accesibles", async () => {
-    const user = userEvent.setup();
-    const { props } = renderBrowser();
-
-    await user.click(screen.getByRole("combobox", { name: "Filtrar catálogo familiar" }));
-    await user.click(screen.getByRole("option", { name: "Confirmados localmente" }));
-    expect(props.onAvailabilityChange).toHaveBeenCalledWith("confirmed");
-
-    await user.click(screen.getByRole("combobox", { name: "Ordenar catálogo familiar" }));
-    await user.click(screen.getByRole("option", { name: "Actualizados recientemente" }));
-    expect(props.onSortChange).toHaveBeenCalledWith("updatedDesc");
-
-    expect(screen.getByRole("button", { name: "Vista familiar de cuadrícula" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await user.click(screen.getByRole("button", { name: "Vista familiar ultracompacta" }));
-    expect(props.onViewChange).toHaveBeenCalledWith("compact");
-  });
-
   it("distingue confirmación sin promover pendientes a la ficha personal", async () => {
     const user = userEvent.setup();
     const { props } = renderBrowser({ view: "list" });
 
-    expect(screen.getByText("2 juegos del grupo")).toBeVisible();
+    // Sólo el comprobado abre ficha: del otro no hay evidencia local, así que
+    // ofrecer su ficha personal sería dar por hecho que se puede jugar.
     expect(screen.getByRole("button", { name: "Abrir ficha de Confirmado" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Abrir ficha de Pendiente" })).toBeNull();
-    expect(screen.getByText("Por confirmar")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Abrir ficha de Confirmado" }));
     expect(props.onOpenConfirmed).toHaveBeenCalledWith(10);
+  });
+
+  it("marca sólo lo comprobado y no rotula el resto", () => {
+    // Con mil ochocientos juegos prestados, rotular «por confirmar» en cada
+    // carátula no informaba de nada: es el estado normal. Lo que merece marca es
+    // la excepción, como «INSTALADO» en la biblioteca.
+    const { container } = renderBrowser();
+
+    const marcas = container.querySelectorAll(".installed-marker");
+    expect(marcas).toHaveLength(1);
+    expect(marcas[0]?.textContent).toContain("COMPROBADO");
+    expect(screen.queryByText(/Por confirmar/)).toBeNull();
   });
 
   it("renderiza una fila densa por juego en vista ultracompacta", () => {

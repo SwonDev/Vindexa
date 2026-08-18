@@ -1128,6 +1128,10 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             statuses={[]}
             collections={[]}
             filterOptions={filterOptionsQuery.data}
+            familyAvailability={familyAvailability}
+            onFamilyAvailabilityChange={setFamilyAvailability}
+            familySort={familySort}
+            onFamilySortChange={setFamilySort}
           />
           <LibrarySkeleton />
         </section>
@@ -1207,6 +1211,10 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             statuses={bootstrap?.statuses ?? []}
             collections={bootstrap?.collections ?? []}
             filterOptions={filterOptionsQuery.data}
+            familyAvailability={familyAvailability}
+            onFamilyAvailabilityChange={setFamilyAvailability}
+            familySort={familySort}
+            onFamilySortChange={setFamilySort}
             onSaveView={scope.kind === "family" ? undefined : () => setNamingView(true)}
             saveViewLabel={
               activeViewIds.length > 1 ? "Guardar la combinación" : "Guardar esta vista"
