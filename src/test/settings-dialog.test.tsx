@@ -451,15 +451,54 @@ describe("ajustes y secretos", () => {
   it("comprueba actualizaciones manualmente sin prometer descarga ni firma", async () => {
     const user = userEvent.setup();
     mockedApi.checkForUpdates.mockResolvedValue({
-      status: "notConfigured",
+      status: "upToDate",
       currentVersion: "0.1.0",
-      message: "No hay endpoint de versiones ni clave pública configurados.",
+      availableVersion: "0.1.0",
+      message: "Estás en la versión 0.1.0, que es la última publicada.",
+      releasePage: "https://github.com/SwonDev/Vindexa/releases/latest",
     });
     renderSettings();
     await user.click(screen.getByRole("button", { name: "Acerca de" }));
     await user.click(screen.getByRole("button", { name: "Buscar actualizaciones" }));
 
-    expect(await screen.findByText(/No hay endpoint de versiones/)).toBeVisible();
+    expect(await screen.findByText(/es la última publicada/)).toBeVisible();
     expect(mockedApi.checkForUpdates).toHaveBeenCalledTimes(1);
+    // Al día no ofrece descargar nada: el enlace sólo aparece si hay versión
+    // nueva de verdad.
+    expect(screen.queryByRole("button", { name: /Ver la versión publicada/ })).toBeNull();
+  });
+
+  it("con versión nueva ofrece abrirla, y nunca la descarga sola", async () => {
+    const user = userEvent.setup();
+    mockedApi.checkForUpdates.mockResolvedValue({
+      status: "available",
+      currentVersion: "0.1.0",
+      availableVersion: "0.1.1",
+      message: "Hay una versión nueva: 0.1.1.",
+      releasePage: "https://github.com/SwonDev/Vindexa/releases/latest",
+    });
+    renderSettings();
+    await user.click(screen.getByRole("button", { name: "Acerca de" }));
+    await user.click(screen.getByRole("button", { name: "Buscar actualizaciones" }));
+
+    expect(await screen.findByText(/Hay una versión nueva: 0\.1\.1/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Ver la versión publicada/ })).toBeVisible();
+  });
+
+  it("no poder comprobarlo no se presenta como estar al día", async () => {
+    const user = userEvent.setup();
+    mockedApi.checkForUpdates.mockResolvedValue({
+      status: "unreachable",
+      currentVersion: "0.1.0",
+      message: "No se ha podido consultar la página de versiones.",
+      releasePage: "https://github.com/SwonDev/Vindexa/releases/latest",
+    });
+    renderSettings();
+    await user.click(screen.getByRole("button", { name: "Acerca de" }));
+    await user.click(screen.getByRole("button", { name: "Buscar actualizaciones" }));
+
+    const aviso = await screen.findByText(/No se ha podido consultar/);
+    expect(aviso).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Ver la versión publicada/ })).toBeNull();
   });
 });

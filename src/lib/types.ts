@@ -162,13 +162,22 @@ export type ShortcutAction =
 export type ShortcutBindings = Record<ShortcutAction, string>;
 
 export interface UpdateCheckResult {
-  status: "notConfigured" | "upToDate" | "available";
+  /**
+   * `unknown` cuando no hay con qué comparar o la comparación no es fiable, y
+   * `unreachable` cuando no se ha podido preguntar. Ninguno de los dos es «estás
+   * al día»: decirlo sin saberlo sería inventarlo.
+   */
+  status: "upToDate" | "available" | "unknown" | "unreachable";
   currentVersion: string;
   availableVersion?: string;
   message: string;
+  /** Dónde se descargan los instaladores. */
+  releasePage: string;
 }
 
 export interface AppBootstrap {
+  /** Versión que se está ejecutando, tal y como la declara el paquete. */
+  appVersion: string;
   stats: LibraryStats;
   statuses: StatusDefinition[];
   collections: CollectionSummary[];

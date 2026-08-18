@@ -158,7 +158,11 @@ impl Database {
         Ok(())
     }
 
-    pub fn bootstrap(&self, steam: SteamConfiguration) -> AppResult<AppBootstrap> {
+    pub fn bootstrap(
+        &self,
+        steam: SteamConfiguration,
+        app_version: String,
+    ) -> AppResult<AppBootstrap> {
         let connection = self.open()?;
         let stats = library::library_stats(&connection)?;
         let statuses = organization::list_statuses(&connection)?;
@@ -167,6 +171,7 @@ impl Database {
         let preferences = organization::load_preferences(&connection)?;
 
         Ok(AppBootstrap {
+            app_version,
             stats,
             statuses,
             collections,

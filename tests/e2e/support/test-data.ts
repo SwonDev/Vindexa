@@ -518,6 +518,7 @@ export function createTestState(scenario: VindexaScenario): TestBackendState {
           scenario === "showcase" || scenario === "scale" ? showcaseCollections : collections,
         );
   const bootstrap: AppBootstrap = {
+    appVersion: "0.1.0",
     stats: {
       totalGames: scenarioGames.length,
       installedGames: scenarioGames.filter((item) => item.installed).length,

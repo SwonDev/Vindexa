@@ -8,6 +8,7 @@ mod models;
 mod steam;
 mod store_window;
 mod stores;
+mod updates;
 
 use commands::AppState;
 use db::Database;

@@ -38,6 +38,7 @@ use crate::stores::{
     launch::ExternalGameAction,
     online::{ExternalStoreSession, SignOutReport as StoreSignOutReport, StoreLoginPrompt},
 };
+use crate::updates;
 use chrono::Utc;
 use std::future::Future;
 use std::path::PathBuf;
@@ -220,10 +221,11 @@ async fn persist_steam_sync_failure_if_current(
 }
 
 #[tauri::command]
-pub async fn bootstrap(state: State<'_, AppState>) -> AppResult<AppBootstrap> {
+pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<AppBootstrap> {
+    let app_version = app.package_info().version.to_string();
     let bootstrap = database_read(&state, move |database| {
         let steam = steam_configuration(&database)?;
-        database.bootstrap(steam)
+        database.bootstrap(steam, app_version)
     })
     .await?;
     steam::metadata_enrichment::start_worker(
@@ -2333,13 +2335,54 @@ pub async fn save_preferences(
 }
 
 #[tauri::command]
-pub fn check_for_updates(app: AppHandle) -> UpdateCheckResult {
+pub async fn check_for_updates(app: AppHandle) -> UpdateCheckResult {
     let current_version = app.package_info().version.to_string();
-    UpdateCheckResult {
-        status: "notConfigured".into(),
-        current_version,
-        available_version: None,
-        message: "Este build no tiene todavía un endpoint de versiones ni una clave pública de firma configurados. Vindexa no descargará ni instalará nada automáticamente.".into(),
+    match updates::latest_published_version().await {
+        Ok(Some(latest)) => match updates::compare(&current_version, &latest) {
+            Some(std::cmp::Ordering::Less) => UpdateCheckResult {
+                status: "available".into(),
+                current_version,
+                available_version: Some(latest.clone()),
+                release_page: updates::RELEASES_PAGE.to_string(),
+                message: format!(
+                    "Hay una versión nueva: {latest}. Vindexa no la descarga ni la instala: ábrela en la página de versiones y decide tú."
+                ),
+            },
+            Some(_) => UpdateCheckResult {
+                status: "upToDate".into(),
+                current_version: current_version.clone(),
+                available_version: Some(latest),
+                release_page: updates::RELEASES_PAGE.to_string(),
+                message: format!(
+                    "Estás en la versión {current_version}, que es la última publicada."
+                ),
+            },
+            // Una de las dos versiones no tiene la forma esperada. Decirlo es
+            // más útil que elegir una de las dos respuestas al azar.
+            None => UpdateCheckResult {
+                status: "unknown".into(),
+                current_version,
+                available_version: Some(latest),
+                release_page: updates::RELEASES_PAGE.to_string(),
+                message: "No se ha podido comparar tu versión con la última publicada.".into(),
+            },
+        },
+        // Sin ninguna versión publicada todavía no hay con qué comparar. No es
+        // un fallo: es el estado de un proyecto recién abierto.
+        Ok(None) => UpdateCheckResult {
+            status: "unknown".into(),
+            current_version,
+            available_version: None,
+            release_page: updates::RELEASES_PAGE.to_string(),
+            message: "Todavía no hay ninguna versión publicada con la que comparar.".into(),
+        },
+        Err(error) => UpdateCheckResult {
+            status: "unreachable".into(),
+            current_version,
+            available_version: None,
+            release_page: updates::RELEASES_PAGE.to_string(),
+            message: error.message,
+        },
     }
 }
 

@@ -201,11 +201,18 @@ pub struct UpdateCheckResult {
     pub current_version: String,
     pub available_version: Option<String>,
     pub message: String,
+    /// Dónde se descargan los instaladores. Viaja con el resultado para que la
+    /// interfaz no repita la dirección escrita a mano.
+    pub release_page: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppBootstrap {
+    /// Versión que se está ejecutando. Viaja desde el paquete para que la
+    /// interfaz no tenga que repetirla escrita a mano, que es como acabó
+    /// enseñando una que ya no era la suya.
+    pub app_version: String,
     pub stats: LibraryStats,
     pub statuses: Vec<StatusDefinition>,
     pub collections: Vec<CollectionSummary>,

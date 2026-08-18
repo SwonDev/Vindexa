@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Ventana principal. `opener:allow-open-url` enumera **una a una** las páginas que Vindexa puede abrir en el navegador del sistema: son sitios donde la persona genera sus propias credenciales. Cualquier otra URL se rechaza, así que añadir una entrada aquí es una decisión deliberada y visible en el diff.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     {
       "identifier": "opener:allow-open-url",
@@ -12,6 +14,9 @@
         },
         {
           "url": "https://itch.io/user/settings/api-keys"
+        },
+        {
+          "url": "https://github.com/SwonDev/Vindexa/releases/latest"
         }
       ]
     }

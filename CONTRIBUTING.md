@@ -174,8 +174,13 @@ borrador sólo cuando las tres han subido lo suyo.
 
 ### Firma de código
 
-Las releases salen **sin firmar**: no hay certificados. El flujo ya lee los secretos que harían
-falta, así que en cuanto existan no hay que tocar nada:
+Las releases salen **sin firmar**: no hay certificados. El flujo de publicación **no declara** las
+variables de firma, y es a propósito: un secreto sin configurar llega como cadena vacía, la acción
+intenta importar ese certificado vacío en el llavero y la compilación de macOS falla con «failed to
+import keychain certificate», que no dice nada de la causa real.
+
+Cuando existan los certificados, se añaden al bloque `env` del paso «Compilar y adjuntar los
+instaladores»:
 
 | Secreto | Para qué |
 | --- | --- |

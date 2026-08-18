@@ -163,7 +163,7 @@ export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: Se
             {section === "shortcuts" && <ShortcutSettings bootstrap={bootstrap} />}
             {section === "data" && <DataSettings bootstrap={bootstrap} />}
             {section === "privacy" && <PrivacySettings />}
-            {section === "about" && <AboutSettings />}
+            {section === "about" && <AboutSettings bootstrap={bootstrap} />}
           </div>
         </div>
       </DialogContent>
@@ -1043,15 +1043,20 @@ function PrivacySettings() {
     </div>
   );
 }
-function AboutSettings() {
+function AboutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string }>();
+  const [versionNueva, setVersionNueva] = useState<{ page: string }>();
   const updateCheck = useMutation({
     mutationFn: api.checkForUpdates,
-    onSuccess: (result) =>
+    onSuccess: (result) => {
+      setVersionNueva(result.status === "available" ? { page: result.releasePage } : undefined);
+      // No poder comprobarlo se enseña como error, porque no saber si estás al
+      // día no es estar al día.
       setNotice({
-        kind: result.status === "notConfigured" ? "error" : "success",
+        kind: result.status === "unreachable" ? "error" : "success",
         message: result.message,
-      }),
+      });
+    },
     onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
   });
   return (
@@ -1063,7 +1068,7 @@ function AboutSettings() {
       <dl className="about-grid">
         <div>
           <dt>Versión</dt>
-          <dd>0.1.0</dd>
+          <dd>{bootstrap?.appVersion ?? "—"}</dd>
         </div>
         <div>
           <dt>Motor</dt>
@@ -1088,9 +1093,15 @@ function AboutSettings() {
         {updateCheck.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}
         Buscar actualizaciones
       </Button>
+      {versionNueva && (
+        <Button size="sm" variant="secondary" onClick={() => openUrl(versionNueva.page)}>
+          <IconExternalLink /> Ver la versión publicada
+        </Button>
+      )}
       <p className="settings-note">
-        La comprobación es manual. Este build nunca descargará ni instalará una versión sin un
-        endpoint HTTPS y una clave pública de firma configurados.
+        La comprobación es manual y sólo mira qué versión hay publicada. Vindexa no descarga ni
+        instala nada por su cuenta: hacerlo exigiría firmar los instaladores y llevar la clave
+        pública dentro de la aplicación, y eso todavía no existe.
       </p>
       <p className="settings-note">
         Vindexa no está afiliada a Valve Corporation. Steam y sus marcas pertenecen a sus

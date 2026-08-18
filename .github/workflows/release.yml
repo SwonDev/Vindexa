@@ -115,15 +115,12 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Firma de código: la release sale sin firmar mientras no haya
-          # certificados. Los secretos están documentados en CONTRIBUTING.md; en
-          # cuanto existan, estas variables los recogen sin tocar el flujo.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Aquí NO se declaran las variables de firma de Apple. Un secreto sin
+          # configurar llega como cadena vacía, y la acción intenta importar ese
+          # certificado vacío en el llavero: la compilación de macOS falla con
+          # «failed to import keychain certificate», que no dice nada de la causa
+          # real. Cuando existan los certificados, se añaden aquí las seis
+          # variables que documenta CONTRIBUTING.md y la firma entra sola.
         with:
           tagName: ${{ needs.preparar.outputs.etiqueta }}
           releaseName: Vindexa ${{ needs.preparar.outputs.etiqueta }}
