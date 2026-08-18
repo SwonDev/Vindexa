@@ -43,6 +43,7 @@ PUBLICABLES=(
   "seguimiento-1440x900.png                 seguimiento.webp"
   "avisos-1440x900.png                      avisos.webp"
   "paleta-busqueda-1440x900.png             paleta-comandos.webp"
+  "ajustes-familia-1440x900.png             ajustes-familia.webp"
 )
 
 # Vídeos que se publican. La clave es el fragmento del directorio que Playwright

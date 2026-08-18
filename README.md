@@ -162,6 +162,8 @@ Si además tienes los clientes instalados, se leen sus manifiestos: es lo único
 que sabe qué está **descargado**, porque la API dice qué posees, no qué has
 instalado.
 
+<img src="./docs/media/ajustes-familia.webp" alt="Ajustes de Steam con el vínculo de sesión para traer el catálogo de la Familia" width="100%">
+
 **Steam Family.** El catálogo compartido se pide con los servicios que usa el
 propio cliente de Steam, autenticados con el testigo de tu sesión. La vía
 habitual —preguntar por cada miembro con una Web API Key— sólo devuelve los

@@ -36,6 +36,7 @@ quedan en `artifacts/showcase/`, que no se publica.
 | `seguimiento.webp` | Seguimiento: olvidados, casi terminados y próximos | 92 KB |
 | `avisos.webp` | Bandeja de avisos y reglas programables | 108 KB |
 | `paleta-comandos.webp` | Paleta de comandos buscando en toda la aplicación | 96 KB |
+| `ajustes-familia.webp` | Ajustes de Steam, con el vínculo de sesión para el catálogo de Family | 84 KB |
 
 Todas a 1440×936, WebP con calidad 88. Por debajo de esa calidad se ven
 artefactos en el texto de 11 px de los metadatos, que es justo lo que hay que

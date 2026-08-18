@@ -204,3 +204,34 @@ test("vitrina · deseados", async ({ app, page }) => {
   await settleArtwork(page).catch(() => undefined);
   await page.screenshot({ path: join(OUT, "deseados-1440x900.png") });
 });
+
+test("vitrina · ajustes de Steam y Familia", async ({ app, page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await app.goto();
+  await app.waitForShell();
+  await settleArtwork(page);
+
+  // Hay dos accesos a Ajustes —la barra superior y la paleta—; vale el primero.
+  await page.getByRole("button", { name: "Abrir Ajustes" }).first().click();
+  const dialogo = page.getByRole("dialog");
+  await expect(dialogo).toBeVisible();
+  await page.waitForTimeout(400);
+
+  // La sección de Steam es larga: lo que interesa comprobar —el catálogo de
+  // Familia— está al final, así que se lleva ahí el desplazamiento.
+  const panel = await dialogo.evaluate((nodo) => {
+    const candidatos = [nodo, ...nodo.querySelectorAll<HTMLElement>("*")] as HTMLElement[];
+    const desplazable = candidatos.find(
+      (elemento) =>
+        elemento.scrollHeight > elemento.clientHeight + 40 && elemento.clientHeight > 200,
+    );
+    if (!desplazable) return 0;
+    desplazable.scrollTop = desplazable.scrollHeight;
+    return desplazable.scrollTop;
+  });
+  expect(panel, "el panel de ajustes debe poder desplazarse").toBeGreaterThan(0);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(OUT, "ajustes-familia-1440x900.png") });
+
+  await expect(dialogo.getByText("Catálogo de Steam Family")).toBeVisible();
+});

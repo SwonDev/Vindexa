@@ -2063,6 +2063,26 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       }
       throw new Error("E2E_ARTWORK_OFFLINE");
     }
+    // ── Catálogo de Steam Family por sesión ────────────────────────────────
+    // El vínculo se simula ya hecho y con una lectura buena detrás: es el
+    // estado que hay que poder revisar, porque el de «sin vincular» no enseña
+    // ni el recuento ni los botones de sincronizar y olvidar.
+    if (command === "steam_family_session_status") {
+      return {
+        linked: true,
+        lastSyncAt: "2026-08-17T09:30:00Z",
+        lastAppCount: 3812,
+      };
+    }
+    if (command === "link_steam_family_session") {
+      return { linked: true };
+    }
+    if (command === "unlink_steam_family_session") {
+      return { linked: false };
+    }
+    if (command === "sync_steam_family_catalog") {
+      return { imported: 3812, unusable: 0, withoutTitle: 4, noFamily: false };
+    }
     if (command === "import_local_steam") {
       return { steamPath: "/e2e/steam", librariesScanned: 0, importedGames: 0, updatedGames: 0 };
     }
