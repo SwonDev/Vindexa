@@ -7,7 +7,7 @@
 Steam, Epic, GOG e itch.io en una sola aplicación de escritorio.
 Sin cuenta, sin servidor, sin telemetría: tus datos se quedan en tu equipo.
 
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-0.1.1-5CAAC1?style=for-the-badge&labelColor=171D25)](https://github.com/SwonDev/Vindexa/releases/latest)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-0.1.2-5CAAC1?style=for-the-badge&labelColor=171D25)](https://github.com/SwonDev/Vindexa/releases/latest)
 [![Plataformas](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-171D25?style=for-the-badge&labelColor=171D25)](#instalación)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-A4D007?style=for-the-badge&labelColor=171D25)](./LICENSE)
 [![Integración continua](https://img.shields.io/github/actions/workflow/status/SwonDev/Vindexa/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=171D25&color=5CAAC1)](https://github.com/SwonDev/Vindexa/actions/workflows/ci.yml)

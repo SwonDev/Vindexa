@@ -6,6 +6,20 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+## [0.1.2] · 2026-08-18
+
+### Corregido
+
+- **El título de una columna del planificador se partía en dos líneas.** «A continuación» no
+  cabía en su cabecera de 42 px y se salía de la fila, descolocando el recuento, el límite y el
+  botón de añadir respecto a las demás columnas. Ahora se recorta con puntos suspensivos y el
+  nombre completo queda en el rótulo del elemento.
+- **La compilación fallaba en Windows y en Linux.** Al retirar el permiso de código muerto a
+  nivel de módulo de la sesión de deseados, el margen de espera y el error del evaluador
+  quedaron sin llamador fuera de macOS: sólo los usa la implementación de WKWebView, y en las
+  otras plataformas no hay evaluador al que esperar. Es el mismo patrón que ya se corrigió en el
+  bloqueador de contenido.
+
 ## [0.1.1] · 2026-08-18
 
 ### Añadido
