@@ -6,7 +6,7 @@ import { LibrarySidebar } from "@/features/library/LibrarySidebar";
 import type { AppBootstrap } from "@/lib/types";
 
 const bootstrap = {
-  stats: { totalGames: 2, installedGames: 1 },
+  stats: { totalGames: 2, installedGames: 1, familyCatalogGames: 17 },
   statuses: [
     {
       id: "playing",
@@ -29,7 +29,6 @@ describe("barra lateral de biblioteca", () => {
         <LibrarySidebar
           bootstrap={bootstrap}
           scope={{ kind: "all", label: "Todos los juegos" }}
-          familyCount={17}
           onScopeChange={onScopeChange}
           onCreateCollection={vi.fn()}
         />
@@ -44,8 +43,12 @@ describe("barra lateral de biblioteca", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: /Jugando/ })).not.toBeInTheDocument();
 
+    // El recuento del catálogo de Family se ve **sin** haber entrado: sale del
+    // arranque. Cuando dependía del listado del propio ámbito, había que entrar
+    // para ver el número que te dice que hay algo dentro.
+    expect(screen.getByText("17")).toBeVisible();
+
     await user.click(screen.getByRole("button", { name: /Steam Family/ }));
     expect(onScopeChange).toHaveBeenCalledWith({ kind: "family", label: "Steam Family" });
-    expect(screen.getByText("17")).toBeVisible();
   });
 });

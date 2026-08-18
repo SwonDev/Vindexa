@@ -2393,3 +2393,78 @@ mod durability_tests {
         assert!(has_game(&active, 10));
     }
 }
+
+#[cfg(test)]
+mod pruebas_del_recuento_de_familia {
+    use super::{library, migrations, seed_defaults};
+    use rusqlite::Connection;
+
+    fn base() -> Connection {
+        let mut connection = Connection::open_in_memory().expect("abrir SQLite en memoria");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("activar claves foráneas");
+        migrations::migrate(&mut connection).expect("migrar");
+        seed_defaults(&mut connection).expect("sembrar");
+        connection
+    }
+
+    fn juego_propio(connection: &Connection, app_id: u32) {
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, playtime_minutes) VALUES (?1, ?2, 0)",
+                rusqlite::params![app_id, format!("Juego {app_id}")],
+            )
+            .expect("insertar juego");
+        connection
+            .execute(
+                "INSERT INTO game_personal(app_id, status_id) VALUES (?1, 'unclassified')",
+                [app_id],
+            )
+            .expect("insertar ficha personal");
+    }
+
+    fn juego_de_familia(connection: &Connection, app_id: u32) {
+        connection
+            .execute(
+                "INSERT INTO family_catalog_games(app_id, title, availability)
+                 VALUES (?1, ?2, 'unknown')",
+                rusqlite::params![app_id, format!("Prestado {app_id}")],
+            )
+            .expect("insertar juego de familia");
+    }
+
+    #[test]
+    fn el_catalogo_de_familia_se_cuenta_entero_y_aparte_de_lo_propio() {
+        // La cifra tiene que ser la misma que se encuentra al entrar en «Steam
+        // Family», incluidos los que además se poseen: un recuento que no
+        // coincide con lo que hay dentro es un fallo. Y no se suma a los
+        // propios, porque tener un juego a la vista no es tenerlo.
+        let connection = base();
+        juego_propio(&connection, 10);
+        juego_propio(&connection, 20);
+        juego_de_familia(&connection, 20); // propio **y** en el catálogo
+        juego_de_familia(&connection, 30);
+        juego_de_familia(&connection, 40);
+
+        let stats = library::library_stats(&connection).expect("estadísticas");
+
+        assert_eq!(stats.total_games, 2, "los propios son dos");
+        assert_eq!(
+            stats.family_catalog_games, 3,
+            "el catálogo entero, como lo enseña su pantalla"
+        );
+    }
+
+    #[test]
+    fn sin_catalogo_de_familia_la_cifra_es_cero_y_no_una_ausencia() {
+        // Cero es una respuesta: significa que no hay nada prestado. La interfaz
+        // la usa para no enseñar un recuento vacío junto a «Steam Family».
+        let connection = base();
+        juego_propio(&connection, 10);
+
+        let stats = library::library_stats(&connection).expect("estadísticas");
+
+        assert_eq!(stats.family_catalog_games, 0);
+    }
+}

@@ -133,6 +133,13 @@ pub struct LibraryStats {
     /// coincidir con lo que se ve. Este recuento existe para que el archivado
     /// nunca sea un agujero negro y la interfaz pueda ofrecer verlos.
     pub archived_games: i64,
+    /// Juegos visibles en el catálogo de Steam Family.
+    ///
+    /// No se suman a `total_games`, porque catálogo visible no es licencia y
+    /// mezclarlos diría que se tienen. Pero el recuento viaja siempre: sin él
+    /// la barra lateral enseñaba «Steam Family» sin número y parecía que esos
+    /// juegos no estaban, cuando estaban a un clic.
+    pub family_catalog_games: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

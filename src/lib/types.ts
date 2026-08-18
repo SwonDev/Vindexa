@@ -138,6 +138,14 @@ export interface LibraryStats {
    * sea un agujero negro y la interfaz pueda ofrecer verlos.
    */
   archivedGames: number;
+  /**
+   * Juegos visibles en el catálogo de Steam Family.
+   *
+   * No están sumados en `totalGames`, porque catálogo visible no es licencia.
+   * Pero la cifra viaja siempre: sin ella la barra lateral enseñaba «Steam
+   * Family» sin número y parecía que esos juegos no estaban.
+   */
+  familyCatalogGames: number;
 }
 
 export interface AppPreferences {

@@ -104,7 +104,12 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     COALESCE(SUM(CASE WHEN p.status_id = 'backlog' THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN p.tracking = 1 THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(g.playtime_minutes), 0),
-                    (SELECT COUNT(*) FROM game_archive)
+                    (SELECT COUNT(*) FROM game_archive),
+                    -- El catálogo entero, que es lo que se encuentra al entrar
+                    -- en «Steam Family». Contar sólo los que no se poseen daría
+                    -- una cifra distinta de la que enseña esa pantalla, y un
+                    -- número que no coincide con lo que hay dentro es un fallo.
+                    (SELECT COUNT(*) FROM family_catalog_games)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
@@ -121,6 +126,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     tracked_games: row.get(4)?,
                     total_playtime_minutes: row.get(5)?,
                     archived_games: row.get(6)?,
+                    family_catalog_games: row.get(7)?,
                 })
             },
         )

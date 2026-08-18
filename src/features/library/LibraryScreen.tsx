@@ -1110,7 +1110,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           scope={scope}
           onScopeChange={changeScope}
           onCreateCollection={() => setCollectionEditorOpen(true)}
-          familyCount={familyQuery.data ? familyTotal : undefined}
         />
         <section className="library-main">
           <LibraryToolbar
@@ -1142,7 +1141,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           scope={scope}
           onScopeChange={changeScope}
           onCreateCollection={() => setCollectionEditorOpen(true)}
-          familyCount={familyQuery.data ? familyTotal : undefined}
         />
         <section className="library-main">
           <div className="screen-error">
@@ -1188,7 +1186,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           scope={scope}
           onScopeChange={changeScope}
           onCreateCollection={() => setCollectionEditorOpen(true)}
-          familyCount={familyQuery.data ? familyTotal : undefined}
           draggingGames={Boolean(activeDrag)}
           collectionReorderEnabled
         />

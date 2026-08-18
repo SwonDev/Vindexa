@@ -674,7 +674,19 @@ export function AppShell() {
         <footer className="statusbar">
           <span>
             {bootstrap
-              ? `Biblioteca · ${bootstrap.stats.totalGames.toLocaleString("es-ES")} juegos · ${bootstrap.stats.installedGames.toLocaleString("es-ES")} instalados`
+              ? [
+                  `Biblioteca · ${bootstrap.stats.totalGames.toLocaleString("es-ES")} juegos`,
+                  `${bootstrap.stats.installedGames.toLocaleString("es-ES")} instalados`,
+                  // El catálogo de Family va aparte porque tenerlo a la vista no
+                  // es tenerlo en propiedad. Se nombra aquí igualmente: es la
+                  // cifra que falta al comparar con el cliente de Steam, y sin
+                  // ella parece que esos juegos no están.
+                  ...(bootstrap.stats.familyCatalogGames > 0
+                    ? [
+                        `${bootstrap.stats.familyCatalogGames.toLocaleString("es-ES")} en Steam Family`,
+                      ]
+                    : []),
+                ].join(" · ")
               : "Preparando biblioteca local…"}
           </span>
           <span className="statusbar__center">

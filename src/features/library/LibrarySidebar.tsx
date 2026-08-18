@@ -33,7 +33,6 @@ interface LibrarySidebarProps {
   scope: LibraryScope;
   onScopeChange: (scope: LibraryScope) => void;
   onCreateCollection: () => void;
-  familyCount?: number | undefined;
   draggingGames?: boolean | undefined;
   collectionReorderEnabled?: boolean | undefined;
 }
@@ -43,7 +42,6 @@ export function LibrarySidebar({
   scope,
   onScopeChange,
   onCreateCollection,
-  familyCount,
   draggingGames = false,
   collectionReorderEnabled = false,
 }: LibrarySidebarProps) {
@@ -74,7 +72,11 @@ export function LibrarySidebar({
           active={selected("family")}
           icon={IconUsersGroup}
           label="Steam Family"
-          count={familyCount}
+          // El recuento sale del arranque, no del listado del propio ámbito.
+          // Antes dependía de una consulta que sólo se ejecuta cuando ya estás
+          // dentro: había que entrar para ver el número que te dice que hay algo
+          // dentro, así que parecía que no había nada.
+          count={bootstrap?.stats.familyCatalogGames}
           onClick={() => onScopeChange({ kind: "family", label: "Steam Family" })}
         />
       </div>
