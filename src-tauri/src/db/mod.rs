@@ -2396,7 +2396,7 @@ mod durability_tests {
 
 #[cfg(test)]
 mod pruebas_del_recuento_de_familia {
-    use super::{library, migrations, seed_defaults};
+    use super::{library, migrations, organization, seed_defaults};
     use rusqlite::Connection;
 
     fn base() -> Connection {
@@ -2498,6 +2498,59 @@ mod pruebas_del_recuento_de_familia {
             )
             .expect("leer la portada");
         assert!(url.ends_with("library_600x900_2x.jpg"), "quedó en {url}");
+    }
+
+    #[test]
+    fn el_recuento_de_un_estado_coincide_con_lo_que_enseña_al_pulsarlo() {
+        // Un número en la barra lateral que lleva a «ningún juego coincide» es
+        // peor que no tener número. Pasó al dar ficha personal al catálogo de
+        // Family: el recuento los contaba y el listado los escondía.
+        let connection = base();
+        juego_propio(&connection, 10);
+        juego_prestado(&connection, 20);
+        juego_prestado(&connection, 30);
+
+        let estados = organization::list_statuses(&connection).expect("estados");
+        let sin_clasificar = estados
+            .iter()
+            .find(|estado| estado.id == "unclassified")
+            .expect("existe el estado por defecto");
+
+        let request = crate::models::GameListRequest {
+            status_id: Some("unclassified".to_string()),
+            ..Default::default()
+        };
+        let listado = library::list_games(&connection, &request, None).expect("listar");
+
+        assert_eq!(
+            sin_clasificar.game_count as usize,
+            listado.items.len(),
+            "la barra lateral ofrece {} y el listado enseña {}",
+            sin_clasificar.game_count,
+            listado.items.len()
+        );
+        assert_eq!(
+            sin_clasificar.game_count, 1,
+            "sólo el propio está en la biblioteca"
+        );
+    }
+
+    #[test]
+    fn el_ambito_de_familia_sí_enseña_los_prestados_por_estado() {
+        // Y clasificar un juego prestado tiene que servir de algo: dentro de su
+        // ámbito, el filtro por estado lo encuentra.
+        let connection = base();
+        juego_prestado(&connection, 20);
+
+        let request = crate::models::GameListRequest {
+            status_id: Some("unclassified".to_string()),
+            ownership_source: Some("family_shared".to_string()),
+            ..Default::default()
+        };
+        let listado = library::list_games(&connection, &request, None).expect("listar");
+
+        assert_eq!(listado.items.len(), 1);
+        assert_eq!(listado.items[0].app_id, 20);
     }
 
     #[test]

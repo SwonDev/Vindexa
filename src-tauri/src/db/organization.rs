@@ -43,9 +43,20 @@ struct GameFacts {
 
 pub fn list_statuses(connection: &Connection) -> AppResult<Vec<StatusDefinition>> {
     let mut statement = connection.prepare(
-        "SELECT s.id, s.name, s.color, s.position, s.built_in, COUNT(p.app_id)
+        // Las mismas dos exclusiones que aplica `library::list_games` por
+        // defecto: los juegos prestados sin confirmar y los archivados no están
+        // en la biblioteca, así que tampoco pueden estar en sus recuentos.
+        // Cuando el catálogo de Family pasó a tener ficha personal, esta
+        // consulta empezó a contarlo y la barra ofrecía mil setecientos juegos
+        // que el listado escondía.
+        "SELECT s.id, s.name, s.color, s.position, s.built_in,
+                COUNT(CASE WHEN g.app_id IS NOT NULL THEN 1 END)
            FROM statuses s
       LEFT JOIN game_personal p ON p.status_id = s.id
+      LEFT JOIN games g ON g.app_id = p.app_id
+                       AND NOT (g.ownership_source = 'family_shared'
+                                AND g.family_availability <> 'confirmed')
+                       AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)
        GROUP BY s.id
        ORDER BY s.position ASC, s.name COLLATE NOCASE ASC",
     )?;
@@ -152,10 +163,16 @@ pub fn reorder_statuses(connection: &mut Connection, ordered_ids: &[String]) -> 
 
 pub fn list_collections(connection: &Connection) -> AppResult<Vec<CollectionSummary>> {
     let mut statement = connection.prepare(
+        // Mismo criterio que en los estados: la cifra tiene que coincidir con lo
+        // que se encuentra al pulsarla.
         "SELECT c.id, c.name, c.description, c.color, c.icon, c.kind, c.match_mode,
-                c.position, COUNT(cg.app_id)
+                c.position, COUNT(CASE WHEN g.app_id IS NOT NULL THEN 1 END)
            FROM collections c
       LEFT JOIN collection_games cg ON cg.collection_id = c.id
+      LEFT JOIN games g ON g.app_id = cg.app_id
+                       AND NOT (g.ownership_source = 'family_shared'
+                                AND g.family_availability <> 'confirmed')
+                       AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)
        GROUP BY c.id
        ORDER BY c.position ASC, c.name COLLATE NOCASE ASC",
     )?;
