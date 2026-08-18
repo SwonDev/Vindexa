@@ -141,7 +141,7 @@ Hay dos vídeos más —el cambio de densidad y la ficha de un juego— en
 
 | Tienda | Cómo se conecta | Qué llega |
 | --- | --- | --- |
-| **Steam** | Manifiestos locales, o cuenta vinculada con Web API Key | Biblioteca completa, tiempos de juego, logros, Steam Family |
+| **Steam** | Manifiestos locales, cuenta vinculada con Web API Key, o la sesión del navegador integrado | Biblioteca completa, tiempos de juego, logros y el catálogo entero de tu Familia |
 | **Epic Games** | Inicio de sesión dentro de Vindexa | Catálogo completo de la cuenta |
 | **GOG** | Inicio de sesión dentro de Vindexa | Catálogo completo de la cuenta |
 | **itch.io** | Clave de API personal | Catálogo completo de la cuenta |
@@ -161,6 +161,13 @@ la interfaz.
 Si además tienes los clientes instalados, se leen sus manifiestos: es lo único
 que sabe qué está **descargado**, porque la API dice qué posees, no qué has
 instalado.
+
+**Steam Family.** El catálogo compartido se pide con los servicios que usa el
+propio cliente de Steam, autenticados con el testigo de tu sesión. La vía
+habitual —preguntar por cada miembro con una Web API Key— sólo devuelve los
+juegos de quien tenga su biblioteca pública, que casi nunca es el caso: por eso
+otras herramientas enseñan una fracción del préstamo familiar. De los demás
+miembros no se guarda nada: ni nombre, ni avatar, ni quién presta qué.
 
 > [!NOTE]
 > Los juegos de Epic, GOG e itch.io viven hoy en el panel de tiendas, con
@@ -293,9 +300,12 @@ descubras.
   biblioteca vacía.
 - El importador local conoce los juegos instalados y los metadatos del
   manifiesto, pero sin Web API no puede deducir tiempos de juego ni perfil.
-- Steam Family depende del grupo detectable y de la visibilidad de sus miembros.
-  **Catálogo visible no es lo mismo que licencia**: sólo la evidencia local se
-  incorpora como compartida.
+- **Catálogo de Family visible no es lo mismo que licencia**: lo que llega por la
+  sesión entra como disponibilidad *por confirmar*, y sólo la evidencia local
+  —un manifiesto en tu disco— la confirma. Un juego del catálogo sin nombre
+  publicado no se guarda, y se cuenta aparte.
+- El testigo de sesión **caduca**. Cuando lo hace, Vindexa lo olvida y pide
+  volver a vincular en lugar de enseñar un catálogo viejo como si fuera de hoy.
 - Desinstalar es una **solicitud validada** al cliente de la tienda. Vindexa no
   borra archivos ni afirma que la tienda haya terminado.
 - El navegador integrado sólo navega por los hosts oficiales de las cuatro

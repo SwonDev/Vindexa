@@ -14,6 +14,17 @@ enumerados al final del README.
 
 ### Añadido
 
+- **Catálogo completo de Steam Family.** El cliente de Steam enseña los juegos propios más los
+  del préstamo familiar; Vindexa sólo veía los propios porque pedía el catálogo compartido con
+  una Web API Key, y eso únicamente devuelve lo de los miembros que tengan su biblioteca
+  pública. Ahora se piden los mismos servicios que usa el cliente, autenticados con el testigo
+  de la sesión abierta en el navegador integrado. El testigo vive en el llavero del sistema, no
+  se registra ni se muestra, y cuando caduca se olvida y la pantalla pide volver a vincular.
+- **Precios de la lista de deseados por lotes.** Se preguntaban de uno en uno con tres cuartos
+  de segundo entre peticiones: mil quinientos deseados eran casi veinte minutos. Ahora son cien
+  por petición y unos segundos.
+- **Tira de ofertas vigentes en Deseados**, de mayor descuento a menor, con las que ya cumplen
+  el precio objetivo marcadas y aviso de precio caducado.
 - **Instaladores para macOS, Windows y Linux.** La integración continua compila y prueba el
   backend en los tres sistemas —el puente con el motor web es distinto en cada uno y un fallo
   ahí no se ve hasta compilar allí— y al etiquetar una versión adjunta los tres instaladores a
