@@ -23,6 +23,13 @@ enumerados al final del README.
 - **Precios de la lista de deseados por lotes.** Se preguntaban de uno en uno con tres cuartos
   de segundo entre peticiones: mil quinientos deseados eran casi veinte minutos. Ahora son cien
   por petición y unos segundos.
+- **«Buscar actualizaciones» comprueba de verdad qué versión hay publicada.** Antes devolvía
+  siempre «no configurado» porque no había dónde mirar. Sigue sin descargar ni instalar nada por
+  su cuenta —eso exigiría firmar los instaladores y llevar la clave pública dentro— pero avisa y
+  ofrece abrir la página. «No he podido comprobarlo» y «no hay con qué comparar» son estados
+  propios: ninguno se presenta como «estás al día».
+- **«Descartar todos» en la bandeja de avisos**, que no es lo mismo que marcar todo como leído:
+  lo primero saca el aviso de la vista de pendientes, lo segundo sólo le quita el resalte.
 - **Tira de ofertas vigentes en Deseados**, de mayor descuento a menor, con las que ya cumplen
   el precio objetivo marcadas y aviso de precio caducado.
 - **Instaladores para macOS, Windows y Linux.** La integración continua compila y prueba el
@@ -139,6 +146,10 @@ enumerados al final del README.
 
 ### Corregido
 
+- **La tabla de avisos crecía sin tope** porque nada la podaba. El arranque borra ahora los ya
+  descartados de hace más de tres meses.
+- **La versión que enseñaba «Acerca de» estaba escrita a mano** y decía 0.1.0 pasara lo que
+  pasara. Ahora llega desde el paquete.
 - **La ficha de un juego ya no repite la petición a la tienda.** La cola de fondo pedía la
   ficha completa y descartaba la mitad: la descripción, las capturas y los vídeos venían en la
   misma respuesta y se tiraban, así que al abrir el juego había que volver a preguntar. Ese era

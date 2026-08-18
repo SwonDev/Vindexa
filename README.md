@@ -320,8 +320,9 @@ descubras.
   —aislamiento por host y por almacén de datos, descargas y ventanas emergentes
   denegadas, y ninguna vía de comunicación con la aplicación—, pero la publicidad
   se carga.
-- **Buscar actualizaciones** no descarga nada: falta el punto de publicación y la
-  clave pública de firma.
+- **Buscar actualizaciones** comprueba qué versión hay publicada, pero **no
+  descarga ni instala nada**: hacerlo exigiría firmar los instaladores y llevar
+  la clave pública dentro de la aplicación.
 - Steam Deck aparece como **Sin datos** mientras no exista una API pública
   documentada que se pueda consumir de forma fiable.
 - Los instaladores no están firmados ni notarizados.
