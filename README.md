@@ -1,20 +1,198 @@
-# Vindexa
+<div align="center">
 
-Vindexa es una aplicación de escritorio local-first para importar, ordenar, planificar y
-seguir una biblioteca personal de Steam sin entregar a Steam la organización privada del
-usuario.
+# VINDEXA
+
+**Tu biblioteca de juegos, organizada de verdad.**
+
+Steam, Epic, GOG e itch.io en una sola aplicación de escritorio.
+Sin cuenta, sin servidor, sin telemetría: tus datos se quedan en tu equipo.
+
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-0.1.0-5CAAC1?style=for-the-badge&labelColor=171D25)](https://github.com/SwonDev/Vindexa/releases/latest)
+[![Plataformas](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-171D25?style=for-the-badge&labelColor=171D25)](#instalación)
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-A4D007?style=for-the-badge&labelColor=171D25)](./LICENSE)
+[![Integración continua](https://img.shields.io/github/actions/workflow/status/SwonDev/Vindexa/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=171D25&color=5CAAC1)](https://github.com/SwonDev/Vindexa/actions/workflows/ci.yml)
+
+<img src="./docs/media/biblioteca-rejilla.webp" alt="La biblioteca de Vindexa en cuadrícula, con las carátulas oficiales de los juegos, la barra lateral de estados y colecciones, y la barra de estado inferior" width="100%">
+
+</div>
+
+## El problema
+
+Una biblioteca de tres mil juegos no es una biblioteca: es un archivo. Steam sabe
+cuáles tienes y cuántas horas les has echado, pero no sabe cuál dejaste a medias,
+cuál te apetece este viernes, ni cuál compraste en oferta hace cuatro años y
+sigue sin abrir. Y si además compras en Epic, en GOG o en itch.io, ni siquiera
+hay un sitio donde estén todos.
+
+Vindexa es ese sitio. No es un launcher más ni un escaparate: es un índice
+personal para **decidir qué jugar, seguirlo y terminarlo**.
+
+<div align="center">
+
+<video src="https://github.com/SwonDev/Vindexa/raw/main/docs/media/recorrido-biblioteca.mp4" poster="./docs/media/recorrido-biblioteca-cartel.webp" width="100%" controls muted loop playsinline>
+  <img src="./docs/media/recorrido-biblioteca-cartel.webp" alt="Recorrido desplazándose por la biblioteca en cuadrícula" width="100%">
+  <a href="https://github.com/SwonDev/Vindexa/raw/main/docs/media/recorrido-biblioteca.mp4">Ver el recorrido por la biblioteca (MP4, 9 s)</a>
+</video>
+
+<em>Miles de juegos, desplazamiento sin tirones, arte oficial en caché local.</em>
+
+</div>
+
+## Qué hace
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Una biblioteca que aguanta el tamaño
+
+Cuadrícula, lista o ultracompacta, siempre virtualizada. Búsqueda de texto
+completo, filtros combinables, diecisiete criterios de orden y agrupación por
+estado, género, año, estudio o antigüedad de la última sesión. Cada vista
+recuerda su búsqueda, sus filtros y dónde te habías quedado.
+
+</td>
+<td width="50%" valign="top">
+
+<img src="./docs/media/biblioteca-lista.webp" alt="Vista de lista con progreso, tiempo jugado y fecha de la última sesión por juego" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<img src="./docs/media/ficha-juego.webp" alt="Ficha de un juego con su imagen de cabecera, tiempo jugado, logros, compatibilidad y descripción oficial" width="100%">
+
+</td>
+<td width="50%" valign="top">
+
+### Una ficha que no se inventa nada
+
+Arte oficial, descripción de la tienda, logros, compatibilidad con mando,
+protección anticopia, idiomas y espacio en disco. Lo que la tienda no ha dicho
+aparece como **sin confirmar**, con el motivo exacto. Nunca como un cero ni como
+un hueco en blanco.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Prioridad explicable
+
+Vindexa te dice qué jugar ahora y **por qué**: qué señales mueven la puntuación
+de cada juego y cuánto aporta cada una. Terminar algo le baja la prioridad
+aunque sigas jugándolo. Y si fijas una prioridad a mano, el cálculo no la pisa.
+
+</td>
+<td width="50%" valign="top">
+
+<img src="./docs/media/ficha-prioridad.webp" alt="Panel que desglosa la prioridad de un juego señal por señal" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<img src="./docs/media/deseados.webp" alt="Lista de deseados repartida en cubos de intención, con precios, descuentos y distancia al precio objetivo" width="100%">
+
+</td>
+<td width="50%" valign="top">
+
+### Deseados con precio y objetivo
+
+Cuatro cubos de intención —comprar ya, esperando oferta, considerando,
+vigilando—, precio objetivo por juego y aviso cuando la tienda baja del umbral.
+Los importes de monedas distintas nunca se suman: sumarlos sería inventar un
+total que no existe.
+
+</td>
+</tr>
+</table>
+
+### Y además
+
+| | |
+| --- | --- |
+| **Planificador** | Kanban, cola, semana y mes, con objetivos, capacidad y límites de trabajo en curso. |
+| **Colecciones** | Manuales o inteligentes, con reglas validadas y vista previa antes de guardar. |
+| **Seguimiento** | Olvidados, casi terminados, próximos lanzamientos y publicaciones recientes. |
+| **Avisos** | Reglas programables sobre lo que Vindexa ya observa, con bandeja y deduplicación. |
+| **Modo sofá** | Interfaz para mirar a dos metros, navegable con mando, que detecta si el juego es compatible con tu sistema antes de ofrecerte instalarlo. |
+| **Paleta de comandos** | `⌘K` y ya está: juegos, secciones, vistas y acciones. |
+| **Navegador integrado** | Las tiendas oficiales en una ventana aislada, con bloqueo de publicidad y rastreo. |
+| **Deshacer de verdad** | Una sola pila para arrastres, reordenaciones y ediciones. `⌘Z` y vuelve. |
+
+<div align="center">
+
+<video src="https://github.com/SwonDev/Vindexa/raw/main/docs/media/paleta-comandos.mp4" poster="./docs/media/paleta-comandos-cartel.webp" width="100%" controls muted loop playsinline>
+  <img src="./docs/media/paleta-comandos-cartel.webp" alt="La paleta de comandos filtrando resultados mientras se escribe" width="100%">
+  <a href="https://github.com/SwonDev/Vindexa/raw/main/docs/media/paleta-comandos.mp4">Ver la paleta de comandos en marcha (MP4, 9 s)</a>
+</video>
+
+<em>La paleta de comandos busca en toda la aplicación mientras escribes.</em>
+
+Hay dos vídeos más —el cambio de densidad y la ficha de un juego— en
+[`docs/media`](./docs/media/README.md).
+
+</div>
+
+## Las tiendas
+
+| Tienda | Cómo se conecta | Qué llega |
+| --- | --- | --- |
+| **Steam** | Manifiestos locales, o cuenta vinculada con Web API Key | Biblioteca completa, tiempos de juego, logros, Steam Family |
+| **Epic Games** | Inicio de sesión dentro de Vindexa | Catálogo completo de la cuenta |
+| **GOG** | Inicio de sesión dentro de Vindexa | Catálogo completo de la cuenta |
+| **itch.io** | Clave de API personal | Catálogo completo de la cuenta |
+
+El inicio de sesión ocurre **en la página de la tienda**, dentro de una ventana
+del navegador integrado que no tiene acceso a la aplicación. Vindexa recoge el
+código de autorización por su cuenta: no hay nada que copiar ni pegar. El flujo
+es el mismo que usan [Legendary](https://github.com/derrod/legendary) y
+[gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl), publicados en
+abierto desde hace años.
+
+Los testigos de sesión viven en el almacén seguro del sistema —Llavero en macOS,
+Credential Manager en Windows, Secret Service en Linux— y **en ningún otro
+sitio**: nunca en SQLite, ni en un fichero, ni en una copia de seguridad, ni en
+la interfaz.
+
+Si además tienes los clientes instalados, se leen sus manifiestos: es lo único
+que sabe qué está **descargado**, porque la API dice qué posees, no qué has
+instalado.
+
+> [!NOTE]
+> Los juegos de Epic, GOG e itch.io viven hoy en el panel de tiendas, con
+> emparejado corregible y arranque directo. Todavía no se mezclan con la
+> biblioteca principal. Es lo siguiente.
+
+## Instalación
+
+Descarga el instalador de tu sistema en la [última
+versión](https://github.com/SwonDev/Vindexa/releases/latest):
+
+| Sistema | Archivo |
+| --- | --- |
+| **macOS** (Apple Silicon e Intel) | `Vindexa_x.y.z_universal.dmg` |
+| **Windows** | `Vindexa_x.y.z_x64-setup.exe` o `Vindexa_x.y.z_x64_en-US.msi` |
+| **Linux** | `Vindexa_x.y.z_amd64.AppImage` o `Vindexa_x.y.z_amd64.deb` |
 
 > [!IMPORTANT]
-> Vindexa está en versión `0.1.0` y todavía no es una distribución firmada con Developer ID
-> ni notarizada. El bundle debug usa una firma ad hoc verificable para evaluación local; la
-> instalación y la
-> persistencia en Bazzite deben verificarse en una máquina Bazzite real antes de declarar
-> soporte de producción.
+> Los instaladores **todavía no van firmados**: no hay certificado de Developer
+> ID ni de Authenticode. macOS y Windows avisarán la primera vez. En
+> [INSTALL.md](./INSTALL.md) está explicado cómo continuar y por qué.
 
-## Inicio rápido
+Al abrirla por primera vez la aplicación crea su base de datos y no muestra
+ningún juego. Vindexa **no incluye catálogo de demostración ni carátulas
+falsas**: un estado vacío significa exactamente que todavía no has importado
+nada. Desde **Ajustes → Steam** puedes leer tu instalación local sin necesidad de
+cuenta ni de clave, o vincular la cuenta para traer tiempos de juego y logros.
 
-Requisitos: Node.js con Corepack, `pnpm`, Rust estable y las dependencias de sistema de
-[Tauri 2](https://v2.tauri.app/start/prerequisites/) para el sistema anfitrión.
+## Desarrollo
+
+Necesitas Node.js con Corepack, `pnpm`, Rust estable y las
+[dependencias de sistema de Tauri 2](https://v2.tauri.app/start/prerequisites/).
 
 ```bash
 corepack enable
@@ -22,183 +200,122 @@ pnpm install --frozen-lockfile --ignore-scripts
 pnpm tauri dev
 ```
 
-La primera apertura crea la base SQLite y sus migraciones. Para cargar juegos reales, usa
-una de estas rutas:
-
-1. Abre **Ajustes → Steam → Explorar bibliotecas locales** para leer los manifiestos de la
-   instalación local de Steam. No requiere cuenta ni Web API Key.
-2. Pulsa **Continuar con Steam** para vincular el SteamID64 mediante el navegador oficial.
-3. Si todavía no tienes una clave, usa **Obtener una Web API Key** para abrir la página
-   oficial de Steam. Al vincular una cuenta, **Guardar y sincronizar** conserva la clave y
-   ejecuta inmediatamente una sincronización; también puedes usar **Sincronizar ahora**.
-
-Vindexa no incluye juegos de demostración ni portadas falsas. Un estado vacío indica que
-todavía no se ha importado una biblioteca real.
-
-## Qué incluye la aplicación
-
-- Biblioteca paginada y virtualizada en cuadrícula o lista, con búsqueda FTS5, filtros
-  combinables y 17 órdenes similares a Steam, persistentes.
-- Catálogo separado de Steam Family, con disponibilidad por confirmar o confirmada
-  localmente y sin conservar identidad de otros miembros.
-- Ficha inmersiva con hero oficial, parallax desactivable por accesibilidad, descripción,
-  metadatos enriquecidos progresivamente, logros explícitos y feedback recuperable.
-- Cola persistente de metadatos que prioriza juegos visibles e instalados, limita la red,
-  deduplica trabajos y respeta TTL, `Retry-After` y backoff sin frenar la biblioteca.
-- Organización personal con estado, progreso, prioridad, valoración, fechas, etiquetas,
-  sesiones, checkpoint, próxima acción, notas y seguimiento.
-- Selección múltiple, acciones masivas y drag and drop a estados/colecciones manuales con
-  teclado, transacción y deshacer seguro.
-- Planificador persistente con Kanban, cola, semana, mes, objetivos, capacidad y límites
-  WIP.
-- Colecciones manuales e inteligentes respaldadas por reglas validadas en Rust y vista
-  previa antes de guardar, con mosaico de portadas y detalle en la misma pantalla.
-- Listas curadas: selecciones editoriales propias con orden manual, nota y destacado por
-  entrada, independientes de las colecciones.
-- Lista de deseados en cuatro cubos de intención, con precio objetivo agregado por moneda y
-  vídeos por juego. El importe se presenta como «al menos» cuando hay entradas sin precio, y
-  nunca se suman monedas distintas.
-- Gestión de contenido adicional por juego. La propiedad se deriva del manifiesto local: lo
-  que no puede demostrarse aparece como «sin confirmar», con el motivo exacto, nunca como
-  ausente.
-- Prioridad dinámica explicable: terminar un juego baja su puntuación aunque se siga jugando,
-  y la ficha muestra qué señales la mueven y cuánto aporta cada una. Una prioridad manual
-  anclada nunca la pisa el cálculo.
-- Marca de juegos sin DRM derivada de señales oficiales, con su evidencia. Es un dato de
-  ficha: no aparece sobre las carátulas.
-- Tiendas externas en Ajustes: detección local de Epic Games Store y GOG leyendo solo los
-  ficheros que esos clientes ya escriben en disco, sin credenciales ni APIs privadas. Si has
-  iniciado sesión en Heroic Games Launcher o en Legendary, se lee su caché de biblioteca y
-  aparece tu catálogo **completo**, no solo lo instalado. El escaneo se lanza a mano, la
-  pantalla distingue «no tienes el cliente» de «lo tienes y no has iniciado sesión», enumera
-  las rutas exactas donde ha buscado cuando no encuentra nada, y el emparejado con tu
-  biblioteca de Steam se puede corregir. Lo detectado vive en ese panel: todavía no aparece
-  en la biblioteca, ni en colecciones, ni en el planificador.
-- Avisos programables y bandeja de eventos oficiales derivados de las señales que Vindexa ya
-  observa, con deduplicación estable.
-- Agrupación de la biblioteca por inicial, estado, género, año, estudio o antigüedad de la
-  última sesión, con encabezado y recuento por grupo.
-- Puente para agentes externos con intenciones tipadas, ámbitos, confirmación humana de lo
-  destructivo, deshacer y registro auditable. Ver [`docs/AGENT_BRIDGE.md`](./docs/AGENT_BRIDGE.md).
-- Seguimiento con recordatorios, olvidados, casi terminados, próximos lanzamientos,
-  publicaciones recientes del feed oficial de Steam y relaciones por estudio/editor
-  verificables. El método público no expone importancia y Vindexa no inventa esa clasificación.
-- Importación de manifiestos locales y sincronización oficial con Steam Web API.
-- Sincronización periódica mientras Vindexa permanece abierta, con intervalo persistente.
-- Diagnóstico persistente del último fallo de Steam, con código y mensaje seguro hasta que
-  una sincronización posterior termina correctamente.
-- Acciones controladas para jugar, instalar, solicitar desinstalación, revelar una carpeta
-  validada y clic derecho con acciones rápidas sobre cualquier juego.
-- Navegador integrado de tiendas con historial, zoom por tienda y bloqueo de publicidad y
-  rastreo, limitado a Steam, GOG, Epic e itch.io, en ventana privada sin acceso a la
-  aplicación.
-- Caché local validada de portadas, cabeceras e iconos oficiales, con carga diferida y
-  fallback accesible.
-- SQLite con WAL, durabilidad `FULL`, claves foráneas, migraciones, búsqueda FTS5, índices,
-  copia, restauración con rollback y comprobaciones de integridad y esquema.
-- Clave de Steam Web API en el almacén seguro del sistema, separada de SQLite y de las
-  copias de seguridad.
-- Diálogos nativos de exportación/restauración: el frontend solicita la operación, pero no
-  recibe ni proporciona rutas de archivos.
-- Densidad y atajos configurables; comprobación manual de updates que permanece desactivada
-  hasta existir endpoint HTTPS y clave pública de firma.
-
-## Comandos de desarrollo
-
-| Comando | Uso |
+| Comando | Qué hace |
 | --- | --- |
-| `pnpm tauri dev` | Ejecuta la aplicación de escritorio con recarga durante el desarrollo. |
-| `pnpm dev` | Ejecuta solo el frontend Vite; los comandos nativos no están disponibles. |
-| `pnpm test` | Ejecuta las pruebas de frontend con Vitest y jsdom. |
-| `pnpm test:rust` | Ejecuta unidades y contratos de Rust/SQLite. |
-| `pnpm lint` | Analiza el repositorio con Biome. |
-| `pnpm build` | Comprueba TypeScript y genera `dist/`. |
-| `pnpm audit:dependencies` | Audita dependencias de producción JS y el lockfile Rust. |
-| `pnpm check` | Ejecuta lint, frontend tests, frontend build y `cargo check`. |
-| `pnpm tauri build` | Compila release y genera los bundles admitidos por el anfitrión. |
-| `pnpm tauri:build:debug` | Genera `.app` y DMG debug con firma ad hoc local verificable. |
+| `pnpm tauri dev` | La aplicación de escritorio con recarga en caliente |
+| `pnpm dev` | Sólo la interfaz; los comandos nativos no existen |
+| `pnpm test` | Pruebas de interfaz (Vitest) |
+| `pnpm test:rust` | Pruebas de backend y contratos de SQLite |
+| `pnpm test:e2e` | Extremo a extremo (Playwright) |
+| `pnpm lint` | Biome |
+| `pnpm check` | Lint, pruebas, compilación y `cargo check` |
+| `pnpm tauri build` | Instaladores para el sistema anfitrión |
+| `scripts/version.sh siguiente` | Sube la versión en los tres sitios que la declaran |
+| `scripts/vitrina.sh` | Regenera el material visual de este README |
 
-`pnpm dev` sirve para trabajar en componentes puros. Para validar persistencia, diálogos,
-Keychain, URLs `steam://`, OpenID o acceso al sistema de archivos hay que usar
-`pnpm tauri dev`.
+Antes de abrir una propuesta de cambio, lee
+[CONTRIBUTING.md](./CONTRIBUTING.md). Hay tres reglas que no se negocian: los
+textos visibles van en español con sus tildes, ningún dato se inventa, y una
+migración nueva lleva el número siguiente al último.
 
-## Estructura
+## Cómo está hecho
+
+**Tauri 2** con backend en **Rust** e interfaz en **React 19** y
+**TypeScript**. **SQLite** como única fuente de verdad, con WAL, durabilidad
+`FULL`, claves foráneas, búsqueda FTS5, migraciones versionadas y comprobación de
+integridad al arrancar. Si el esquema no cuadra con lo que la aplicación espera,
+la base se pone en cuarentena en lugar de tocarla.
 
 ```text
-src/
-├── app/                  # Proveedores y raíz React
-├── components/           # Estados comunes y primitivas shadcn/Radix
-├── features/             # Biblioteca, planificador, colecciones, seguimiento y ajustes
-├── hooks/                # Comportamiento React compartido
-├── lib/                  # Contratos TypeScript, IPC y formato
-└── test/                 # Pruebas Vitest/Testing Library
+src/                      Interfaz
+├── features/             Biblioteca, planificador, colecciones, deseados,
+│                         seguimiento, avisos, modo sofá, ajustes
+├── components/           Primitivas y estados comunes
+└── lib/                  Contratos con el backend y formato
 
-src-tauri/
-├── migrations/           # Esquema SQLite e índices/FTS5 versionados
-├── src/db/               # Persistencia, consultas y reglas de organización
-├── src/steam/            # OpenID, Web API, manifiestos y acciones permitidas
-├── src/art_cache.rs      # Caché validada de imágenes oficiales
-├── src/commands.rs       # Frontera IPC de Tauri
-└── tests/                # Contratos de modelos, persistencia y escala
+src-tauri/                Backend
+├── migrations/           Esquema versionado (34 migraciones)
+└── src/
+    ├── db/               Persistencia y reglas de organización
+    ├── steam/            OpenID, Web API, manifiestos, tienda
+    ├── stores/           Epic, GOG, itch.io y clientes locales
+    ├── browser/          Ventana de tienda aislada y bloqueo de rastreo
+    └── agent/            Puente para agentes externos
 ```
 
-## Persistencia y seguridad
+Hay **1.421 pruebas** automáticas: 682 de backend y contratos de SQLite, 739 de
+interfaz, más una batería de extremo a extremo con Playwright. La integración
+continua compila y las ejecuta en macOS, Windows y Linux, y trata cualquier
+aviso de Clippy como un error.
 
-SQLite es la fuente de verdad. Su ruta efectiva aparece en
-**Ajustes → Datos y copias → Ubicación de datos**. El backend activa claves foráneas, WAL,
-durabilidad `FULL`, un timeout de cinco segundos y comprobaciones de integridad, historial
-de migraciones y esquema al iniciar.
+## Privacidad
 
-La Web API Key no se guarda en SQLite, `localStorage`, el frontend ni el backup: la gestiona
-el almacén seguro nativo mediante el servicio `io.vindexa.desktop`. El inicio de la
-aplicación no lee Keychain: `bootstrap` consulta un marcador no secreto en SQLite. Keychain
-solo se abre al guardar, eliminar, comprobar voluntariamente o usar la clave para
-sincronizar. La autenticación OpenID se abre en el navegador, usa un callback loopback
-temporal y valida la afirmación con Steam.
+No hay servidor de Vindexa. No hay telemetría. No hay cuenta que crear. La
+aplicación habla con las APIs públicas de las tiendas y con nada más.
 
-Consulta [PRIVACY.md](./PRIVACY.md) antes de manejar una copia de seguridad: contiene
-notas, checkpoints y demás datos personales en texto legible dentro de SQLite.
+Lo que se guarda vive en tu equipo: la base SQLite, la caché de imágenes y los
+testigos de sesión en el almacén seguro del sistema. **Una copia de seguridad
+contiene tus notas, tus checkpoints y tus valoraciones en texto legible**; antes
+de compartir una, lee [PRIVACY.md](./PRIVACY.md).
 
 ## Documentación
 
-- [Arquitectura y flujos de datos](./ARCHITECTURE.md)
-- [Manual de usuario](./USER_MANUAL.md)
-- [Configurar Steam](./STEAM_SETUP.md)
-- [Privacidad y almacenamiento](./PRIVACY.md)
-- [Seguridad y modelo de amenazas](./SECURITY.md)
-- [Esquema SQLite y migraciones](./DATABASE.md)
-- [Compilar e instalar](./INSTALL.md)
-- [Estrategia y comandos de pruebas](./TESTING.md)
-- [Sistema de diseño](./DESIGN.md)
-- [Guía de contribución](./CONTRIBUTING.md)
-- [Decisiones arquitectónicas](./docs/adr/README.md)
-- [Puente para agentes externos](./docs/AGENT_BRIDGE.md)
-- [Registro de cambios](./CHANGELOG.md)
-- [Licencia MIT](./LICENSE)
-- [Brief maestro](./VINDEXA_DESIGN_BRIEF.md)
+| | |
+| --- | --- |
+| [Manual de usuario](./USER_MANUAL.md) | Cómo se usa, pantalla por pantalla |
+| [Instalación](./INSTALL.md) | Compilar, instalar y qué hacer con los avisos de firma |
+| [Configurar Steam](./STEAM_SETUP.md) | Manifiestos locales, Web API Key y OpenID |
+| [Arquitectura](./ARCHITECTURE.md) | Flujos de datos y decisiones estructurales |
+| [Base de datos](./DATABASE.md) | Esquema, índices y migraciones |
+| [Diseño](./DESIGN.md) | Paleta, tipografía, densidad y componentes |
+| [Seguridad](./SECURITY.md) | Modelo de amenazas y cómo avisar de un fallo |
+| [Privacidad](./PRIVACY.md) | Qué se guarda, dónde y qué sale en una copia |
+| [Pruebas](./TESTING.md) | Estrategia y comandos |
+| [Contribuir](./CONTRIBUTING.md) | Estándares y proceso |
+| [Puente de agentes](./docs/AGENT_BRIDGE.md) | API local con ámbitos, auditoría y deshacer |
+| [Decisiones](./docs/adr/README.md) | Registro de decisiones arquitectónicas |
+| [Cambios](./CHANGELOG.md) | Registro de versiones |
 
-## Límites verificados del alcance actual
+## Lo que todavía no hace
 
-- La sincronización remota necesita una Web API Key y una biblioteca visible para la clave;
-  Steam puede devolver una colección vacía cuando la privacidad no permite consultar los
-  juegos.
-- El importador local conoce juegos instalados y metadatos de manifiesto, pero no puede
-  deducir tiempos de juego ni perfil sin la Web API.
-- Steam Family depende del grupo detectable y de la visibilidad de sus miembros. Catálogo
-  visible no equivale a licencia; solo la evidencia local se incorpora como compartida.
-- La desinstalación es una solicitud validada al cliente Steam; Vindexa no borra archivos ni
-  confirma que Steam haya terminado.
-- La ventana integrada de tienda solo navega por el host oficial, no es un navegador general
-  ni un bloqueador publicitario completo. En macOS y Linux activa reglas nativas de contenido
-  antes de navegar y falla cerrada si no puede instalarlas. La ruta Linux existe, pero su
-  funcionamiento en Bazzite real todavía no está certificado.
-- **Buscar actualizaciones** no descarga nada: falta endpoint de releases y clave pública.
-- No hay telemetría, servidor Vindexa ni sincronización personal en la nube.
-- Steam Deck permanece **Sin datos** mientras no exista una API pública documentada que
-  Vindexa pueda consumir de forma fiable.
-- El bundle debug se firma ad hoc; no existe firma Developer ID ni notarización para una
-  distribución pública.
-- Bazzite no puede considerarse verificado desde el entorno macOS de desarrollo.
+Está aquí y no escondido al final por una razón: preferimos decirlo a que lo
+descubras.
 
-Vindexa no está afiliada a Valve Corporation. Steam y sus marcas pertenecen a sus
-respectivos titulares.
+<details>
+<summary><strong>Límites conocidos del alcance actual</strong></summary>
+
+- Los juegos de Epic, GOG e itch.io **no aparecen aún en la biblioteca
+  principal**, ni en colecciones, ni en el planificador. Viven en el panel de
+  tiendas.
+- La sincronización remota de Steam necesita una Web API Key **y** una
+  biblioteca visible para esa clave. Con el perfil en privado, Steam devuelve una
+  colección vacía; Vindexa lo detecta y lo dice, en lugar de enseñarte una
+  biblioteca vacía.
+- El importador local conoce los juegos instalados y los metadatos del
+  manifiesto, pero sin Web API no puede deducir tiempos de juego ni perfil.
+- Steam Family depende del grupo detectable y de la visibilidad de sus miembros.
+  **Catálogo visible no es lo mismo que licencia**: sólo la evidencia local se
+  incorpora como compartida.
+- Desinstalar es una **solicitud validada** al cliente de la tienda. Vindexa no
+  borra archivos ni afirma que la tienda haya terminado.
+- El navegador integrado sólo navega por los hosts oficiales de las cuatro
+  tiendas. No es un navegador general ni un bloqueador de publicidad completo.
+- **Buscar actualizaciones** no descarga nada: falta el punto de publicación y la
+  clave pública de firma.
+- Steam Deck aparece como **Sin datos** mientras no exista una API pública
+  documentada que se pueda consumir de forma fiable.
+- Los instaladores no están firmados ni notarizados.
+- La compatibilidad con Bazzite existe en el código pero no está certificada en
+  una máquina Bazzite real.
+- El modo sofá no se ha probado con mando físico.
+
+</details>
+
+## Licencia
+
+[MIT](./LICENSE).
+
+Vindexa no está afiliada a Valve Corporation, Epic Games, GOG.com ni itch.io.
+Steam, Epic Games Store, GOG y itch.io, y sus marcas, pertenecen a sus
+respectivos titulares. El arte de los juegos pertenece a sus editores y se
+muestra desde las CDN públicas de las tiendas.

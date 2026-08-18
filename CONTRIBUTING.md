@@ -15,6 +15,7 @@ si la función ya existe y extiéndela en vez de crear una implementación paral
 - [Sistema de diseño y accesibilidad](#sistema-de-diseño-y-accesibilidad)
 - [Pruebas obligatorias](#pruebas-obligatorias)
 - [Documentación y commits](#documentación-y-commits)
+- [Publicar una versión](#publicar-una-versión)
 - [Lista de revisión](#lista-de-revisión)
 
 ## Preparar el entorno
@@ -148,6 +149,47 @@ Bazzite.
 - Mantén los cambios enfocados y no reviertas trabajo ajeno no relacionado.
 - No incluyas bases, backups, Keychain, rutas personales, capturas privadas ni artefactos de
   compilación.
+
+## Publicar una versión
+
+El criterio de versionado del proyecto avanza el tercer número hasta `0.1.10` y a partir de
+ahí pasa a `0.2.0`: `0.1.0` → `0.1.1` → … → `0.1.9` → `0.1.10` → `0.2.0`.
+
+La versión vive por triplicado —`package.json`, `src-tauri/Cargo.toml` y
+`src-tauri/tauri.conf.json`— porque cada herramienta lee la suya. Nunca se editan a mano:
+
+```bash
+scripts/version.sh siguiente     # o scripts/version.sh 0.1.4 para fijarla
+```
+
+Después:
+
+1. Pasa el contenido de `[Sin publicar]` del `CHANGELOG.md` a la nueva versión, con su fecha.
+2. `git commit -am "chore: versión x.y.z"`
+3. `git tag vx.y.z && git push origin main --follow-tags`
+
+El flujo de publicación comprueba que la etiqueta coincide con la versión declarada antes de
+compilar nada, construye los instaladores de macOS, Windows y Linux, y saca la release del
+borrador sólo cuando las tres han subido lo suyo.
+
+### Firma de código
+
+Las releases salen **sin firmar**: no hay certificados. El flujo ya lee los secretos que harían
+falta, así que en cuanto existan no hay que tocar nada:
+
+| Secreto | Para qué |
+| --- | --- |
+| `APPLE_CERTIFICATE` · `APPLE_CERTIFICATE_PASSWORD` · `APPLE_SIGNING_IDENTITY` | Firmar el `.app` y el DMG con un Developer ID |
+| `APPLE_ID` · `APPLE_PASSWORD` · `APPLE_TEAM_ID` | Notarizar el DMG |
+
+No hay secreto de actualizaciones automáticas porque **Buscar actualizaciones** todavía no
+descarga nada: falta el punto de publicación y la clave pública de firma.
+
+### Material visual
+
+Las capturas y los vídeos del README se regeneran con `scripts/vitrina.sh`, que necesita
+`magick`, `cwebp` y `ffmpeg`. Salen del escenario `showcase` de las pruebas de extremo a
+extremo: la aplicación real sobre un catálogo de muestra, nunca una biblioteca personal.
 
 ## Lista de revisión
 

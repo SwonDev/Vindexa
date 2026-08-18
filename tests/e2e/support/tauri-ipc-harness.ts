@@ -1613,6 +1613,70 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       return;
     }
 
+    // ── Precios de la lista de deseados ────────────────────────────────────
+    // Se derivan de las entradas sembradas para que la pantalla de deseados se
+    // pueda revisar con precios de verdad: uno por debajo del objetivo, uno con
+    // descuento pero todavía por encima, uno en otra moneda que por tanto no es
+    // comparable, y uno sin precio observado. Cada rama de la interfaz tiene su
+    // caso, y ninguno finge un importe que la tienda no habría dado.
+    if (command === "list_wishlist_prices") {
+      const observado = "2026-08-17T09:00:00Z";
+      const precio = (
+        appId: number,
+        currency: string,
+        finalCents: number,
+        initialCents: number,
+      ) => ({
+        appId,
+        currency,
+        countryCode: currency === "EUR" ? "ES" : "US",
+        finalCents,
+        initialCents,
+        discountPercent:
+          initialCents > finalCents
+            ? Math.round(((initialCents - finalCents) / initialCents) * 100)
+            : 0,
+        lowestCents: finalCents,
+        lowestObservedAt: observado,
+        changedAt: observado,
+        observedAt: observado,
+        source: "steam_store" as const,
+        freshness: "fresh" as const,
+        ageMinutes: 45,
+      });
+
+      return seedWishlist(state).map((entry, indice) => {
+        // La cuarta entrada se queda sin precio observado a propósito.
+        if (indice === 3) {
+          return {
+            appId: entry.appId,
+            otherCurrencies: [],
+            comparable: false,
+            meetsTarget: false,
+          };
+        }
+        const moneda = entry.currency ?? "EUR";
+        const objetivo = entry.targetPriceCents;
+        // La primera cumple el objetivo; la segunda está de oferta pero por
+        // encima; la tercera está en otra moneda que la del objetivo.
+        const finales = [1999, 2399, 1799];
+        const iniciales = [3999, 4999, 1799];
+        const gamePrice = precio(entry.appId, moneda, finales[indice], iniciales[indice]);
+        const comparable = objetivo !== undefined;
+        const differenceCents = comparable ? gamePrice.finalCents - objetivo : undefined;
+        return {
+          appId: entry.appId,
+          targetCents: objetivo,
+          targetCurrency: objetivo === undefined ? undefined : moneda,
+          price: gamePrice,
+          otherCurrencies: [],
+          comparable,
+          differenceCents,
+          meetsTarget: differenceCents !== undefined && differenceCents <= 0,
+        };
+      });
+    }
+
     // ── Vídeos por juego ───────────────────────────────────────────────────
     if (command === "list_game_videos") {
       const appId = Number(args.appId);

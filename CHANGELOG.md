@@ -6,8 +6,25 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+## [0.1.0] · 2026-08-18
+
+Primera publicación pública, con instaladores para macOS, Windows y Linux. Los
+instaladores todavía no van firmados; los límites conocidos del alcance están
+enumerados al final del README.
+
 ### Añadido
 
+- **Instaladores para macOS, Windows y Linux.** La integración continua compila y prueba el
+  backend en los tres sistemas —el puente con el motor web es distinto en cada uno y un fallo
+  ahí no se ve hasta compilar allí— y al etiquetar una versión adjunta los tres instaladores a
+  la misma release. La release queda en borrador hasta que las tres plataformas han subido lo
+  suyo: una release a medias es peor que ninguna.
+- **`scripts/version.sh`** sube la versión en los tres ficheros que la declaran y calcula la
+  siguiente según el criterio del proyecto (0.1.0 → … → 0.1.10 → 0.2.0), sustituyendo sólo la
+  línea de la versión para no reformatear nada.
+- **`scripts/vitrina.sh` y `scripts/marco.sh`** regeneran el material visual del repositorio:
+  capturas y vídeos de la aplicación real, enmarcados y optimizados, a partir del escenario de
+  vitrina de las pruebas de extremo a extremo.
 - **Arrastre desde toda la carátula.** Las tarjetas y filas de la biblioteca y las fichas del
   planificador ya no dibujan un asa de seis puntos: cualquier punto de la superficie arrastra
   con el puntero, y el activador que queda es exclusivamente para teclado y lectores de
@@ -111,6 +128,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Corregido
 
+- **La ficha de un juego ya no repite la petición a la tienda.** La cola de fondo pedía la
+  ficha completa y descartaba la mitad: la descripción, las capturas y los vídeos venían en la
+  misma respuesta y se tiraban, así que al abrir el juego había que volver a preguntar. Ese era
+  el tirón que se notaba al abrir una ficha. Ahora se persiste el paquete entero de una vez.
+- **Siete pruebas de integración estaban en rojo** porque enumeraban a mano las migraciones que
+  aplicaban, y cada migración nueva que tocaba `games` las rompía por un motivo sin relación
+  con el cambio. Ahora aplican el esquema completo leyéndolo del directorio.
+
 - **El desplazamiento vertical de Seguimiento no funcionaba.** La pantalla no tenía altura
   resuelta, así que su zona desplazable nunca desbordaba y el contenido lo recortaba en
   silencio el contenedor padre. Se corrigió con la misma solución que ya usan Planificador y
@@ -213,8 +238,3 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   en una máquina Bazzite real.
 - Steam Deck queda como **Sin datos** porque no se consume una API pública documentada para
   esa señal.
-
-## [0.1.0]
-
-Reservado para la primera publicación validada. No existe todavía una release pública
-certificada desde este repositorio.

@@ -11,6 +11,7 @@ Linux y no se debe presentar como compatible con Bazzite sin construirlo y ejecu
 
 ## Índice
 
+- [Instalar desde una release](#instalar-desde-una-release)
 - [Preparar el repositorio](#preparar-el-repositorio)
 - [Ejecutar en desarrollo](#ejecutar-en-desarrollo)
 - [Compilar para macOS](#compilar-para-macos)
@@ -18,6 +19,46 @@ Linux y no se debe presentar como compatible con Bazzite sin construirlo y ejecu
 - [Actualizar sin perder datos](#actualizar-sin-perder-datos)
 - [Desinstalar](#desinstalar)
 - [Diagnosticar una instalación](#diagnosticar-una-instalación)
+
+## Instalar desde una release
+
+Si sólo quieres usar Vindexa, no hace falta compilar nada: descarga el instalador de tu
+sistema desde la [última versión](https://github.com/SwonDev/Vindexa/releases/latest).
+
+| Sistema | Archivo | Qué hacer |
+| --- | --- | --- |
+| **macOS** | `Vindexa_x.y.z_universal.dmg` | Abre el DMG y arrastra Vindexa a Aplicaciones |
+| **Windows** | `Vindexa_x.y.z_x64-setup.exe` | Ejecútalo. El `.msi` está para despliegues desatendidos |
+| **Linux** | `Vindexa_x.y.z_amd64.AppImage` | `chmod +x` y ejecútalo, sin instalar nada |
+| **Linux (Debian y derivadas)** | `Vindexa_x.y.z_amd64.deb` | `sudo apt install ./Vindexa_*.deb` |
+
+El binario de macOS es universal: funciona en Apple Silicon y en Intel sin elegir versión.
+
+### Los instaladores no están firmados
+
+No hay certificado de Developer ID de Apple ni de Authenticode de Microsoft, así que el
+sistema avisará la primera vez. El aviso es correcto: significa que el sistema no puede
+verificar quién publicó el archivo, no que el archivo esté dañado.
+
+**macOS.** Al abrirlo dirá que no se puede comprobar que esté libre de software malicioso.
+Ve a **Ajustes del Sistema → Privacidad y seguridad**, busca el aviso sobre Vindexa y pulsa
+**Abrir de todos modos**. Sólo hay que hacerlo una vez.
+
+**Windows.** SmartScreen dirá que ha protegido tu PC. Pulsa **Más información** y luego
+**Ejecutar de todas formas**.
+
+**Linux.** No hay aviso: el AppImage sólo necesita permiso de ejecución.
+
+Si prefieres no confiar en un binario sin firmar, compila desde el código fuente siguiendo el
+resto de este documento. Es la única forma de verificar por ti mismo qué estás ejecutando.
+
+### La primera vez que se abre
+
+Vindexa crea su base de datos y **no muestra ningún juego**. No hay catálogo de demostración
+ni carátulas falsas: un estado vacío significa que todavía no has importado nada. Desde
+**Ajustes → Steam** puedes leer tu instalación local —sin cuenta ni clave— o vincular la
+cuenta para traer tiempos de juego y logros. En [STEAM_SETUP.md](./STEAM_SETUP.md) están las
+tres vías explicadas.
 
 ## Preparar el repositorio
 
