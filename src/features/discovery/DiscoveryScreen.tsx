@@ -25,10 +25,20 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Eyebrow } from "@/components/common/Eyebrow";
+import { GameContextMenu } from "@/components/common/GameContextMenu";
 import { LoadingState } from "@/components/common/LoadingState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ProgressMeter } from "@/components/common/ProgressMeter";
@@ -42,6 +52,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UpcomingReleasesBlock } from "@/features/discovery/UpcomingReleasesBlock";
+import {
+  type GameQuickActions,
+  useGameQuickActions,
+} from "@/features/library/use-game-quick-actions";
 import { NotificationRulesPanel } from "@/features/notifications/NotificationRulesPanel";
 import { formatDate, formatPlaytime } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
@@ -107,6 +121,13 @@ const radarViews: RadarDefinition[] = [
 
 const skeletonKeys = ["a", "b", "c", "d", "e", "f"] as const;
 
+/* La ficha sólo se descarga cuando alguien abre una. */
+const GameDetailSheet = lazy(() =>
+  import("@/features/library/GameDetailSheet").then((module) => ({
+    default: module.GameDetailSheet,
+  })),
+);
+
 export function DiscoveryScreen({
   bootstrap,
   loading,
@@ -119,6 +140,14 @@ export function DiscoveryScreen({
   const [mood, setMood] = useState("any");
   const [radarView, setRadarView] = useState<RadarView>("tracking");
   const [announcement, setAnnouncement] = useState("");
+  const [openGameId, setOpenGameId] = useState<number>();
+  /* Las mismas acciones que en la biblioteca: desde seguimiento no se podía
+     abrir la ficha de un juego ni cambiarle el estado sin ir a buscarlo. */
+  const acciones = useGameQuickActions({
+    bootstrap,
+    onMessage: setAnnouncement,
+    onOpenDetail: (game) => setOpenGameId(game.appId),
+  });
   const discovery = useQuery({
     queryKey: ["discovery"],
     queryFn: api.discoverySnapshot,
@@ -383,6 +412,7 @@ export function DiscoveryScreen({
                   view={radarView}
                   reminding={reminder.isPending}
                   onRemind={(game) => reminder.mutate(game)}
+                  acciones={acciones}
                 />
               ) : (
                 <EmptyState
@@ -439,6 +469,20 @@ export function DiscoveryScreen({
           )}
         </aside>
       </div>
+      {openGameId !== undefined && bootstrap ? (
+        <Suspense fallback={null}>
+          <GameDetailSheet
+            appId={openGameId}
+            open
+            onOpenChange={(next) => {
+              if (!next) setOpenGameId(undefined);
+            }}
+            statuses={bootstrap.statuses}
+            collections={bootstrap.collections}
+            confirmUninstall={bootstrap.preferences.confirmUninstall}
+          />
+        </Suspense>
+      ) : null}
     </section>
   );
 }
@@ -657,43 +701,81 @@ function GameRadarList({
   view,
   reminding,
   onRemind,
+  acciones,
 }: {
   items: GameSummary[];
   view: Exclude<RadarView, "reminders">;
   reminding: boolean;
   onRemind: (game: GameSummary) => void;
+  acciones: GameQuickActions;
 }) {
   return (
     <ul className="radar-list">
       {items.map((game) => (
-        <li key={game.appId}>
-          <Artwork
-            appId={game.appId}
-            src={game.iconUrl ?? game.coverUrl}
-            title={game.title}
-            kind="icon"
-          />
-          <div className="radar-list__copy">
-            <strong>{game.title}</strong>
-            <span>{radarMetadata(game, view)}</span>
-          </div>
-          <ProgressMeter
-            className="radar-list__progress"
-            value={game.progress}
-            label={`Progreso de ${game.title}: ${game.progress}%`}
-          />
-          {view === "tracking" ? (
-            /* Una etiqueta pasiva no puede llevar el relleno del botón
+        <GameContextMenu
+          key={game.appId}
+          game={game}
+          busy={acciones.busy}
+          showShortcuts={false}
+          statuses={acciones.statuses}
+          collections={acciones.collections}
+          collectionIds={acciones.collectionIdsOf(game)}
+          extraActions={[
+            {
+              id: "recordar",
+              label: "Recordármelo en una semana",
+              icon: <IconBellPlus aria-hidden="true" />,
+              disabled: reminding,
+              onSelect: onRemind,
+            },
+          ]}
+          onOpenDetail={acciones.onOpenDetail}
+          onOpenStore={acciones.onOpenStore}
+          onPlay={acciones.onPlay}
+          onInstall={acciones.onInstall}
+          onRevealInstallation={acciones.onRevealInstallation}
+          onChangeStatus={acciones.onChangeStatus}
+          onChangePriority={acciones.onChangePriority}
+          onToggleCollection={acciones.onToggleCollection}
+          onTogglePinned={acciones.onTogglePinned}
+          onToggleTracking={acciones.onToggleTracking}
+          onCopyTitle={acciones.onCopyTitle}
+          onCopyAppId={acciones.onCopyAppId}
+        >
+          <li>
+            <Artwork
+              appId={game.appId}
+              src={game.iconUrl ?? game.coverUrl}
+              title={game.title}
+              kind="icon"
+            />
+            <div className="radar-list__copy">
+              <strong>{game.title}</strong>
+              <span>{radarMetadata(game, view)}</span>
+            </div>
+            <ProgressMeter
+              className="radar-list__progress"
+              value={game.progress}
+              label={`Progreso de ${game.title}: ${game.progress}%`}
+            />
+            {view === "tracking" ? (
+              /* Una etiqueta pasiva no puede llevar el relleno del botón
                principal: compite con la única acción real de la pantalla. */
-            <Badge variant="outline" data-installed={game.installed}>
-              {game.installed ? "Instalado" : "No instalado"}
-            </Badge>
-          ) : (
-            <Button size="sm" variant="outline" disabled={reminding} onClick={() => onRemind(game)}>
-              <IconBellPlus /> Recordarme
-            </Button>
-          )}
-        </li>
+              <Badge variant="outline" data-installed={game.installed}>
+                {game.installed ? "Instalado" : "No instalado"}
+              </Badge>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={reminding}
+                onClick={() => onRemind(game)}
+              >
+                <IconBellPlus /> Recordarme
+              </Button>
+            )}
+          </li>
+        </GameContextMenu>
       ))}
     </ul>
   );

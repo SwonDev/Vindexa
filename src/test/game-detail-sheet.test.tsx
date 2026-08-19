@@ -520,6 +520,44 @@ describe("ficha inmersiva de juego", () => {
 
     expect(await screen.findByText("Media hora de partida")).toBeVisible();
     await waitFor(() => expect(mockedApi.listGameVideos).toHaveBeenCalledWith(620));
+
+    // Que aparezca el título no es que el vídeo se reproduzca. El marco no
+    // existe hasta que se pulsa —una miniatura remota sería una petición a
+    // Google antes de que nadie haya decidido ver nada—, así que se pulsa y se
+    // comprueba el marco de verdad, con su origen sin seguimiento.
+    expect(document.querySelector("iframe")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Reproducir/ }));
+
+    const marco = await waitFor(() => {
+      const encontrado = document.querySelector("iframe");
+      if (!encontrado) throw new Error("no hay marco");
+      return encontrado;
+    });
+    expect(marco).toHaveAttribute("src", "https://www.youtube-nocookie.com/embed/abc123");
+  });
+
+  it("un vídeo sin dirección validada por Rust no se incrusta", async () => {
+    // La URL del marco la construye el backend. Si llegara vacía —porque el
+    // origen no está permitido— la pantalla no puede inventarse una: eso
+    // convertiría un campo de texto en un vector de inyección de marcos.
+    const user = userEvent.setup();
+    mockedApi.listGameVideos.mockResolvedValue([
+      {
+        id: "vid-2",
+        appId: 620,
+        kind: "gameplay",
+        title: "De un sitio cualquiera",
+        url: "https://ejemplo.tld/video",
+        embedUrl: null,
+        position: 0,
+        createdAt: "2026-08-19T10:00:00.000Z",
+      },
+    ]);
+    renderSheet();
+
+    await user.click(await screen.findByRole("tab", { name: "Vídeos" }));
+    expect(await screen.findByText("De un sitio cualquiera")).toBeVisible();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("muestra el tiempo jugado reciente de las últimas dos semanas", async () => {

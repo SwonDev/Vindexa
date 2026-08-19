@@ -448,6 +448,60 @@ describe("ajustes y secretos", () => {
     );
   });
 
+  it("Esc cancela la grabación de un atajo en vez de asignarse", async () => {
+    // Mientras se graba, un manejador en captura se queda con todas las teclas.
+    // Sin una salida, cambiar de opinión obliga a asignar algo que no se quiere
+    // o a cerrar el diálogo; y Esc, que es el gesto de cancelar en cualquier
+    // sistema, acababa asignándose o dando un error de colisión.
+    const user = userEvent.setup();
+    renderSettings();
+    await user.click(screen.getByRole("button", { name: "Atajos" }));
+
+    const boton = screen.getByRole("button", { name: /Cambiar Biblioteca/ });
+    await user.click(boton);
+    expect(boton).toHaveTextContent("Pulsa una combinación…");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(boton).not.toHaveTextContent("Pulsa una combinación…"));
+    expect(within(boton).getByText(/1$/).tagName).toBe("KBD");
+    expect(mockedApi.savePreferences).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("volver a pulsar el botón también cancela", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    await user.click(screen.getByRole("button", { name: "Atajos" }));
+
+    const boton = screen.getByRole("button", { name: /Cambiar Biblioteca/ });
+    await user.click(boton);
+    expect(boton).toHaveTextContent("Pulsa una combinación…");
+    await user.click(boton);
+
+    await waitFor(() => expect(boton).not.toHaveTextContent("Pulsa una combinación…"));
+    expect(within(boton).getByText(/1$/).tagName).toBe("KBD");
+    expect(mockedApi.savePreferences).not.toHaveBeenCalled();
+  });
+
+  it("Esc con modificador sí se puede asignar", async () => {
+    // Cancelar es sólo el Esc a secas: si se descartara cualquier Esc, se
+    // perdería una combinación legítima sin decirlo.
+    const user = userEvent.setup();
+    renderSettings();
+    await user.click(screen.getByRole("button", { name: "Atajos" }));
+
+    await user.click(screen.getByRole("button", { name: /Cambiar Biblioteca/ }));
+    fireEvent.keyDown(window, { key: "Escape", shiftKey: true });
+
+    await waitFor(() =>
+      expect(mockedApi.savePreferences).toHaveBeenCalledWith({
+        ...bootstrap.preferences,
+        shortcuts: { ...bootstrap.preferences.shortcuts, library: "Shift+Escape" },
+      }),
+    );
+  });
+
   it("comprueba actualizaciones manualmente sin prometer descarga ni firma", async () => {
     const user = userEvent.setup();
     mockedApi.checkForUpdates.mockResolvedValue({

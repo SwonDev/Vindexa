@@ -149,10 +149,34 @@ export async function toggleFitWindow(): Promise<void> {
  * Doble clic sobre un botón, un campo o un enlace es otra cosa: quien pulsa dos
  * veces seguidas en «Sincronizar» no está pidiendo que la ventana cambie de
  * tamaño.
+ *
+ * La lista es la misma que usa Tauri en su zona de arrastre
+ * (`tauri/src/window/scripts/drag.js`, `isClickableElement`). Tienen que
+ * coincidir: donde Tauri considera que hay algo pulsable no arrastra ni
+ * maximiza, y si aquí se opinara distinto un doble clic haría una cosa en el
+ * arrastre y otra en el tamaño.
  */
+const PULSABLE = [
+  "a",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "label",
+  "summary",
+  "[contenteditable]:not([contenteditable='false'])",
+  "[tabindex]:not([tabindex='-1'])",
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="tab"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[role="option"]',
+].join(", ");
+
 export function isEmptyChromeTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return !target.closest(
-    'button, a, input, textarea, select, [role="button"], [role="tab"], [contenteditable="true"]',
-  );
+  return !target.closest(PULSABLE);
 }

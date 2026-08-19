@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -209,5 +209,28 @@ describe("modo sofá", () => {
     expect(
       screen.getByText("Este entorno no expone la API de mandos: usa el teclado o el ratón."),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * El modo salón se lleva con mando, pero se abre con ratón.
+ *
+ * Sus acciones vivían sólo en la ficha lateral y en el mando; con el ratón, el
+ * clic derecho sobre una carátula no hacía nada.
+ */
+describe("acciones rápidas del modo salón", () => {
+  it("ofrece jugar y abrir la tienda sobre la carátula que se señala", async () => {
+    const user = userEvent.setup();
+    renderCouch();
+
+    const segunda = await screen.findByRole("button", { name: /^Bravo\./ });
+    await user.pointer({ keys: "[MouseRight]", target: segunda });
+
+    const menu = await screen.findByRole("menu", { name: /Acciones rápidas de Bravo/ });
+    expect(within(menu).getByRole("menuitem", { name: /Jugar|Instalar/ })).toBeVisible();
+    await user.click(within(menu).getByRole("menuitem", { name: "Abrir en la tienda oficial" }));
+
+    // La orden va sobre el juego señalado, no sobre el que tenía el foco.
+    await waitFor(() => expect(mockedApi.openStore).toHaveBeenCalledWith(2));
   });
 });

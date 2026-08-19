@@ -14,6 +14,14 @@ import {
 import { useCallback, useState } from "react";
 import { AnimatedNumber, PressableSurface, StaggerList } from "@/components/motion";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CollectionIcon } from "@/features/collections/CollectionIcon";
 import {
@@ -153,21 +161,44 @@ export function LibrarySidebar({
         )}
       </div>
       <div className="sidebar-section">
-        <button
-          type="button"
-          className="sidebar-heading sidebar-heading--toggle"
-          aria-controls="library-statuses"
-          aria-expanded={statusesExpanded}
-          onClick={() => {
-            setStatusesExpanded((current) => {
-              writeLibrarySectionExpanded("statuses", !current);
-              return !current;
-            });
-          }}
-        >
-          <span>ESTADOS</span>
-          <IconChevronDown size={13} data-expanded={statusesExpanded} />
-        </button>
+        {/* La cabecera también responde al clic derecho: es donde se busca
+            «editar estados» cuando se está mirando la lista de estados. */}
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              className="sidebar-heading sidebar-heading--toggle"
+              aria-controls="library-statuses"
+              aria-expanded={statusesExpanded}
+              onClick={() => {
+                setStatusesExpanded((current) => {
+                  writeLibrarySectionExpanded("statuses", !current);
+                  return !current;
+                });
+              }}
+            >
+              <span>ESTADOS</span>
+              <IconChevronDown size={13} data-expanded={statusesExpanded} />
+            </button>
+          </ContextMenuTrigger>
+          <ContextMenuContent aria-label="Acciones rápidas de los estados">
+            <ContextMenuLabel>Estados</ContextMenuLabel>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onSelect={() => {
+                setStatusesExpanded((current) => {
+                  writeLibrarySectionExpanded("statuses", !current);
+                  return !current;
+                });
+              }}
+            >
+              {statusesExpanded ? "Plegar la lista" : "Desplegar la lista"}
+            </ContextMenuItem>
+            {onEditStatuses && (
+              <ContextMenuItem onSelect={onEditStatuses}>Editar estados…</ContextMenuItem>
+            )}
+          </ContextMenuContent>
+        </ContextMenu>
         {/* Los estados aparecen escalonados al desplegar la sección. No es
             adorno: el escalonado es lo que hace legible que se ha abierto una
             lista, en vez de que catorce filas salgan de golpe. No se aplica a
@@ -197,22 +228,31 @@ export function LibrarySidebar({
         </StaggerList>
       </div>
       <div className="sidebar-section sidebar-section--grow">
-        <div className="sidebar-heading-row">
-          <span className="sidebar-heading">COLECCIONES</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Crear colección"
-                onClick={onCreateCollection}
-              >
-                <IconPlus />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Crear colección</TooltipContent>
-          </Tooltip>
-        </div>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div className="sidebar-heading-row">
+              <span className="sidebar-heading">COLECCIONES</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Crear colección"
+                    onClick={onCreateCollection}
+                  >
+                    <IconPlus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Crear colección</TooltipContent>
+              </Tooltip>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent aria-label="Acciones rápidas de las colecciones">
+            <ContextMenuLabel>Colecciones</ContextMenuLabel>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={onCreateCollection}>Nueva colección…</ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <SortableContext
           items={(bootstrap?.collections ?? []).map((collection) =>
             collectionOrderDragId(collection.id),

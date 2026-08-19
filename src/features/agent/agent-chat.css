@@ -126,7 +126,7 @@
   font-size: 10px;
 }
 
-.agent-chat__steps span {
+.agent-chat__steps li span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -146,8 +146,8 @@
   color: var(--v-error);
 }
 
-.agent-chat__thinking svg,
-.agent-chat__error svg {
+.agent-chat .agent-chat__thinking svg,
+.agent-chat .agent-chat__error svg {
   width: 13px;
   height: 13px;
 }
@@ -274,7 +274,7 @@
   line-height: 1.4;
 }
 
-.agent-chat__task-list span {
+.agent-chat__task-list li span {
   color: var(--v-subtle);
   font-size: 10px;
 }

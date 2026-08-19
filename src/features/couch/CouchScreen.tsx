@@ -1,6 +1,7 @@
 import {
   IconAlertTriangle,
   IconBrandSteam,
+  IconCopy,
   IconDeviceGamepad2,
   IconDownload,
   IconFilterCheck,
@@ -14,6 +15,14 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { ProgressMeter } from "@/components/common/ProgressMeter";
 import { useReducedMotion } from "@/components/motion/use-reduced-motion";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   clampCouchIndex,
   couchColumns,
@@ -157,39 +166,49 @@ export function CouchScreen({ onExit }: CouchScreenProps) {
       .catch((cause: unknown) => report(getErrorMessage(cause), true));
   };
 
-  const playFocused = () => {
-    if (!focused) return;
+  /* Toma el juego como argumento en vez de leer el enfocado: el menú
+     contextual actúa sobre la carátula sobre la que se pulsó, que puede no ser
+     la que tiene el foco todavía. */
+  const playGame = (game: GameSummary) => {
     // La guarda vive aquí y no sólo en el botón porque el mando y el teclado
     // llaman a esta función directamente: esconder el control no basta.
-    if (!focused.installed) {
-      const aviso = platformWarning(focused, hostPlatform);
+    if (!game.installed) {
+      const aviso = platformWarning(game, hostPlatform);
       if (aviso) {
         setAnnouncement(aviso);
         return;
       }
     }
-    if (focused.installed) {
+    if (game.installed) {
       runAction(
-        `Abriendo ${focused.title}…`,
-        `Steam recibió la solicitud para iniciar ${focused.title}.`,
-        () => api.launchGame(focused.appId),
+        `Abriendo ${game.title}…`,
+        `Steam recibió la solicitud para iniciar ${game.title}.`,
+        () => api.launchGame(game.appId),
       );
       return;
     }
     runAction(
-      `Preparando la instalación de ${focused.title}…`,
-      `Steam recibió la solicitud para instalar ${focused.title}.`,
-      () => api.installGame(focused.appId),
+      `Preparando la instalación de ${game.title}…`,
+      `Steam recibió la solicitud para instalar ${game.title}.`,
+      () => api.installGame(game.appId),
     );
   };
 
-  const openStore = () => {
+  const playFocused = () => {
     if (!focused) return;
+    playGame(focused);
+  };
+
+  const openStoreFor = (game: GameSummary) =>
     runAction(
       "Abriendo la tienda protegida…",
-      `La tienda oficial de ${focused.title} se abrió en una sesión privada.`,
-      () => api.openStore(focused.appId),
+      `La tienda oficial de ${game.title} se abrió en una sesión privada.`,
+      () => api.openStore(game.appId),
     );
+
+  const openStore = () => {
+    if (!focused) return;
+    openStoreFor(focused);
   };
 
   const toggleInstalledOnly = () => {
@@ -414,34 +433,70 @@ export function CouchScreen({ onExit }: CouchScreenProps) {
             >
               {games.map((game, index) => (
                 <li key={game.appId}>
-                  <button
-                    type="button"
-                    className="couch-tile"
-                    ref={(node) => {
-                      if (node) tiles.current.set(game.appId, node);
-                      else tiles.current.delete(game.appId);
-                    }}
-                    // Foco itinerante: sólo la carátula enfocada entra en el
-                    // recorrido del tabulador, como en cualquier rejilla.
-                    tabIndex={focused?.appId === game.appId ? 0 : -1}
-                    aria-current={focused?.appId === game.appId ? "true" : undefined}
-                    aria-label={`${game.title}. ${game.statusName}. ${game.installed ? "Instalado" : "No instalado"}. ${formatPlaytime(game.playtimeMinutes)} jugados`}
-                    onFocus={() => setFocusIndex(index)}
-                    onClick={() => setFocusIndex(index)}
-                    onDoubleClick={playFocused}
-                  >
-                    <Artwork
-                      appId={game.appId}
-                      src={game.coverUrl ?? game.headerUrl}
-                      title={game.title}
-                      kind="cover"
-                      className="couch-tile__art"
-                    />
-                    <span className="couch-tile__title">{game.title}</span>
-                    <span className="couch-tile__meta">
-                      {game.installed ? "Instalado" : "No instalado"}
-                    </span>
-                  </button>
+                  {/* El modo salón se lleva con mando, pero también se abre con
+                      ratón: el clic derecho ofrece lo mismo que los botones de
+                      la ficha lateral, sobre la carátula que se señala. */}
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="couch-tile"
+                        ref={(node) => {
+                          if (node) tiles.current.set(game.appId, node);
+                          else tiles.current.delete(game.appId);
+                        }}
+                        // Foco itinerante: sólo la carátula enfocada entra en el
+                        // recorrido del tabulador, como en cualquier rejilla.
+                        tabIndex={focused?.appId === game.appId ? 0 : -1}
+                        aria-current={focused?.appId === game.appId ? "true" : undefined}
+                        aria-label={`${game.title}. ${game.statusName}. ${game.installed ? "Instalado" : "No instalado"}. ${formatPlaytime(game.playtimeMinutes)} jugados`}
+                        onFocus={() => setFocusIndex(index)}
+                        onClick={() => setFocusIndex(index)}
+                        onDoubleClick={playFocused}
+                      >
+                        <Artwork
+                          appId={game.appId}
+                          src={game.coverUrl ?? game.headerUrl}
+                          title={game.title}
+                          kind="cover"
+                          className="couch-tile__art"
+                        />
+                        <span className="couch-tile__title">{game.title}</span>
+                        <span className="couch-tile__meta">
+                          {game.installed ? "Instalado" : "No instalado"}
+                        </span>
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent aria-label={`Acciones rápidas de ${game.title}`}>
+                      <ContextMenuLabel>{game.title}</ContextMenuLabel>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          setFocusIndex(index);
+                          playGame(game);
+                        }}
+                      >
+                        <IconPlayerPlay aria-hidden="true" />
+                        {game.installed ? "Jugar" : "Instalar"}
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          setFocusIndex(index);
+                          openStoreFor(game);
+                        }}
+                      >
+                        <IconBrandSteam aria-hidden="true" /> Abrir en la tienda oficial
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => {
+                          navigator.clipboard?.writeText(game.title).catch(() => undefined);
+                        }}
+                      >
+                        <IconCopy aria-hidden="true" /> Copiar título
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 </li>
               ))}
             </ul>

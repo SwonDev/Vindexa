@@ -1,6 +1,14 @@
 import { IconAlertTriangle, IconBookmark, IconPin, IconX } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -74,30 +82,59 @@ export function SavedViewsBar(props: SavedViewsBarProps) {
           const order = props.activeIds.indexOf(view.id) + 1;
           return (
             <li key={view.id}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="saved-view"
-                    data-active={active}
-                    data-accent={view.accent}
-                    aria-pressed={active}
-                    onClick={() => props.onToggle(view)}
+              {/* Las mismas opciones que el botón «⋯», al alcance del gesto que
+                  se prueba primero. Sin él, había que dar con un botón de tres
+                  puntos que sólo aparece al pasar por encima. */}
+              <ContextMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="saved-view"
+                        data-active={active}
+                        data-accent={view.accent}
+                        aria-pressed={active}
+                        onClick={() => props.onToggle(view)}
+                      >
+                        {view.pinned ? <IconPin size={12} /> : <IconBookmark size={12} />}
+                        <span className="saved-view__name">{view.name}</span>
+                        {active && props.activeIds.length > 1 && (
+                          <span className="saved-view__order" aria-hidden="true">
+                            {order}
+                          </span>
+                        )}
+                      </button>
+                    </ContextMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="saved-view__summary">{describeView(view, context)}</p>
+                    {view.description && <p>{view.description}</p>}
+                  </TooltipContent>
+                </Tooltip>
+                <ContextMenuContent aria-label={`Acciones rápidas de ${view.name}`}>
+                  <ContextMenuLabel>{view.name}</ContextMenuLabel>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => props.onToggle(view)}>
+                    <IconBookmark aria-hidden="true" />
+                    {active ? "Quitar del filtro" : "Aplicar"}
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => props.onTogglePinned(view)}>
+                    <IconPin aria-hidden="true" />
+                    {view.pinned ? "Desanclar" : "Anclar al principio"}
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    disabled={!active || !drifted}
+                    onSelect={() => props.onUpdate(view)}
                   >
-                    {view.pinned ? <IconPin size={12} /> : <IconBookmark size={12} />}
-                    <span className="saved-view__name">{view.name}</span>
-                    {active && props.activeIds.length > 1 && (
-                      <span className="saved-view__order" aria-hidden="true">
-                        {order}
-                      </span>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="saved-view__summary">{describeView(view, context)}</p>
-                  {view.description && <p>{view.description}</p>}
-                </TooltipContent>
-              </Tooltip>
+                    <IconBookmark aria-hidden="true" /> Actualizar con lo que veo
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem variant="destructive" onSelect={() => props.onDelete(view)}>
+                    <IconX aria-hidden="true" /> Eliminar vista
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               <Popover>
                 <PopoverTrigger asChild>
                   <button

@@ -31,7 +31,7 @@ import {
   IconTargetArrow,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -59,6 +59,7 @@ import type {
   PlannerSettings,
   SavePlannerItemInput,
 } from "@/lib/types";
+import { PlannerCardContextMenu, PlannerLaneContextMenu } from "./PlannerContextMenu";
 import {
   PlannerCapacityEditor,
   PlannerItemEditor,
@@ -68,6 +69,14 @@ import {
 } from "./PlannerViews";
 import { buildMonthSegments, buildPlannerMetrics, buildWeekSegments } from "./planner-periods";
 import "./planner-advanced.css";
+
+/* La ficha llega sólo cuando alguien la pide: el planificador se abre sin ella
+   y pesa lo mismo que antes. */
+const GameDetailSheet = lazy(() =>
+  import("@/features/library/GameDetailSheet").then((module) => ({
+    default: module.GameDetailSheet,
+  })),
+);
 
 type PlannerMode = "kanban" | "queue" | "week" | "month";
 
@@ -97,9 +106,11 @@ function shiftAnchor(anchorIso: string, mode: PlannerMode, direction: -1 | 1): s
 export function PlannerScreen({
   bootstrap,
   loading,
+  onOpenSettings,
 }: {
   bootstrap?: AppBootstrap;
   loading: boolean;
+  onOpenSettings?: ((target: "organization") => void) | undefined;
 }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<PlannerMode>("kanban");
@@ -167,6 +178,42 @@ export function PlannerScreen({
     },
     onError: (error) => setMessage(getErrorMessage(error)),
   });
+  /* Sacar un juego del plan no existía en ninguna pantalla: `remove_planner_item`
+     estaba escrito, expuesto y sin forma de llamarlo. */
+  const removeMutation = useMutation({
+    mutationFn: (appId: number) => api.removePlannerItem(appId),
+    onSuccess: () => {
+      setMessage("Juego retirado del planificador");
+      void queryClient.invalidateQueries({ queryKey: ["planner-overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+    },
+    onError: (error) => setMessage(getErrorMessage(error)),
+  });
+  const columnMutation = useMutation({
+    mutationFn: ({
+      column,
+      color,
+      wipLimit,
+    }: {
+      column: PlannerColumn;
+      color?: string;
+      wipLimit?: number | undefined;
+    }) =>
+      api.savePlannerColumn(
+        column.id,
+        column.name,
+        color ?? column.color,
+        wipLimit === undefined && color !== undefined ? column.wipLimit : wipLimit,
+      ),
+    onSuccess: () => {
+      setMessage("Columna actualizada");
+      void queryClient.invalidateQueries({ queryKey: ["planner-overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+    },
+    onError: (error) => setMessage(getErrorMessage(error)),
+  });
+  const [openGameId, setOpenGameId] = useState<number>();
+
   const capacityMutation = useMutation({
     mutationFn: (settings: PlannerSettings) => api.savePlannerCapacity(settings),
     onSuccess: () => {
@@ -453,8 +500,25 @@ export function PlannerScreen({
                   <PlannerLane
                     key={column.id}
                     column={column}
+                    columns={columns}
                     plannedIds={plannedIds}
                     onEdit={saveItem}
+                    busy={isSaving}
+                    onMoveToColumn={(appId, columnId) => {
+                      const destino = columns.find((candidate) => candidate.id === columnId);
+                      mutation.mutate({
+                        appId,
+                        columnId,
+                        position: destino ? destino.items.length : 0,
+                      });
+                    }}
+                    onRemoveItem={(appId) => removeMutation.mutate(appId)}
+                    onOpenDetail={setOpenGameId}
+                    onChangeColor={(color) => columnMutation.mutate({ column, color })}
+                    onChangeLimit={(wipLimit) => columnMutation.mutate({ column, wipLimit })}
+                    {...(onOpenSettings
+                      ? { onOpenSettings: () => onOpenSettings("organization") }
+                      : {})}
                   />
                 ))}
               </div>
@@ -479,32 +543,70 @@ export function PlannerScreen({
           <PlannerPeriodView period={period} label="Plan mensual" onEdit={saveItem} />
         </TabsContent>
       </Tabs>
+      {openGameId !== undefined && bootstrap ? (
+        <Suspense fallback={null}>
+          <GameDetailSheet
+            appId={openGameId}
+            open
+            onOpenChange={(next) => {
+              if (!next) setOpenGameId(undefined);
+            }}
+            statuses={bootstrap.statuses}
+            collections={bootstrap.collections}
+            confirmUninstall={bootstrap.preferences.confirmUninstall}
+          />
+        </Suspense>
+      ) : null}
     </section>
   );
 }
 
 function PlannerLane({
   column,
+  columns,
   plannedIds,
   onEdit,
+  busy,
+  onMoveToColumn,
+  onRemoveItem,
+  onOpenDetail,
+  onChangeColor,
+  onChangeLimit,
+  onOpenSettings,
 }: {
   column: PlannerColumn;
+  columns: readonly PlannerColumn[];
   plannedIds: Set<number>;
   onEdit: (input: SavePlannerItemInput) => Promise<void>;
+  busy: boolean;
+  onMoveToColumn: (appId: number, columnId: string) => void;
+  onRemoveItem: (appId: number) => void;
+  onOpenDetail: (appId: number) => void;
+  onChangeColor: (color: string) => void;
+  onChangeLimit: (limit: number | undefined) => void;
+  onOpenSettings?: (() => void) | undefined;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const overloaded = Boolean(column.wipLimit && column.items.length > column.wipLimit);
   return (
     <section className="planner-lane" data-over={isOver} ref={setNodeRef}>
-      <header>
-        <span className="lane-color" style={{ backgroundColor: column.color }} />
-        <h2 title={column.name}>{column.name}</h2>
-        <data>{column.items.length}</data>
-        {column.wipLimit && (
-          <Badge variant={overloaded ? "destructive" : "outline"}>Límite {column.wipLimit}</Badge>
-        )}
-        <PlannerAddGame column={column} plannedIds={plannedIds} />
-      </header>
+      <PlannerLaneContextMenu
+        column={column}
+        busy={busy}
+        onChangeColor={onChangeColor}
+        onChangeLimit={onChangeLimit}
+        {...(onOpenSettings ? { onOpenSettings } : {})}
+      >
+        <header>
+          <span className="lane-color" style={{ backgroundColor: column.color }} />
+          <h2 title={column.name}>{column.name}</h2>
+          <data>{column.items.length}</data>
+          {column.wipLimit && (
+            <Badge variant={overloaded ? "destructive" : "outline"}>Límite {column.wipLimit}</Badge>
+          )}
+          <PlannerAddGame column={column} plannedIds={plannedIds} />
+        </header>
+      </PlannerLaneContextMenu>
       {overloaded && (
         <div className="lane-warning">
           <IconAlertTriangle size={14} /> Sobrecarga: reduce el trabajo activo.
@@ -516,7 +618,17 @@ function PlannerLane({
       >
         <div className="planner-lane__items">
           {column.items.map((item) => (
-            <SortablePlannerCard key={item.appId} item={item} onEdit={onEdit} />
+            <SortablePlannerCard
+              key={item.appId}
+              item={item}
+              onEdit={onEdit}
+              columns={columns}
+              currentColumnId={column.id}
+              busy={busy}
+              onMoveToColumn={(columnId) => onMoveToColumn(item.appId, columnId)}
+              onRemove={() => onRemoveItem(item.appId)}
+              onOpenDetail={onOpenDetail}
+            />
           ))}
           {/* La zona de destino se muestra siempre: una columna con hueco
               tiene que anunciar que acepta juegos, no solo cuando está vacía. */}
@@ -626,23 +738,46 @@ function PlannerAddGame({
 function SortablePlannerCard({
   item,
   onEdit,
+  columns,
+  currentColumnId,
+  busy,
+  onMoveToColumn,
+  onRemove,
+  onOpenDetail,
 }: {
   item: PlannerItem;
   onEdit: (input: SavePlannerItemInput) => Promise<void>;
+  columns: readonly PlannerColumn[];
+  currentColumnId: string;
+  busy: boolean;
+  onMoveToColumn: (columnId: string) => void;
+  onRemove: () => void;
+  onOpenDetail: (appId: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(item.appId),
   });
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      data-dragging={isDragging}
-      // El gesto de puntero vive en el contenedor: toda la tarjeta arrastra.
-      onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLDivElement>}
+    <PlannerCardContextMenu
+      item={item}
+      columns={columns}
+      currentColumnId={currentColumnId}
+      busy={busy}
+      onMoveToColumn={onMoveToColumn}
+      onRemove={onRemove}
+      onOpenDetail={onOpenDetail}
+      onSaveItem={onEdit}
     >
-      <PlannerCard item={item} dragProps={{ ...attributes, ...listeners }} onEdit={onEdit} />
-    </div>
+      <div
+        ref={setNodeRef}
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        data-dragging={isDragging}
+        // El gesto de puntero vive en el contenedor: toda la tarjeta arrastra.
+        onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLDivElement>}
+      >
+        <PlannerCard item={item} dragProps={{ ...attributes, ...listeners }} onEdit={onEdit} />
+      </div>
+    </PlannerCardContextMenu>
   );
 }
 

@@ -35,6 +35,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
+import { GameContextMenu } from "@/components/common/GameContextMenu";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
   AnimatedNumber,
@@ -67,6 +68,11 @@ import {
   parseCollectionOrderDragId,
   reorderCollectionIds,
 } from "@/features/library/library-dnd";
+import { CollectionContextMenu } from "@/features/library/SidebarContextMenus";
+import {
+  type GameQuickActions,
+  useGameQuickActions,
+} from "@/features/library/use-game-quick-actions";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppBootstrap, CollectionSummary, GameSummary, StatusDefinition } from "@/lib/types";
 import "@/features/collections/collections.css";
@@ -274,6 +280,16 @@ export function CollectionsScreen({
     onError: (cause) => setMessage(getErrorMessage(cause)),
   });
 
+  /* El clic derecho sobre un juego ofrece aquí lo mismo que en la biblioteca:
+     es el mismo juego. Lo propio de esta pantalla —sacarlo de la colección— se
+     añade como acción extra, y sólo en las manuales: en una inteligente lo que
+     manda son sus reglas. */
+  const acciones = useGameQuickActions({
+    bootstrap,
+    onMessage: setMessage,
+    onOpenDetail: (game) => setOpenGameId(game.appId),
+  });
+
   const persistOrder = (next: string[]) => {
     const previous = collections.map((collection) => collection.id);
     if (next === previous || next.every((id, index) => id === previous[index])) return;
@@ -458,6 +474,7 @@ export function CollectionsScreen({
                 removeFromCollection.mutate({ game, collectionId: selected.id })
               }
               removing={removeFromCollection.isPending}
+              acciones={acciones}
             />
           ) : null}
         </div>
@@ -537,6 +554,9 @@ function CollectionTile({
   // La tarjeta solo pide datos cuando ha entrado en pantalla; el resto de la
   // pantalla puede tener cuarenta colecciones sin coste alguno.
   const [revealed, setRevealed] = useState(false);
+  // Borrar desde el menú contextual pasa por la misma confirmación que el botón
+  // del pie: es la misma acción y no puede ser más fácil por venir de otro sitio.
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
 
   const preview = useQuery({
     queryKey: ["collection-preview", collection.id, MOSAIC_LIMIT],
@@ -585,179 +605,210 @@ function CollectionTile({
   const dropState: DropState = isDragging ? "idle" : isOver ? "over" : dragging ? "active" : "idle";
 
   return (
-    <RevealOnScroll asChild onReveal={() => setRevealed(true)}>
-      <DragFeedbackSurface asChild state={dropState}>
-        <article
-          ref={setNodeRef}
-          className="collection-tile"
-          data-kind={collection.kind}
-          data-selected={selected}
-          data-dragging={isDragging}
-          data-empty={empty}
-          onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
-          style={{ transform: CSS.Transform.toString(transform), transition }}
-        >
-          <span className="collection-tile__accent" aria-hidden="true" />
-          <button
-            ref={setActivatorNodeRef}
-            type="button"
-            className="collection-drag-activator"
-            aria-label={`Reordenar ${collection.name}`}
-            {...attributes}
-            {...listeners}
-          />
-          <PressableSurface asChild liftPx={1} hoverScale={1.004}>
-            <div className="collection-tile__surface">
-              {/* El mosaico es una previsualización visual: el nombre, el
+    <>
+      <CollectionContextMenu
+        collection={collection}
+        onEdit={onEdit}
+        onDelete={() => setConfirmandoBorrado(true)}
+      >
+        <RevealOnScroll asChild onReveal={() => setRevealed(true)}>
+          <DragFeedbackSurface asChild state={dropState}>
+            <article
+              ref={setNodeRef}
+              className="collection-tile"
+              data-kind={collection.kind}
+              data-selected={selected}
+              data-dragging={isDragging}
+              data-empty={empty}
+              onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
+              style={{ transform: CSS.Transform.toString(transform), transition }}
+            >
+              <span className="collection-tile__accent" aria-hidden="true" />
+              <button
+                ref={setActivatorNodeRef}
+                type="button"
+                className="collection-drag-activator"
+                aria-label={`Reordenar ${collection.name}`}
+                {...attributes}
+                {...listeners}
+              />
+              <PressableSurface asChild liftPx={1} hoverScale={1.004}>
+                <div className="collection-tile__surface">
+                  {/* El mosaico es una previsualización visual: el nombre, el
                   recuento y el resumen de reglas ya dicen en texto todo lo que
                   contiene, así que leer cinco carátulas seguidas solo añadiría
                   ruido en un lector de pantalla. */}
-              <span className="collection-tile__mosaic" aria-hidden="true">
-                {empty ? (
-                  <span className="collection-tile__vacant">
-                    <IconPlus />
-                    {collection.kind === "smart"
-                      ? "Ninguna coincidencia todavía"
-                      : "Vacía · arrastra juegos aquí"}
-                  </span>
-                ) : showMosaicSkeleton ? (
-                  Array.from({ length: MOSAIC_LIMIT }, (_, slot) => (
-                    <ShimmerSkeleton
-                      // biome-ignore lint/suspicious/noArrayIndexKey: huecos idénticos sin identidad propia
-                      key={slot}
-                      className="collection-tile__cover"
-                      aspectRatio="2 / 3"
-                      radiusPx={2}
-                    />
-                  ))
-                ) : (
-                  Array.from({ length: MOSAIC_LIMIT }, (_, slot) => {
-                    const game = games[slot];
-                    return game ? (
-                      <span key={game.appId} className="collection-tile__cover">
-                        <Artwork
-                          appId={game.appId}
-                          src={game.coverUrl}
-                          title={game.title}
-                          kind="cover"
-                        />
+                  <span className="collection-tile__mosaic" aria-hidden="true">
+                    {empty ? (
+                      <span className="collection-tile__vacant">
+                        <IconPlus />
+                        {collection.kind === "smart"
+                          ? "Ninguna coincidencia todavía"
+                          : "Vacía · arrastra juegos aquí"}
                       </span>
+                    ) : showMosaicSkeleton ? (
+                      Array.from({ length: MOSAIC_LIMIT }, (_, slot) => (
+                        <ShimmerSkeleton
+                          // biome-ignore lint/suspicious/noArrayIndexKey: huecos idénticos sin identidad propia
+                          key={slot}
+                          className="collection-tile__cover"
+                          aspectRatio="2 / 3"
+                          radiusPx={2}
+                        />
+                      ))
                     ) : (
-                      <span
-                        // biome-ignore lint/suspicious/noArrayIndexKey: hueco decorativo de una retícula de longitud fija; no reordena ni guarda estado
-                        key={`empty-${slot}`}
-                        className="collection-tile__cover collection-tile__cover--empty"
-                        aria-hidden="true"
-                      />
-                    );
-                  })
-                )}
-                <span className="collection-tile__badge">
-                  {collection.kind === "smart" ? <IconBolt /> : <IconFolder />}
-                  {kindLabel(collection.kind)}
-                </span>
-              </span>
-              <span className="collection-tile__body">
-                <span className="collection-tile__icon" aria-hidden="true">
-                  <CollectionIcon name={collection.icon} fallback={collection.kind} />
-                </span>
-                <h2 className="collection-tile__name">
-                  {/* Sin `aria-label`: el nombre accesible sale del texto, de
+                      Array.from({ length: MOSAIC_LIMIT }, (_, slot) => {
+                        const game = games[slot];
+                        return game ? (
+                          <span key={game.appId} className="collection-tile__cover">
+                            <Artwork
+                              appId={game.appId}
+                              src={game.coverUrl}
+                              title={game.title}
+                              kind="cover"
+                            />
+                          </span>
+                        ) : (
+                          <span
+                            // biome-ignore lint/suspicious/noArrayIndexKey: hueco decorativo de una retícula de longitud fija; no reordena ni guarda estado
+                            key={`empty-${slot}`}
+                            className="collection-tile__cover collection-tile__cover--empty"
+                            aria-hidden="true"
+                          />
+                        );
+                      })
+                    )}
+                    <span className="collection-tile__badge">
+                      {collection.kind === "smart" ? <IconBolt /> : <IconFolder />}
+                      {kindLabel(collection.kind)}
+                    </span>
+                  </span>
+                  <span className="collection-tile__body">
+                    <span className="collection-tile__icon" aria-hidden="true">
+                      <CollectionIcon name={collection.icon} fallback={collection.kind} />
+                    </span>
+                    <h2 className="collection-tile__name">
+                      {/* Sin `aria-label`: el nombre accesible sale del texto, de
                       modo que el encabezado se sigue llamando exactamente como
                       la colección. El recuento vive al lado, en su propia
                       celda, y la selección la comunica `aria-pressed`. */}
-                  <button
-                    type="button"
-                    className="collection-tile__target"
-                    aria-pressed={selected}
-                    onClick={onSelect}
-                  >
-                    {collection.name}
-                  </button>
-                </h2>
-                <span className="collection-tile__count">
-                  <AnimatedNumber value={collection.gameCount} />
-                </span>
-                <p
-                  className="collection-tile__summary"
-                  data-tone={!collection.description && ruleSummary ? "rules" : "text"}
-                  title={ruleDetail}
-                >
-                  {summary}
-                </p>
-              </span>
-              {/* El pie ya no repite el tipo de colección —la insignia sobre el
+                      <button
+                        type="button"
+                        className="collection-tile__target"
+                        aria-pressed={selected}
+                        onClick={onSelect}
+                      >
+                        {collection.name}
+                      </button>
+                    </h2>
+                    <span className="collection-tile__count">
+                      <AnimatedNumber value={collection.gameCount} />
+                    </span>
+                    <p
+                      className="collection-tile__summary"
+                      data-tone={!collection.description && ruleSummary ? "rules" : "text"}
+                      title={ruleDetail}
+                    >
+                      {summary}
+                    </p>
+                  </span>
+                  {/* El pie ya no repite el tipo de colección —la insignia sobre el
                   mosaico lo dice— ni el modo de combinación de reglas, que se
                   ha ido a la ficha de la colección. Queda como barra de
                   acciones. */}
-              <footer className="collection-tile__footer">
-                {/* Los controles no arrastran la tarjeta: el gesto se detiene aquí. */}
-                <span
-                  className="collection-tile__actions"
-                  onPointerDown={(event) => event.stopPropagation()}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Subir ${collection.name}`}
-                    disabled={busy || index === 0}
-                    onClick={() => onMove(-1)}
-                  >
-                    <IconArrowUp />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Bajar ${collection.name}`}
-                    disabled={busy || index === total - 1}
-                    onClick={() => onMove(1)}
-                  >
-                    <IconArrowDown />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Editar ${collection.name}`}
-                    onClick={onEdit}
-                  >
-                    <IconPencil />
-                  </Button>
-                  <DeleteCollectionDialog
-                    collection={collection}
-                    busy={busy}
-                    onDelete={onDelete}
-                    triggerLabel={`Eliminar ${collection.name}`}
-                  />
-                </span>
-              </footer>
-            </div>
-          </PressableSurface>
-        </article>
-      </DragFeedbackSurface>
-    </RevealOnScroll>
+                  <footer className="collection-tile__footer">
+                    {/* Los controles no arrastran la tarjeta: el gesto se detiene aquí. */}
+                    <span
+                      className="collection-tile__actions"
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Subir ${collection.name}`}
+                        disabled={busy || index === 0}
+                        onClick={() => onMove(-1)}
+                      >
+                        <IconArrowUp />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Bajar ${collection.name}`}
+                        disabled={busy || index === total - 1}
+                        onClick={() => onMove(1)}
+                      >
+                        <IconArrowDown />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Editar ${collection.name}`}
+                        onClick={onEdit}
+                      >
+                        <IconPencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Eliminar ${collection.name}`}
+                        onClick={() => setConfirmandoBorrado(true)}
+                      >
+                        <IconTrash />
+                      </Button>
+                    </span>
+                  </footer>
+                </div>
+              </PressableSurface>
+            </article>
+          </DragFeedbackSurface>
+        </RevealOnScroll>
+      </CollectionContextMenu>
+      <DeleteCollectionDialog
+        collection={collection}
+        busy={busy}
+        onDelete={onDelete}
+        open={confirmandoBorrado}
+        onOpenChange={setConfirmandoBorrado}
+      />
+    </>
   );
 }
 
+/**
+ * La confirmación de borrado, con o sin botón propio.
+ *
+ * Con `triggerLabel` se dibuja su botón; con `open` la abre quien quiera —el
+ * menú contextual, por ejemplo— sin duplicar el texto de la confirmación, que
+ * es lo que de verdad importa que sea idéntico venga de donde venga.
+ */
 function DeleteCollectionDialog({
   collection,
   busy,
   onDelete,
   triggerLabel,
   triggerVariant = "ghost",
+  open,
+  onOpenChange,
 }: {
   collection: CollectionSummary;
   busy: boolean;
   onDelete: () => void;
-  triggerLabel: string;
+  triggerLabel?: string | undefined;
   triggerVariant?: "ghost" | "destructive";
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
+  const controlado = open !== undefined;
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant={triggerVariant} size="icon-sm" aria-label={triggerLabel}>
-          <IconTrash />
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog {...(controlado ? { open, ...(onOpenChange ? { onOpenChange } : {}) } : {})}>
+      {triggerLabel && (
+        <AlertDialogTrigger asChild>
+          <Button variant={triggerVariant} size="icon-sm" aria-label={triggerLabel}>
+            <IconTrash />
+          </Button>
+        </AlertDialogTrigger>
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>¿Eliminar “{collection.name}”?</AlertDialogTitle>
@@ -787,6 +838,7 @@ function CollectionDetail({
   onOpenGame,
   onRemoveGame,
   removing,
+  acciones,
 }: {
   collection: CollectionSummary;
   statuses: readonly StatusDefinition[];
@@ -796,6 +848,7 @@ function CollectionDetail({
   onOpenGame: (appId: number) => void;
   onRemoveGame: (game: GameSummary) => void;
   removing: boolean;
+  acciones: GameQuickActions;
 }) {
   // El panel se remonta con `key={collection.id}`, así que la paginación
   // arranca de cero en cada colección sin necesidad de sincronizarla.
@@ -911,24 +964,59 @@ function CollectionDetail({
             <ul className="collection-games">
               {items.map((game) => (
                 <li key={game.appId} className="collection-games__item">
-                  <PressableSurface asChild liftPx={1}>
-                    <button
-                      type="button"
-                      className="collection-games__open"
-                      aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
-                      onClick={() => onOpenGame(game.appId)}
-                    >
-                      <span className="collection-games__cover" aria-hidden="true">
-                        <Artwork
-                          appId={game.appId}
-                          src={game.coverUrl}
-                          title={game.title}
-                          kind="cover"
-                        />
-                      </span>
-                      <span className="collection-games__title">{game.title}</span>
-                    </button>
-                  </PressableSurface>
+                  <GameContextMenu
+                    game={game}
+                    busy={acciones.busy || removing}
+                    showShortcuts={false}
+                    statuses={acciones.statuses}
+                    collections={acciones.collections}
+                    collectionIds={acciones.collectionIdsOf(game)}
+                    extraActions={
+                      smart
+                        ? []
+                        : [
+                            {
+                              id: "quitar",
+                              label: `Quitar de ${collection.name}`,
+                              icon: <IconX aria-hidden="true" />,
+                              destructive: true,
+                              disabled: removing,
+                              onSelect: onRemoveGame,
+                            },
+                          ]
+                    }
+                    onOpenDetail={(item) => onOpenGame(item.appId)}
+                    onOpenStore={acciones.onOpenStore}
+                    onPlay={acciones.onPlay}
+                    onInstall={acciones.onInstall}
+                    onRevealInstallation={acciones.onRevealInstallation}
+                    onChangeStatus={acciones.onChangeStatus}
+                    onChangePriority={acciones.onChangePriority}
+                    onToggleCollection={acciones.onToggleCollection}
+                    onTogglePinned={acciones.onTogglePinned}
+                    onToggleTracking={acciones.onToggleTracking}
+                    onCopyTitle={acciones.onCopyTitle}
+                    onCopyAppId={acciones.onCopyAppId}
+                  >
+                    <PressableSurface asChild liftPx={1}>
+                      <button
+                        type="button"
+                        className="collection-games__open"
+                        aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
+                        onClick={() => onOpenGame(game.appId)}
+                      >
+                        <span className="collection-games__cover" aria-hidden="true">
+                          <Artwork
+                            appId={game.appId}
+                            src={game.coverUrl}
+                            title={game.title}
+                            kind="cover"
+                          />
+                        </span>
+                        <span className="collection-games__title">{game.title}</span>
+                      </button>
+                    </PressableSurface>
+                  </GameContextMenu>
                   <span className="collection-games__meta">
                     <span
                       className="collection-games__dot"

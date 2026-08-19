@@ -243,3 +243,49 @@ describe("traducción de la coincidencia y de la fecha", () => {
     });
   });
 });
+
+/**
+ * El clic derecho sobre un lanzamiento.
+ *
+ * Las cuatro acciones de la fila son botones de dieciséis píxeles que sólo
+ * aparecen al pasar por encima. El menú las pone donde se buscan.
+ */
+describe("acciones rápidas de un próximo lanzamiento", () => {
+  beforeEach(() => {
+    mockedApi.upcomingReleases.mockResolvedValue([exactRelease, approximateRelease]);
+    mockedApi.recordTasteFeedback.mockResolvedValue(undefined);
+    mockedApi.dismissUpcomingRelease.mockResolvedValue(undefined);
+  });
+
+  it("ofrece las mismas cuatro acciones que la fila", async () => {
+    const user = userEvent.setup();
+    renderBlock();
+
+    const fila = (await screen.findAllByText("Silksong del Norte")).find((nodo) =>
+      nodo.classList.contains("upcoming-row__title"),
+    );
+    expect(fila).toBeDefined();
+    await user.pointer({ keys: "[MouseRight]", target: fila as HTMLElement });
+
+    const menu = await screen.findByRole("menu", {
+      name: /Acciones rápidas de Silksong del Norte/,
+    });
+    expect(within(menu).getByRole("menuitem", { name: "Me interesa" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "No me interesa" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Programar un aviso" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Descartar" })).toBeVisible();
+  });
+
+  it("descartar desde el menú llama a la misma orden que el botón", async () => {
+    const user = userEvent.setup();
+    renderBlock();
+
+    const fila = (await screen.findAllByText("Silksong del Norte")).find((nodo) =>
+      nodo.classList.contains("upcoming-row__title"),
+    );
+    await user.pointer({ keys: "[MouseRight]", target: fila as HTMLElement });
+    await user.click(await screen.findByRole("menuitem", { name: "Descartar" }));
+
+    await waitFor(() => expect(mockedApi.dismissUpcomingRelease).toHaveBeenCalled());
+  });
+});

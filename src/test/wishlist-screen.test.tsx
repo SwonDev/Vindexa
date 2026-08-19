@@ -14,6 +14,7 @@ vi.mock("@/lib/tauri", () => ({
     refreshWishlistPrices: vi.fn(),
     saveWishlistEntry: vi.fn(),
     removeWishlistEntry: vi.fn(),
+    openStore: vi.fn(),
     moveWishlistEntry: vi.fn(),
     reorderWishlistBucket: vi.fn(),
     listGameVideos: vi.fn(),
@@ -361,5 +362,70 @@ describe("pantalla de deseados · estados límite", () => {
     expect(alert).toHaveTextContent("No se pudieron leer los deseados");
     expect(alert).toHaveTextContent("SQLite no responde.");
     expect(within(alert).getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+});
+
+/**
+ * El clic derecho sobre una tarjeta de deseados.
+ *
+ * Los botones de la tarjeta sólo aparecen al pasar por encima. Además, abrir la
+ * tienda de un deseado no estaba en ninguna parte: había que buscar el juego a
+ * mano fuera de Vindexa.
+ */
+describe("acciones rápidas de un deseado", () => {
+  beforeEach(() => {
+    mockedApi.wishlistOverview.mockResolvedValue(fullOverview);
+    mockedApi.wishlistPrices.mockResolvedValue([]);
+    mockedApi.removeWishlistEntry.mockResolvedValue(undefined);
+    mockedApi.openStore.mockResolvedValue(undefined);
+  });
+
+  it("ofrece editar, abrir la tienda, mover y quitar", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const tarjeta = await screen.findByRole("button", { name: "Hollow Knight: Silksong" });
+    await user.pointer({ keys: "[MouseRight]", target: tarjeta });
+
+    const menu = await screen.findByRole("menu", {
+      name: /Acciones rápidas de Hollow Knight: Silksong/,
+    });
+    expect(
+      within(menu).getByRole("menuitem", { name: "Editar nota y precio objetivo" }),
+    ).toBeVisible();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Abrir en la tienda oficial" }),
+    ).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Mover a" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Quitar de los deseados" })).toBeVisible();
+  });
+
+  it("abre la tienda oficial, que no estaba en ningún otro sitio", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: await screen.findByRole("button", { name: "Hollow Knight: Silksong" }),
+    });
+    await user.click(await screen.findByRole("menuitem", { name: "Abrir en la tienda oficial" }));
+
+    await waitFor(() => expect(mockedApi.openStore).toHaveBeenCalledWith(1030300));
+  });
+
+  it("subir está apagado en el primero de su carril", async () => {
+    // Ofrecer un movimiento imposible es peor que no ofrecerlo: parece que la
+    // aplicación ignora la orden.
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: await screen.findByRole("button", { name: "Hollow Knight: Silksong" }),
+    });
+    const menu = await screen.findByRole("menu", { name: /Acciones rápidas/ });
+    expect(within(menu).getByRole("menuitem", { name: /Subir en el carril/ })).toHaveAttribute(
+      "data-disabled",
+    );
   });
 });

@@ -170,6 +170,7 @@ export function CollectionIconPicker({
         const OptionIcon = option.icon;
         const selected = option.value === value;
         return (
+          // biome-ignore lint/a11y/useSemanticElements: un `input[type=radio]` no deja dibujar el icono dentro, y aquí lo que se elige es precisamente la forma
           <button
             key={option.value}
             type="button"

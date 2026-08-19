@@ -24,11 +24,14 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   IconArrowBackUp,
   IconArrowDown,
+  IconArrowsExchange,
   IconArrowUp,
+  IconBrandSteam,
   IconChevronRight,
   IconCoin,
   IconLoader2,
   IconNote,
+  IconPencil,
   IconPlus,
   IconRefresh,
   IconTag,
@@ -46,6 +49,17 @@ import {
   ShimmerSkeleton,
 } from "@/components/motion";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -142,6 +156,12 @@ export function WishlistBoard({
     onError: (cause) => setMessage({ tone: "error", text: getErrorMessage(cause) }),
   });
 
+  /* Abrir la tienda de un deseado obligaba a buscarlo a mano fuera de Vindexa.
+     Es la misma orden protegida que usa la biblioteca. */
+  const abrirTienda = useMutation({
+    mutationFn: (entry: WishlistEntry) => api.openStore(entry.game.appId),
+    onError: (cause) => setMessage({ tone: "error", text: getErrorMessage(cause) }),
+  });
   const remove = useMutation({
     mutationFn: (entry: WishlistEntry) => api.removeWishlistEntry(entry.game.appId),
     onSuccess: (_data, entry) => {
@@ -483,6 +503,7 @@ export function WishlistBoard({
               }
               onMoveTo={(appId, bucket) => commitMove(appId, bucket)}
               onRemove={(entry) => remove.mutate(entry)}
+              onOpenStore={(entry) => abrirTienda.mutate(entry)}
               onAdd={(appId, title) => addGame(lane.bucket, appId, title)}
               adding={save.isPending}
             />
@@ -621,6 +642,7 @@ function WishlistLane({
   onMoveWithin,
   onMoveTo,
   onRemove,
+  onOpenStore,
   onAdd,
   adding,
 }: {
@@ -634,6 +656,7 @@ function WishlistLane({
   onMoveWithin: (index: number, direction: -1 | 1) => void;
   onMoveTo: (appId: number, bucket: WishlistBucketId) => void;
   onRemove: (entry: WishlistEntry) => void;
+  onOpenStore: (entry: WishlistEntry) => void;
   onAdd: (appId: number, title: string) => void;
   adding: boolean;
 }) {
@@ -703,6 +726,7 @@ function WishlistLane({
                   onMoveWithin={(direction) => onMoveWithin(index, direction)}
                   onMoveTo={(bucket) => onMoveTo(entry.game.appId, bucket)}
                   onRemove={() => onRemove(entry)}
+                  onOpenStore={() => onOpenStore(entry)}
                 />
               ))
             ) : (
@@ -717,6 +741,82 @@ function WishlistLane({
 
 /* --- Tarjeta ------------------------------------------------------------- */
 
+/**
+ * Acciones rápidas de una entrada de deseados.
+ *
+ * Repite lo que ya hacen los botones de la tarjeta, y ése es el punto: los
+ * botones sólo aparecen al pasar por encima, mientras que el clic derecho es el
+ * gesto que se prueba primero. Lo único que añade es abrir la tienda, que hasta
+ * ahora obligaba a buscar el juego a mano.
+ */
+function WishlistCardContextMenu({
+  entry,
+  bucket,
+  index,
+  total,
+  busy,
+  children,
+  onSelect,
+  onMoveWithin,
+  onMoveTo,
+  onRemove,
+  onOpenStore,
+}: {
+  entry: WishlistEntry;
+  bucket: WishlistBucketId;
+  index: number;
+  total: number;
+  busy: boolean;
+  children: React.ReactNode;
+  onSelect: () => void;
+  onMoveWithin: (direction: -1 | 1) => void;
+  onMoveTo: (bucket: WishlistBucketId) => void;
+  onRemove: () => void;
+  onOpenStore: () => void;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent aria-label={`Acciones rápidas de ${entry.game.title}`}>
+        <ContextMenuLabel>{entry.game.title}</ContextMenuLabel>
+        <ContextMenuSeparator />
+
+        <ContextMenuItem onSelect={onSelect}>
+          <IconPencil aria-hidden="true" /> Editar nota y precio objetivo
+        </ContextMenuItem>
+        <ContextMenuItem disabled={busy} onSelect={onOpenStore}>
+          <IconBrandSteam aria-hidden="true" /> Abrir en la tienda oficial
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <IconArrowsExchange aria-hidden="true" /> Mover a
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {WISHLIST_BUCKETS.filter((option) => option.id !== bucket).map((option) => (
+              <ContextMenuItem key={option.id} disabled={busy} onSelect={() => onMoveTo(option.id)}>
+                {option.label}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuItem disabled={busy || index === 0} onSelect={() => onMoveWithin(-1)}>
+          <IconArrowUp aria-hidden="true" /> Subir en el carril
+        </ContextMenuItem>
+        <ContextMenuItem disabled={busy || index === total - 1} onSelect={() => onMoveWithin(1)}>
+          <IconArrowDown aria-hidden="true" /> Bajar en el carril
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" disabled={busy} onSelect={onRemove}>
+          <IconTrash aria-hidden="true" /> Quitar de los deseados
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 function WishlistCard({
   entry,
   index,
@@ -730,6 +830,7 @@ function WishlistCard({
   onMoveWithin,
   onMoveTo,
   onRemove,
+  onOpenStore,
 }: {
   entry: WishlistEntry;
   index: number;
@@ -743,6 +844,7 @@ function WishlistCard({
   onMoveWithin: (direction: -1 | 1) => void;
   onMoveTo: (bucket: WishlistBucketId) => void;
   onRemove: () => void;
+  onOpenStore: () => void;
 }) {
   const {
     attributes,
@@ -763,155 +865,171 @@ function WishlistCard({
       : formatCents(entry.targetPriceCents, entry.currency);
 
   return (
-    <DragFeedbackSurface asChild state={dropState}>
-      <article
-        ref={setNodeRef}
-        className="wishlist-card"
-        data-selected={selected}
-        data-dragging={isDragging}
-        /* Toda la tarjeta arrastra: no hay asa de seis puntos sobre la
+    <WishlistCardContextMenu
+      entry={entry}
+      bucket={bucket}
+      index={index}
+      total={total}
+      busy={busy}
+      onSelect={onSelect}
+      onMoveWithin={onMoveWithin}
+      onMoveTo={onMoveTo}
+      onRemove={onRemove}
+      onOpenStore={onOpenStore}
+    >
+      <DragFeedbackSurface asChild state={dropState}>
+        <article
+          ref={setNodeRef}
+          className="wishlist-card"
+          data-selected={selected}
+          data-dragging={isDragging}
+          /* Toda la tarjeta arrastra: no hay asa de seis puntos sobre la
            carátula. El activador de abajo existe solo para teclado. */
-        onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
-        style={{ transform: CSS.Transform.toString(transform), transition }}
-      >
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="wishlist-drag-activator"
-          aria-label={`Arrastrar ${entry.game.title}`}
-          {...attributes}
-          {...listeners}
-        />
-        <PressableSurface asChild liftPx={1} hoverScale={1.004}>
-          <div className="wishlist-card__surface">
-            <span className="wishlist-card__cover" aria-hidden="true">
-              <Artwork
-                appId={entry.game.appId}
-                src={entry.game.coverUrl}
-                title={entry.game.title}
-                kind="cover"
-              />
-            </span>
-            <h3 className="wishlist-card__name">
-              <button
-                type="button"
-                className="wishlist-card__target"
-                aria-pressed={selected}
-                onClick={onSelect}
-              >
-                {entry.game.title}
-              </button>
-            </h3>
-            <p className="wishlist-card__meta">
-              {/* Sin prioridad fijada no se dibuja la escala: cinco casillas
+          onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
+          style={{ transform: CSS.Transform.toString(transform), transition }}
+        >
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="wishlist-drag-activator"
+            aria-label={`Arrastrar ${entry.game.title}`}
+            {...attributes}
+            {...listeners}
+          />
+          <PressableSurface asChild liftPx={1} hoverScale={1.004}>
+            <div className="wishlist-card__surface">
+              <span className="wishlist-card__cover" aria-hidden="true">
+                <Artwork
+                  appId={entry.game.appId}
+                  src={entry.game.coverUrl}
+                  title={entry.game.title}
+                  kind="cover"
+                />
+              </span>
+              <h3 className="wishlist-card__name">
+                <button
+                  type="button"
+                  className="wishlist-card__target"
+                  aria-pressed={selected}
+                  onClick={onSelect}
+                >
+                  {entry.game.title}
+                </button>
+              </h3>
+              <p className="wishlist-card__meta">
+                {/* Sin prioridad fijada no se dibuja la escala: cinco casillas
                   vacías no dicen nada y en una lista larga son sólo ruido. */}
-              {entry.priority > 0 && (
-                <span className="wishlist-card__priority" data-level={entry.priority}>
-                  <span className="sr-only">Prioridad {entry.priority} de 5</span>
-                  {[1, 2, 3, 4, 5].map((step) => (
-                    <i key={step} data-on={step <= entry.priority} aria-hidden="true" />
-                  ))}
-                </span>
-              )}
-              {target ? (
-                <span className="wishlist-card__price">
-                  <IconCoin aria-hidden="true" /> {target}
-                </span>
-              ) : (
-                <span className="wishlist-card__price" data-missing="true">
-                  Sin precio objetivo
-                </span>
-              )}
-              {entry.note && (
-                <span className="wishlist-card__note" title={entry.note}>
-                  <IconNote aria-hidden="true" /> {entry.note}
-                </span>
-              )}
-            </p>
-            {/* El precio observado y su fecha van juntos y siempre visibles: un
+                {entry.priority > 0 && (
+                  <span className="wishlist-card__priority" data-level={entry.priority}>
+                    <span className="sr-only">Prioridad {entry.priority} de 5</span>
+                    {[1, 2, 3, 4, 5].map((step) => (
+                      <i key={step} data-on={step <= entry.priority} aria-hidden="true" />
+                    ))}
+                  </span>
+                )}
+                {target ? (
+                  <span className="wishlist-card__price">
+                    <IconCoin aria-hidden="true" /> {target}
+                  </span>
+                ) : (
+                  <span className="wishlist-card__price" data-missing="true">
+                    Sin precio objetivo
+                  </span>
+                )}
+                {entry.note && (
+                  <span className="wishlist-card__note" title={entry.note}>
+                    <IconNote aria-hidden="true" /> {entry.note}
+                  </span>
+                )}
+              </p>
+              {/* El precio observado y su fecha van juntos y siempre visibles: un
                 importe sin la fecha en la que se miró no es un dato utilizable,
                 y la ausencia de precio también se enseña. */}
-            <p
-              className="wishlist-card__observed"
-              data-freshness={price.freshness}
-              data-meets={price.meetsTarget}
-            >
-              {price.amount ? (
-                <>
-                  <b className="wishlist-card__observed-amount">{price.amount}</b>
-                  {price.reference && (
-                    <s className="wishlist-card__observed-was">{price.reference}</s>
-                  )}
-                  {price.discount && (
-                    <span className="wishlist-card__observed-cut">{price.discount}</span>
-                  )}
-                </>
-              ) : (
-                <b className="wishlist-card__observed-amount" data-missing="true">
-                  Precio desconocido
-                </b>
-              )}
-              <span className="wishlist-card__observed-when">{price.observed}</span>
-              <span className="wishlist-card__observed-verdict">{price.verdict}</span>
-              {price.lowest && (
-                <span className="wishlist-card__observed-low">
-                  Mínimo visto por Vindexa: {price.lowest}
-                </span>
-              )}
-            </p>
-          </div>
-        </PressableSurface>
-        {/* Alternativa completa al gesto: los controles no arrastran nada. */}
-        <span className="wishlist-card__actions" onPointerDown={(event) => event.stopPropagation()}>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Subir ${entry.game.title}`}
-            disabled={busy || index === 0}
-            onClick={onMoveWithin.bind(null, -1)}
-          >
-            <IconArrowUp />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Bajar ${entry.game.title}`}
-            disabled={busy || index === total - 1}
-            onClick={onMoveWithin.bind(null, 1)}
-          >
-            <IconArrowDown />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="xs"
-                aria-label={`Mover ${entry.game.title} a otro carril`}
-                disabled={busy}
+              <p
+                className="wishlist-card__observed"
+                data-freshness={price.freshness}
+                data-meets={price.meetsTarget}
               >
-                Mover
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {WISHLIST_BUCKETS.filter((option) => option.id !== bucket).map((option) => (
-                <DropdownMenuItem key={option.id} onSelect={() => onMoveTo(option.id)}>
-                  {option.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Quitar ${entry.game.title} de los deseados`}
-            disabled={busy}
-            onClick={onRemove}
+                {price.amount ? (
+                  <>
+                    <b className="wishlist-card__observed-amount">{price.amount}</b>
+                    {price.reference && (
+                      <s className="wishlist-card__observed-was">{price.reference}</s>
+                    )}
+                    {price.discount && (
+                      <span className="wishlist-card__observed-cut">{price.discount}</span>
+                    )}
+                  </>
+                ) : (
+                  <b className="wishlist-card__observed-amount" data-missing="true">
+                    Precio desconocido
+                  </b>
+                )}
+                <span className="wishlist-card__observed-when">{price.observed}</span>
+                <span className="wishlist-card__observed-verdict">{price.verdict}</span>
+                {price.lowest && (
+                  <span className="wishlist-card__observed-low">
+                    Mínimo visto por Vindexa: {price.lowest}
+                  </span>
+                )}
+              </p>
+            </div>
+          </PressableSurface>
+          {/* Alternativa completa al gesto: los controles no arrastran nada. */}
+          <span
+            className="wishlist-card__actions"
+            onPointerDown={(event) => event.stopPropagation()}
           >
-            <IconTrash />
-          </Button>
-        </span>
-      </article>
-    </DragFeedbackSurface>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Subir ${entry.game.title}`}
+              disabled={busy || index === 0}
+              onClick={onMoveWithin.bind(null, -1)}
+            >
+              <IconArrowUp />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Bajar ${entry.game.title}`}
+              disabled={busy || index === total - 1}
+              onClick={onMoveWithin.bind(null, 1)}
+            >
+              <IconArrowDown />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  aria-label={`Mover ${entry.game.title} a otro carril`}
+                  disabled={busy}
+                >
+                  Mover
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {WISHLIST_BUCKETS.filter((option) => option.id !== bucket).map((option) => (
+                  <DropdownMenuItem key={option.id} onSelect={() => onMoveTo(option.id)}>
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Quitar ${entry.game.title} de los deseados`}
+              disabled={busy}
+              onClick={onRemove}
+            >
+              <IconTrash />
+            </Button>
+          </span>
+        </article>
+      </DragFeedbackSurface>
+    </WishlistCardContextMenu>
   );
 }
 

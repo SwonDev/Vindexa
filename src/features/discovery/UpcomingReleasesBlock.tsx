@@ -14,6 +14,14 @@ import { Artwork } from "@/components/common/Artwork";
 import { AnimatedNumber, ExpandableSection, RevealOnScroll } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   NotificationRuleDialog,
   type RulePrefill,
 } from "@/features/notifications/NotificationRuleDialog";
@@ -375,112 +383,135 @@ function UpcomingRow({
   const studio = item.developer ?? item.publisher;
 
   return (
-    <RevealOnScroll asChild delayMs={Math.min(index * 24, 160)}>
-      <li className="upcoming-row" data-verdict={verdict ?? "none"}>
-        <Artwork
-          appId={item.appId}
-          src={item.capsuleUrl ?? item.headerUrl ?? undefined}
-          title={item.title}
-          kind="cover"
-          className="upcoming-row__art"
-        />
-        <div className="upcoming-row__body">
-          <p className="upcoming-row__title">{item.title}</p>
-          <p className="upcoming-row__meta">
-            {date.state === "exact" && date.machine ? (
-              <time className="upcoming-date" data-state="exact" dateTime={date.machine}>
-                {date.label}
-              </time>
-            ) : (
-              <span
-                className="upcoming-date"
-                data-state={date.state}
-                title={
-                  date.state === "approximate"
-                    ? "Fecha aproximada: es la etiqueta que publica la tienda, no un día concreto."
-                    : "La tienda todavía no ha publicado ninguna fecha."
-                }
-              >
-                {date.state === "approximate" ? `≈ ${date.label}` : date.label}
-              </span>
-            )}
-            {studio ? <span className="upcoming-row__studio">{studio}</span> : null}
-          </p>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <RevealOnScroll asChild delayMs={Math.min(index * 24, 160)}>
+          <li className="upcoming-row" data-verdict={verdict ?? "none"}>
+            <Artwork
+              appId={item.appId}
+              src={item.capsuleUrl ?? item.headerUrl ?? undefined}
+              title={item.title}
+              kind="cover"
+              className="upcoming-row__art"
+            />
+            <div className="upcoming-row__body">
+              <p className="upcoming-row__title">{item.title}</p>
+              <p className="upcoming-row__meta">
+                {date.state === "exact" && date.machine ? (
+                  <time className="upcoming-date" data-state="exact" dateTime={date.machine}>
+                    {date.label}
+                  </time>
+                ) : (
+                  <span
+                    className="upcoming-date"
+                    data-state={date.state}
+                    title={
+                      date.state === "approximate"
+                        ? "Fecha aproximada: es la etiqueta que publica la tienda, no un día concreto."
+                        : "La tienda todavía no ha publicado ninguna fecha."
+                    }
+                  >
+                    {date.state === "approximate" ? `≈ ${date.label}` : date.label}
+                  </span>
+                )}
+                {studio ? <span className="upcoming-row__studio">{studio}</span> : null}
+              </p>
 
-          {/* Una puntuación sin su razón no se pinta: sería una cifra sin
+              {/* Una puntuación sin su razón no se pinta: sería una cifra sin
               procedencia, que es justo lo que esta pantalla no hace. */}
-          {reason ? (
-            <div className="upcoming-match">
-              <span
-                className="upcoming-match__meter"
-                data-level={match.level}
-                role="img"
-                aria-label={`${match.band}: ${match.percent} %`}
-              >
-                {[0, 1, 2, 3, 4].map((step) => (
-                  <span key={step} data-on={match.percent > step * 20} />
-                ))}
-              </span>
-              <span className="upcoming-match__value">
-                {match.band} · {match.percent} %
-              </span>
-              <p className="upcoming-match__reason">{reason}</p>
+              {reason ? (
+                <div className="upcoming-match">
+                  <span
+                    className="upcoming-match__meter"
+                    data-level={match.level}
+                    role="img"
+                    aria-label={`${match.band}: ${match.percent} %`}
+                  >
+                    {[0, 1, 2, 3, 4].map((step) => (
+                      <span key={step} data-on={match.percent > step * 20} />
+                    ))}
+                  </span>
+                  <span className="upcoming-match__value">
+                    {match.band} · {match.percent} %
+                  </span>
+                  <p className="upcoming-match__reason">{reason}</p>
+                </div>
+              ) : (
+                <p className="upcoming-match__reason">
+                  Sin razón registrada: no se muestra una coincidencia que no se pueda explicar.
+                  Recalcula para volver a puntuarlo.
+                </p>
+              )}
+
+              <div className="upcoming-actions">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={busy}
+                  title="Lo mantiene en la lista y cuenta a favor de sus rasgos al recalcular."
+                  onClick={() => onVerdict("interested")}
+                >
+                  <IconThumbUp /> Me interesa
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={busy}
+                  title="Lo retira de la lista y sus rasgos restarán al recalcular."
+                  onClick={() => onVerdict("not_interested")}
+                >
+                  <IconThumbDown /> No me interesa
+                </Button>
+                <span className="upcoming-actions__spacer" />
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label={`Programar un aviso para ${item.title}`}
+                  title="Programar un aviso con esta fecha"
+                  onClick={onSchedule}
+                >
+                  <IconBellPlus />
+                </Button>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  disabled={busy}
+                  aria-label={`Descartar ${item.title}`}
+                  title="Solo lo retira de la lista; sus rasgos también restarán al recalcular."
+                  onClick={onDismiss}
+                >
+                  <IconX />
+                </Button>
+              </div>
+
+              {verdict === "interested" && (
+                <p className="upcoming-row__verdict">
+                  Anotado como interesante. Se aplicará en el próximo recálculo.
+                </p>
+              )}
             </div>
-          ) : (
-            <p className="upcoming-match__reason">
-              Sin razón registrada: no se muestra una coincidencia que no se pueda explicar.
-              Recalcula para volver a puntuarlo.
-            </p>
-          )}
-
-          <div className="upcoming-actions">
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy}
-              title="Lo mantiene en la lista y cuenta a favor de sus rasgos al recalcular."
-              onClick={() => onVerdict("interested")}
-            >
-              <IconThumbUp /> Me interesa
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy}
-              title="Lo retira de la lista y sus rasgos restarán al recalcular."
-              onClick={() => onVerdict("not_interested")}
-            >
-              <IconThumbDown /> No me interesa
-            </Button>
-            <span className="upcoming-actions__spacer" />
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              aria-label={`Programar un aviso para ${item.title}`}
-              title="Programar un aviso con esta fecha"
-              onClick={onSchedule}
-            >
-              <IconBellPlus />
-            </Button>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              disabled={busy}
-              aria-label={`Descartar ${item.title}`}
-              title="Solo lo retira de la lista; sus rasgos también restarán al recalcular."
-              onClick={onDismiss}
-            >
-              <IconX />
-            </Button>
-          </div>
-
-          {verdict === "interested" && (
-            <p className="upcoming-row__verdict">
-              Anotado como interesante. Se aplicará en el próximo recálculo.
-            </p>
-          )}
-        </div>
-      </li>
-    </RevealOnScroll>
+          </li>
+        </RevealOnScroll>
+      </ContextMenuTrigger>
+      {/* Las mismas cuatro acciones de la fila, sin tener que apuntar a botones
+          de dieciséis píxeles. */}
+      <ContextMenuContent aria-label={`Acciones rápidas de ${item.title}`}>
+        <ContextMenuLabel>{item.title}</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={busy} onSelect={() => onVerdict("interested")}>
+          <IconThumbUp aria-hidden="true" /> Me interesa
+        </ContextMenuItem>
+        <ContextMenuItem disabled={busy} onSelect={() => onVerdict("not_interested")}>
+          <IconThumbDown aria-hidden="true" /> No me interesa
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onSchedule}>
+          <IconBellPlus aria-hidden="true" /> Programar un aviso
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" disabled={busy} onSelect={onDismiss}>
+          <IconX aria-hidden="true" /> Descartar
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

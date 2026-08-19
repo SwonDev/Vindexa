@@ -73,6 +73,23 @@ export const DEFAULT_GAME_CONTEXT_SHORTCUTS: Readonly<Partial<Record<GameContext
     copyAppId: "Mod+Shift+C",
   };
 
+/**
+ * Una acción que sólo tiene sentido en la pantalla que monta el menú.
+ *
+ * «Quitar de la colección» no existe en la biblioteca y «Quitar del
+ * planificador» no existe en una colección: son verbos del sitio, no del juego.
+ * Entran aquí en vez de crecer la lista de props con una opción por pantalla.
+ */
+export interface GameContextExtraAction {
+  id: string;
+  label: string;
+  icon?: React.ReactNode | undefined;
+  /** Se pinta en rojo y se separa: quita algo, aunque no borre el juego. */
+  destructive?: boolean | undefined;
+  disabled?: boolean | undefined;
+  onSelect: (game: GameSummary) => void;
+}
+
 export interface GameContextMenuProps {
   /** Juego sobre el que actúan todas las entradas del menú. */
   game: GameSummary;
@@ -94,6 +111,8 @@ export interface GameContextMenuProps {
   shortcuts?: Partial<Record<GameContextAction, string>> | undefined;
   /** Oculta las etiquetas de atajo si la pantalla no las tiene enlazadas. */
   showShortcuts?: boolean | undefined;
+  /** Acciones propias de la pantalla que monta el menú. */
+  extraActions?: readonly GameContextExtraAction[] | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
   onPlay?: ((game: GameSummary) => void) | undefined;
   onInstall?: ((game: GameSummary) => void) | undefined;
@@ -164,6 +183,7 @@ export function GameContextMenu({
   collectionIds,
   shortcuts,
   showShortcuts = true,
+  extraActions,
   onOpenChange,
   onPlay,
   onInstall,
@@ -200,6 +220,7 @@ export function GameContextMenu({
   const showOrganizeGroup = showStatusSub || showPrioritySub || showCollectionsSub;
   const showFlagsGroup = Boolean(onTogglePinned || onToggleTracking);
   const showCopyGroup = Boolean(onCopyTitle || onCopyAppId);
+  const showExtraGroup = (extraActions?.length ?? 0) > 0;
 
   return (
     <ContextMenu {...(onOpenChange ? { onOpenChange } : {})}>
@@ -274,7 +295,25 @@ export function GameContextMenu({
           </ContextMenuGroup>
         )}
 
-        {showNavigationGroup && showOrganizeGroup && <ContextMenuSeparator />}
+        {(showLaunchGroup || showNavigationGroup) && showExtraGroup && <ContextMenuSeparator />}
+
+        {showExtraGroup && (
+          <ContextMenuGroup>
+            {(extraActions ?? []).map((action) => (
+              <ContextMenuItem
+                key={action.id}
+                disabled={busy || action.disabled === true}
+                {...(action.destructive ? { variant: "destructive" as const } : {})}
+                onSelect={() => action.onSelect(game)}
+              >
+                {action.icon}
+                {action.label}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuGroup>
+        )}
+
+        {(showNavigationGroup || showExtraGroup) && showOrganizeGroup && <ContextMenuSeparator />}
 
         {showStatusSub && onChangeStatus && (
           <ContextMenuSub>

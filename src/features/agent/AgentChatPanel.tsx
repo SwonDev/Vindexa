@@ -223,8 +223,7 @@ export function AgentChatPanel({ onClose }: { onClose: () => void }) {
 
           {turns.map((turn, index) => (
             <article
-              // El índice vale como clave: los turnos sólo se añaden al final y
-              // nunca se reordenan ni se borran.
+              // biome-ignore lint/suspicious/noArrayIndexKey: los turnos sólo se añaden al final; nunca se reordenan ni se borran
               key={`${turn.role}-${index}`}
               className="agent-chat__turn"
               data-role={turn.role}
@@ -233,7 +232,11 @@ export function AgentChatPanel({ onClose }: { onClose: () => void }) {
               {turn.steps && turn.steps.length > 0 && (
                 <ul className="agent-chat__steps">
                   {turn.steps.map((step, position) => (
-                    <li key={`${step.tool}-${position}`} data-failed={step.failed}>
+                    <li
+                      // biome-ignore lint/suspicious/noArrayIndexKey: los pasos de un turno ya terminado no cambian de orden
+                      key={`${step.tool}-${position}`}
+                      data-failed={step.failed}
+                    >
                       <code>{step.tool}</code>
                       <span>{describeArguments(step.arguments)}</span>
                     </li>

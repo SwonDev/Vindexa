@@ -56,6 +56,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -406,113 +414,140 @@ function CuratedTile({
     isOver,
   } = useSortable({ id: listDragId(list.id), data: { title: list.name } });
   const dropState: DropState = isDragging ? "idle" : isOver ? "over" : dragging ? "active" : "idle";
+  // El menú contextual borra por el mismo camino que el botón: la confirmación
+  // no puede depender de por dónde se entre.
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
 
   return (
-    <DragFeedbackSurface asChild state={dropState}>
-      <article
-        ref={setNodeRef}
-        className="curated-tile"
-        data-kind={list.kind}
-        data-selected={selected}
-        data-dragging={isDragging}
-        onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
-        style={{ transform: CSS.Transform.toString(transform), transition }}
-      >
-        <span
-          className="curated-tile__accent"
-          style={{ backgroundColor: accentToken(list.accent) }}
-          aria-hidden="true"
-        />
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="wishlist-drag-activator"
-          aria-label={`Reordenar ${list.name}`}
-          {...attributes}
-          {...listeners}
-        />
-        <PressableSurface asChild liftPx={1} hoverScale={1.004}>
-          <div className="curated-tile__surface">
-            <span className="curated-tile__icon" aria-hidden="true">
-              <CollectionIcon name={list.icon} fallback="manual" />
-            </span>
-            <h3 className="curated-tile__name">
-              <button
-                type="button"
-                className="curated-tile__target"
-                aria-pressed={selected}
-                onClick={onSelect}
-              >
-                {list.name}
-              </button>
-            </h3>
-            <span className="curated-tile__count">
-              <AnimatedNumber value={list.gameCount} />
-            </span>
-            <p className="curated-tile__summary">
-              {list.description || "Sin descripción todavía."}
-            </p>
-            <footer className="curated-tile__footer">
-              <span className="curated-tile__chip">{curatedKindLabel(list.kind)}</span>
-              {list.pinned && (
-                <span className="curated-tile__chip" data-pinned="true">
-                  <IconPinFilled aria-hidden="true" /> FIJADA
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <DragFeedbackSurface asChild state={dropState}>
+          <article
+            ref={setNodeRef}
+            className="curated-tile"
+            data-kind={list.kind}
+            data-selected={selected}
+            data-dragging={isDragging}
+            onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLElement>}
+            style={{ transform: CSS.Transform.toString(transform), transition }}
+          >
+            <span
+              className="curated-tile__accent"
+              style={{ backgroundColor: accentToken(list.accent) }}
+              aria-hidden="true"
+            />
+            <button
+              ref={setActivatorNodeRef}
+              type="button"
+              className="wishlist-drag-activator"
+              aria-label={`Reordenar ${list.name}`}
+              {...attributes}
+              {...listeners}
+            />
+            <PressableSurface asChild liftPx={1} hoverScale={1.004}>
+              <div className="curated-tile__surface">
+                <span className="curated-tile__icon" aria-hidden="true">
+                  <CollectionIcon name={list.icon} fallback="manual" />
                 </span>
-              )}
-            </footer>
-          </div>
-        </PressableSurface>
-        <span className="curated-tile__actions" onPointerDown={(event) => event.stopPropagation()}>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Subir ${list.name}`}
-            disabled={busy || index === 0}
-            onClick={() => onMove(-1)}
-          >
-            <IconArrowUp />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Bajar ${list.name}`}
-            disabled={busy || index === total - 1}
-            onClick={() => onMove(1)}
-          >
-            <IconArrowDown />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Editar ${list.name}`}
-            onClick={onEdit}
-          >
-            <IconPencil />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon-xs" aria-label={`Eliminar ${list.name}`}>
-                <IconTrash />
+                <h3 className="curated-tile__name">
+                  <button
+                    type="button"
+                    className="curated-tile__target"
+                    aria-pressed={selected}
+                    onClick={onSelect}
+                  >
+                    {list.name}
+                  </button>
+                </h3>
+                <span className="curated-tile__count">
+                  <AnimatedNumber value={list.gameCount} />
+                </span>
+                <p className="curated-tile__summary">
+                  {list.description || "Sin descripción todavía."}
+                </p>
+                <footer className="curated-tile__footer">
+                  <span className="curated-tile__chip">{curatedKindLabel(list.kind)}</span>
+                  {list.pinned && (
+                    <span className="curated-tile__chip" data-pinned="true">
+                      <IconPinFilled aria-hidden="true" /> FIJADA
+                    </span>
+                  )}
+                </footer>
+              </div>
+            </PressableSurface>
+            <span
+              className="curated-tile__actions"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Subir ${list.name}`}
+                disabled={busy || index === 0}
+                onClick={() => onMove(-1)}
+              >
+                <IconArrowUp />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar «{list.name}»?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Desaparecerá la lista y su orden. Ningún juego ni dato personal se borra.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete} disabled={busy}>
-                  Eliminar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </span>
-      </article>
-    </DragFeedbackSurface>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Bajar ${list.name}`}
+                disabled={busy || index === total - 1}
+                onClick={() => onMove(1)}
+              >
+                <IconArrowDown />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Editar ${list.name}`}
+                onClick={onEdit}
+              >
+                <IconPencil />
+              </Button>
+              <AlertDialog open={confirmandoBorrado} onOpenChange={setConfirmandoBorrado}>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon-xs" aria-label={`Eliminar ${list.name}`}>
+                    <IconTrash />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Eliminar «{list.name}»?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Desaparecerá la lista y su orden. Ningún juego ni dato personal se borra.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={onDelete} disabled={busy}>
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </span>
+          </article>
+        </DragFeedbackSurface>
+      </ContextMenuTrigger>
+      <ContextMenuContent aria-label={`Acciones rápidas de ${list.name}`}>
+        <ContextMenuLabel>{list.name}</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onEdit}>
+          <IconPencil aria-hidden="true" /> Editar lista…
+        </ContextMenuItem>
+        <ContextMenuItem disabled={busy || index === 0} onSelect={() => onMove(-1)}>
+          <IconArrowUp aria-hidden="true" /> Subir
+        </ContextMenuItem>
+        <ContextMenuItem disabled={busy || index === total - 1} onSelect={() => onMove(1)}>
+          <IconArrowDown aria-hidden="true" /> Bajar
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={() => setConfirmandoBorrado(true)}>
+          <IconTrash aria-hidden="true" /> Eliminar lista
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -650,76 +685,131 @@ function CuratedListDetail({ list }: { list: CuratedList }) {
         ) : (
           <ul className="curated-items">
             {items.map((item, index) => (
-              <li
-                key={item.game.appId}
-                className="curated-item"
-                data-highlight={item.highlight}
-                data-position={index + 1}
-              >
-                <span className="curated-item__rank" aria-hidden="true">
-                  {index + 1}
-                </span>
-                <span className="curated-item__cover" aria-hidden="true">
-                  <Artwork
-                    appId={item.game.appId}
-                    src={item.game.coverUrl}
-                    title={item.game.title}
-                    kind="cover"
-                  />
-                </span>
-                <div className="curated-item__body">
-                  <p className="curated-item__title">{item.game.title}</p>
-                  {noteDraft?.appId === item.game.appId ? (
-                    <div className="curated-item__editor">
-                      <Textarea
-                        rows={2}
-                        value={noteDraft.note}
-                        maxLength={400}
-                        aria-label={`Nota de ${item.game.title}`}
-                        onChange={(event) =>
-                          setNoteDraft({ appId: item.game.appId, note: event.currentTarget.value })
-                        }
+              <ContextMenu key={item.game.appId}>
+                <ContextMenuTrigger asChild>
+                  <li
+                    className="curated-item"
+                    data-highlight={item.highlight}
+                    data-position={index + 1}
+                  >
+                    <span className="curated-item__rank" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <span className="curated-item__cover" aria-hidden="true">
+                      <Artwork
+                        appId={item.game.appId}
+                        src={item.game.coverUrl}
+                        title={item.game.title}
+                        kind="cover"
                       />
+                    </span>
+                    <div className="curated-item__body">
+                      <p className="curated-item__title">{item.game.title}</p>
+                      {noteDraft?.appId === item.game.appId ? (
+                        <div className="curated-item__editor">
+                          <Textarea
+                            rows={2}
+                            value={noteDraft.note}
+                            maxLength={400}
+                            aria-label={`Nota de ${item.game.title}`}
+                            onChange={(event) =>
+                              setNoteDraft({
+                                appId: item.game.appId,
+                                note: event.currentTarget.value,
+                              })
+                            }
+                          />
+                          <Button
+                            size="xs"
+                            disabled={busy}
+                            onClick={() =>
+                              update.mutate({
+                                appId: item.game.appId,
+                                note: noteDraft.note.trim(),
+                                highlight: item.highlight,
+                              })
+                            }
+                          >
+                            {update.isPending && <IconLoader2 className="is-spinning" />} Guardar
+                            nota
+                          </Button>
+                          <Button variant="ghost" size="xs" onClick={() => setNoteDraft(undefined)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="curated-item__note"
+                          aria-label={`Editar la nota de ${item.game.title}`}
+                          onClick={() => setNoteDraft({ appId: item.game.appId, note: item.note })}
+                        >
+                          {item.note || "Añadir una nota"}
+                        </button>
+                      )}
+                    </div>
+                    <span className="curated-item__actions">
                       <Button
-                        size="xs"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={
+                          item.highlight
+                            ? `Quitar destacado a ${item.game.title}`
+                            : `Destacar ${item.game.title}`
+                        }
+                        aria-pressed={item.highlight}
                         disabled={busy}
                         onClick={() =>
                           update.mutate({
                             appId: item.game.appId,
-                            note: noteDraft.note.trim(),
-                            highlight: item.highlight,
+                            note: item.note,
+                            highlight: !item.highlight,
                           })
                         }
                       >
-                        {update.isPending && <IconLoader2 className="is-spinning" />} Guardar nota
+                        {item.highlight ? <IconStarFilled /> : <IconStar />}
                       </Button>
-                      <Button variant="ghost" size="xs" onClick={() => setNoteDraft(undefined)}>
-                        Cancelar
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Subir ${item.game.title}`}
+                        disabled={busy || index === 0}
+                        onClick={() => moveItem(index, -1)}
+                      >
+                        <IconArrowUp />
                       </Button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="curated-item__note"
-                      aria-label={`Editar la nota de ${item.game.title}`}
-                      onClick={() => setNoteDraft({ appId: item.game.appId, note: item.note })}
-                    >
-                      {item.note || "Añadir una nota"}
-                    </button>
-                  )}
-                </div>
-                <span className="curated-item__actions">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={
-                      item.highlight
-                        ? `Quitar destacado a ${item.game.title}`
-                        : `Destacar ${item.game.title}`
-                    }
-                    aria-pressed={item.highlight}
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Bajar ${item.game.title}`}
+                        disabled={busy || index === items.length - 1}
+                        onClick={() => moveItem(index, 1)}
+                      >
+                        <IconArrowDown />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Quitar ${item.game.title} de ${list.name}`}
+                        disabled={busy}
+                        onClick={() => removeItem.mutate(item.game.appId)}
+                      >
+                        <IconX />
+                      </Button>
+                    </span>
+                  </li>
+                </ContextMenuTrigger>
+                <ContextMenuContent aria-label={`Acciones rápidas de ${item.game.title}`}>
+                  <ContextMenuLabel>{item.game.title}</ContextMenuLabel>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onSelect={() => setNoteDraft({ appId: item.game.appId, note: item.note })}
+                  >
+                    <IconPencil aria-hidden="true" /> Editar la nota
+                  </ContextMenuItem>
+                  <ContextMenuItem
                     disabled={busy}
-                    onClick={() =>
+                    onSelect={() =>
                       update.mutate({
                         appId: item.game.appId,
                         note: item.note,
@@ -727,37 +817,23 @@ function CuratedListDetail({ list }: { list: CuratedList }) {
                       })
                     }
                   >
-                    {item.highlight ? <IconStarFilled /> : <IconStar />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Subir ${item.game.title}`}
-                    disabled={busy || index === 0}
-                    onClick={() => moveItem(index, -1)}
-                  >
-                    <IconArrowUp />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Bajar ${item.game.title}`}
-                    disabled={busy || index === items.length - 1}
-                    onClick={() => moveItem(index, 1)}
-                  >
-                    <IconArrowDown />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Quitar ${item.game.title} de ${list.name}`}
+                    {item.highlight ? (
+                      <IconStarFilled aria-hidden="true" />
+                    ) : (
+                      <IconStar aria-hidden="true" />
+                    )}
+                    {item.highlight ? "Quitar destacado" : "Destacar"}
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    variant="destructive"
                     disabled={busy}
-                    onClick={() => removeItem.mutate(item.game.appId)}
+                    onSelect={() => removeItem.mutate(item.game.appId)}
                   >
-                    <IconX />
-                  </Button>
-                </span>
-              </li>
+                    <IconTrash aria-hidden="true" /> Quitar de la lista
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             ))}
           </ul>
         )}

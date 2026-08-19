@@ -812,6 +812,21 @@ function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined 
     const capture = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopPropagation();
+      // Mientras se graba, este manejador se queda con todas las teclas: sin una
+      // salida, cambiar de opinión obligaría a asignar algo que no se quiere o a
+      // cerrar el diálogo, porque el propio Esc del diálogo tampoco llega.
+      // `Esc` a secas cancela; con modificador sigue siendo asignable.
+      if (
+        event.key === "Escape" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        setRecording(undefined);
+        setNotice(undefined);
+        return;
+      }
       const shortcut = eventToShortcut(event);
       if (!shortcut) return;
       const rejection = describeShortcutRejection(bindings, recording, shortcut);
@@ -886,7 +901,7 @@ function ShortcutSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined 
                   aria-pressed={recording === entry.action}
                   onClick={() => {
                     setNotice(undefined);
-                    setRecording(entry.action);
+                    setRecording((actual) => (actual === entry.action ? undefined : entry.action));
                   }}
                 >
                   {recording === entry.action ? (

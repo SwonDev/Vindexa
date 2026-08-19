@@ -143,14 +143,32 @@ export function PlannerCapacityEditor({
   );
 }
 
+/**
+ * El editor de la planificación de un juego.
+ *
+ * Trae su propio botón, pero también se puede abrir desde fuera —el menú
+ * contextual de una tarjeta— pasando `open`. Cuando se controla desde fuera, el
+ * botón desaparece: dos disparadores para el mismo diálogo confunden más de lo
+ * que ayudan.
+ */
 export function PlannerItemEditor({
   item,
   onSave,
+  open: openProp,
+  onOpenChange,
 }: {
   item: PlannerViewItem;
   onSave: (input: SavePlannerItemInput) => Promise<void>;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
-  const [open, setOpen] = useState(false);
+  const controlado = openProp !== undefined;
+  const [openInterno, setOpenInterno] = useState(false);
+  const open = controlado ? openProp : openInterno;
+  const setOpen = (next: boolean) => {
+    if (!controlado) setOpenInterno(next);
+    onOpenChange?.(next);
+  };
   const [objective, setObjective] = useState(item.objective ?? "");
   const [plannedFor, setPlannedFor] = useState(item.plannedFor ?? "");
   const [targetDate, setTargetDate] = useState(item.targetDate ?? "");
@@ -202,11 +220,13 @@ export function PlannerItemEditor({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={`Planificar ${item.title}`}>
-          <IconPencil />
-        </Button>
-      </DialogTrigger>
+      {!controlado && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon-xs" aria-label={`Planificar ${item.title}`}>
+            <IconPencil />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="planner-item-dialog">
         <DialogHeader>
           <DialogTitle>Planificar {item.title}</DialogTitle>

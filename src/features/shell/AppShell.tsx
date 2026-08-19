@@ -527,7 +527,16 @@ export function AppShell() {
     ? { bootstrap, loading: bootstrapQuery.isPending }
     : { loading: bootstrapQuery.isPending };
   const content = (() => {
-    if (section === "planner") return <PlannerScreen {...screenProps} />;
+    if (section === "planner")
+      return (
+        <PlannerScreen
+          {...screenProps}
+          onOpenSettings={(target) => {
+            setSettingsSection(target);
+            setSettingsOpen(true);
+          }}
+        />
+      );
     if (section === "wishlist") return <WishlistScreen {...screenProps} />;
     if (section === "collections") return <CollectionsScreen {...screenProps} />;
     if (section === "tracking") return <DiscoveryScreen {...screenProps} />;
@@ -626,6 +635,7 @@ export function AppShell() {
               propagación en la barra impide que llegue. Sólo se corta el doble
               clic (`detail === 2`); el arrastre, que es un clic simple, sigue
               siendo suyo y sigue funcionando igual. */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: es cromado de ventana; el doble clic sobre la barra no tiene equivalente de teclado en ningún sistema, y todo lo que hay dentro sí es pulsable */}
           <header
             className="topbar"
             data-tauri-drag-region="deep"

@@ -23,6 +23,12 @@ vi.mock("@/lib/tauri", () => ({
     reorderCollections: vi.fn(),
     setGameCollections: vi.fn(),
     cacheGameArt: vi.fn(),
+    updateGame: vi.fn(),
+    openStore: vi.fn(),
+    launchGame: vi.fn(),
+    installGame: vi.fn(),
+    revealInstallation: vi.fn(),
+    setCollectionAppearance: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "No se pudo completar la operación.",
@@ -203,6 +209,95 @@ describe("pantalla de colecciones", () => {
           : page([game(413150, "Stardew Valley"), game(105600, "Terraria")]),
       ),
     );
+  });
+
+  it("el clic derecho sobre una colección ofrece editarla, borrarla y cambiarle el aspecto", async () => {
+    // Editar una colección desde aquí era ir a buscar el lápiz del pie de la
+    // tarjeta. El gesto que todo el mundo prueba primero es el clic derecho.
+    const user = userEvent.setup();
+    renderScreen(makeBootstrap([favourites, halfTold]));
+
+    const tarjeta = screen
+      .getAllByRole("article")
+      .find((tile) => tile.textContent?.includes("Favoritos"));
+    expect(tarjeta).toBeDefined();
+    await user.pointer({ keys: "[MouseRight]", target: tarjeta as HTMLElement });
+
+    const menu = await screen.findByRole("menu", { name: /Acciones rápidas de Favoritos/ });
+    expect(within(menu).getByRole("menuitem", { name: "Editar colección…" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Eliminar colección" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Color" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Icono" })).toBeVisible();
+  });
+
+  it("borrar desde el menú contextual pasa por la misma confirmación", async () => {
+    // Un borrado que se dispara directo desde un menú es un borrado que ocurre
+    // por accidente.
+    const user = userEvent.setup();
+    renderScreen(makeBootstrap([favourites, halfTold]));
+
+    const tarjeta = screen
+      .getAllByRole("article")
+      .find((tile) => tile.textContent?.includes("Favoritos"));
+    await user.pointer({ keys: "[MouseRight]", target: tarjeta as HTMLElement });
+    await user.click(await screen.findByRole("menuitem", { name: "Eliminar colección" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(/¿Eliminar “Favoritos”\?/);
+    expect(mockedApi.deleteCollection).not.toHaveBeenCalled();
+  });
+
+  it("el clic derecho sobre un juego de la colección ofrece sacarlo de ella", async () => {
+    const user = userEvent.setup();
+    renderScreen(makeBootstrap([favourites, halfTold]));
+
+    const fila = await screen.findByRole("button", { name: /^Portal 2,/ });
+    await user.pointer({ keys: "[MouseRight]", target: fila });
+
+    const menu = await screen.findByRole("menu", { name: /Acciones rápidas de Portal 2/ });
+    expect(within(menu).getByRole("menuitem", { name: "Abrir ficha" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Estado" })).toBeVisible();
+    await user.click(within(menu).getByRole("menuitem", { name: /Quitar de Favoritos/ }));
+
+    await waitFor(() =>
+      expect(mockedApi.setGameCollections).toHaveBeenCalledWith(620, expect.any(Array)),
+    );
+  });
+
+  it("una colección inteligente no ofrece sacar un juego a mano", async () => {
+    // Sacarlo no serviría de nada: la regla lo devolvería en la siguiente
+    // pasada. Ofrecerlo sería prometer algo que no se cumple.
+    const user = userEvent.setup();
+    renderScreen(makeBootstrap([halfTold, favourites]));
+
+    const fila = await screen.findByRole("button", { name: /^Stardew Valley,/ });
+    await user.pointer({ keys: "[MouseRight]", target: fila });
+
+    const menu = await screen.findByRole("menu", { name: /Acciones rápidas de Stardew Valley/ });
+    expect(within(menu).queryByRole("menuitem", { name: /Quitar de/ })).toBeNull();
+  });
+
+  it("pinta el icono elegido de cada colección, no uno genérico", async () => {
+    // El icono se cambiaba y la vista principal seguía enseñando la carpeta de
+    // siempre. Aquí se monta la pantalla de verdad y se mira lo que sale: que
+    // el valor guardado llega hasta el SVG.
+    renderScreen(
+      makeBootstrap([
+        collection({ id: "cohetes", name: "Para el espacio", icon: "rocket", position: 0 }),
+        collection({ id: "raro", name: "Con un icono retirado", icon: "no-existe", position: 1 }),
+      ]),
+    );
+
+    const espacio = screen
+      .getAllByRole("article")
+      .find((tile) => tile.textContent?.includes("Para el espacio"));
+    expect(espacio?.querySelector(".tabler-icon-rocket")).not.toBeNull();
+
+    // Un icono que ya no está en el catálogo no deja el hueco vacío: cae en la
+    // carpeta, que es lo que significa «sin icono propio».
+    const retirado = screen
+      .getAllByRole("article")
+      .find((tile) => tile.textContent?.includes("Con un icono retirado"));
+    expect(retirado?.querySelector(".tabler-icon-folder")).not.toBeNull();
   });
 
   it("enseña las carátulas reales de cada colección sin pedir la biblioteca entera", async () => {

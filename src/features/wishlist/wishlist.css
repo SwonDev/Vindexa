@@ -1591,7 +1591,6 @@
 /* La salida va pegada al aviso que la justifica, y no se encoge: cuando el
    texto explica que el perfil no es público, el botón que lo resuelve tiene que
    seguir siendo pulsable por estrecha que quede la ventana. */
-.wishlist-screen__notice > .btn,
 .wishlist-screen__notice > button {
   flex: 0 0 auto;
 }

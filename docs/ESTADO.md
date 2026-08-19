@@ -97,18 +97,38 @@ SELECT drm_state, COUNT(*) FROM games WHERE drm_state <> 'unknown' GROUP BY drm_
 
 ## 6. Clic derecho
 
-Cuatro menús contextuales:
+Cancelar el menú nativo de WebKit es una decisión de toda la aplicación, así que
+ofrecer uno propio también lo es. Está en todas las pantallas:
 
 | Sobre qué | Qué ofrece |
 |---|---|
-| Un juego | Jugar, instalar, ficha, tienda, fijar, seguir, estado, prioridad, colecciones, copiar |
-| Una colección | Color e icono en rejilla (42 iconos, 12 colores), editar, eliminar |
+| Un juego, en cualquier pantalla | Jugar o instalar, ficha, tienda, estado, prioridad, colecciones, fijar, seguir, copiar |
+| Una colección (barra lateral y pantalla) | Color e icono en rejilla (42 iconos, 12 colores), editar, eliminar con confirmación |
+| Un juego dentro de una colección | Lo de un juego, más «Quitar de …» — sólo en las manuales |
 | Un estado | Color en rejilla, editor de estados |
 | Una tienda | Abrir su navegador integrado con tu sesión, sincronizar ahora |
+| Las cabeceras «ESTADOS» y «COLECCIONES» | Plegar, editar estados, nueva colección |
+| Una vista guardada | Aplicar o quitar, anclar, actualizar con lo que ves, eliminar |
+| Una tarjeta del planificador | Ficha, editar planificación, mover a otra columna, copiar, quitar del plan |
+| Una columna del planificador | Color, límite de trabajo, editar columnas |
+| Un deseado | Editar nota y precio, abrir la tienda, mover de carril, subir, bajar, quitar |
+| Una lista curada | Editar, subir, bajar, eliminar |
+| Un juego de una lista curada | Editar la nota, destacar, quitar de la lista |
+| Un juego en seguimiento | Lo de un juego, más «Recordármelo en una semana» |
+| Un próximo lanzamiento | Me interesa, no me interesa, programar un aviso, descartar |
+| Una carátula del modo salón | Jugar o instalar, abrir la tienda, copiar título |
+| Un aviso | Marcar como leído, copiar, descartar |
+
+Dos cosas aparecieron por el camino y no estaban en ninguna parte de la
+interfaz: **quitar un juego del planificador** —`remove_planner_item` existía en
+el backend y no lo llamaba nadie— y **abrir la tienda de un deseado**.
 
 ```
-grep -n "export function.*ContextMenu" src/features/library/SidebarContextMenus.tsx
+pnpm test src/test/context-menu-coverage.test.tsx
 ```
+
+La cobertura se vigila con una prueba: si una pantalla nueva no monta menú, o
+una lo pierde, falla.
 
 ## 7. La ventana
 

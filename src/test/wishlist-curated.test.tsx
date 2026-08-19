@@ -363,3 +363,74 @@ describe("listas curadas · estados límite", () => {
     expect(screen.getByRole("button", { name: "Empezar en los metroidvania" })).toBeVisible();
   });
 });
+
+/**
+ * El clic derecho en las listas curadas.
+ *
+ * Los botones de una baldosa y de cada juego sólo aparecen al pasar por encima
+ * y son de dieciséis píxeles. El menú pone lo mismo donde se busca.
+ */
+describe("acciones rápidas de las listas curadas", () => {
+  beforeEach(() => {
+    mockedApi.listCuratedLists.mockResolvedValue([entrada, invierno]);
+    mockedApi.curatedListDetail.mockResolvedValue(entradaDetail);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 8, offset: 0 });
+    mockedApi.deleteCuratedList.mockResolvedValue(undefined);
+    mockedApi.updateCuratedItem.mockResolvedValue(undefined);
+    mockedApi.removeCuratedGame.mockResolvedValue(undefined);
+  });
+
+  it("una lista ofrece editarla, moverla y borrarla", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const baldosa = (await screen.findAllByRole("article")).find((nodo) =>
+      nodo.textContent?.includes("Empezar en los metroidvania"),
+    );
+    expect(baldosa).toBeDefined();
+    await user.pointer({ keys: "[MouseRight]", target: baldosa as HTMLElement });
+
+    const menu = await screen.findByRole("menu", {
+      name: /Acciones rápidas de Empezar en los metroidvania/,
+    });
+    expect(within(menu).getByRole("menuitem", { name: "Editar lista…" })).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: "Eliminar lista" })).toBeVisible();
+  });
+
+  it("borrar una lista desde el menú pasa por la confirmación", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const baldosa = (await screen.findAllByRole("article")).find((nodo) =>
+      nodo.textContent?.includes("Empezar en los metroidvania"),
+    );
+    await user.pointer({ keys: "[MouseRight]", target: baldosa as HTMLElement });
+    await user.click(await screen.findByRole("menuitem", { name: "Eliminar lista" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      /¿Eliminar «Empezar en los metroidvania»\?/,
+    );
+    expect(mockedApi.deleteCuratedList).not.toHaveBeenCalled();
+  });
+
+  it("un juego de la lista se destaca y se quita desde su menú", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const fila = (await screen.findByText("Hyper Light Drifter")).closest("li");
+    expect(fila).not.toBeNull();
+    await user.pointer({ keys: "[MouseRight]", target: fila as HTMLElement });
+
+    const menu = await screen.findByRole("menu", {
+      name: /Acciones rápidas de Hyper Light Drifter/,
+    });
+    expect(within(menu).getByRole("menuitem", { name: "Editar la nota" })).toBeVisible();
+    await user.click(within(menu).getByRole("menuitem", { name: "Destacar" }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateCuratedItem).toHaveBeenCalledWith(
+        expect.objectContaining({ appId: 257850, highlight: true }),
+      ),
+    );
+  });
+});

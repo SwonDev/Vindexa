@@ -7,6 +7,7 @@ import {
   IconCheck,
   IconChecks,
   IconCircleCheck,
+  IconCopy,
   IconInfoCircle,
   IconLoader2,
   IconRefresh,
@@ -16,6 +17,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Overlay } from "@/components/common/Overlay";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatRelativeDate } from "@/lib/format";
@@ -285,28 +294,72 @@ function NotificationRow({
   const SeverityIcon = SEVERITY_ICON[event.severity] ?? IconInfoCircle;
   const unread = !event.readAt;
   return (
-    <li className="notification-row" data-severity={event.severity} data-unread={unread}>
-      <SeverityIcon aria-label={SEVERITY_LABEL[event.severity] ?? "Aviso"} size={15} stroke={1.9} />
-      <div className="notification-row__body">
-        <p className="notification-row__title">{event.title}</p>
-        {event.body && <p className="notification-row__text">{event.body}</p>}
-        <p className="notification-row__meta">
-          {event.gameTitle ? `${event.gameTitle} · ` : ""}
-          {formatRelativeDate(event.occurredAt)}
-        </p>
-      </div>
-      <div className="notification-row__actions">
-        {unread && (
-          <Button variant="ghost" size="icon-xs" aria-label="Marcar como leído" onClick={onRead}>
-            <IconCheck />
-          </Button>
-        )}
-        {!event.dismissedAt && (
-          <Button variant="ghost" size="icon-xs" aria-label="Descartar aviso" onClick={onDismiss}>
-            <IconX />
-          </Button>
-        )}
-      </div>
-    </li>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <li className="notification-row" data-severity={event.severity} data-unread={unread}>
+          <SeverityIcon
+            aria-label={SEVERITY_LABEL[event.severity] ?? "Aviso"}
+            size={15}
+            stroke={1.9}
+          />
+          <div className="notification-row__body">
+            <p className="notification-row__title">{event.title}</p>
+            {event.body && <p className="notification-row__text">{event.body}</p>}
+            <p className="notification-row__meta">
+              {event.gameTitle ? `${event.gameTitle} · ` : ""}
+              {formatRelativeDate(event.occurredAt)}
+            </p>
+          </div>
+          <div className="notification-row__actions">
+            {unread && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Marcar como leído"
+                onClick={onRead}
+              >
+                <IconCheck />
+              </Button>
+            )}
+            {!event.dismissedAt && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Descartar aviso"
+                onClick={onDismiss}
+              >
+                <IconX />
+              </Button>
+            )}
+          </div>
+        </li>
+      </ContextMenuTrigger>
+      {/* Los dos botones de la fila miden dieciséis píxeles y sólo salen al
+          pasar por encima; aquí están sin apuntar. */}
+      <ContextMenuContent aria-label={`Acciones rápidas de ${event.title}`}>
+        <ContextMenuLabel>{event.title}</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={!unread} onSelect={onRead}>
+          <IconCheck aria-hidden="true" /> Marcar como leído
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => {
+            navigator.clipboard
+              ?.writeText([event.title, event.body].filter(Boolean).join("\n"))
+              .catch(() => undefined);
+          }}
+        >
+          <IconCopy aria-hidden="true" /> Copiar el aviso
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          disabled={Boolean(event.dismissedAt)}
+          onSelect={onDismiss}
+        >
+          <IconX aria-hidden="true" /> Descartar
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
