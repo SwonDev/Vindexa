@@ -154,7 +154,9 @@
 
 .agent-chat__composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* El dictado ocupa su propia columna: aparece sólo si hay transcriptor, y
+     `auto` deja que la fila se recomponga sin mover el campo de texto. */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
   gap: 8px;
   padding: 9px 10px;

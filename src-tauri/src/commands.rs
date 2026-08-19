@@ -2672,6 +2672,28 @@ pub async fn delete_agent_task(state: State<'_, AppState>, task_id: String) -> A
     .await
 }
 
+/// ¿Hay un transcriptor en este ordenador con el que dictar?
+///
+/// `None` no es un error: es que no lo hay, y entonces el botón de dictar ni
+/// siquiera aparece. Ofrecerlo para que falle sería peor.
+#[tauri::command]
+pub async fn speech_endpoint() -> AppResult<Option<localmodel::speech::SpeechEndpoint>> {
+    Ok(localmodel::speech::discover().await)
+}
+
+/// Convierte un dictado en texto, contra un transcriptor local.
+///
+/// El audio llega como bytes desde la ventana y no se guarda en ninguna parte:
+/// se manda, se recibe el texto y se olvida.
+#[tauri::command]
+pub async fn transcribe_dictation(
+    base_url: String,
+    audio: Vec<u8>,
+    mime: String,
+) -> AppResult<String> {
+    localmodel::speech::transcribe(&base_url, audio, &mime).await
+}
+
 /// Un turno de conversación con el agente que vive dentro de Vindexa.
 ///
 /// Devuelve la respuesta y, por separado, lo que haya hecho por el camino: un

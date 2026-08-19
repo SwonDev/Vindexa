@@ -329,3 +329,9 @@ export interface SaveScheduledTask {
   cadence: string;
   enabled?: boolean;
 }
+
+/** Transcriptor local con el que dictar. */
+export interface SpeechEndpoint {
+  baseUrl: string;
+  model: string | null;
+}

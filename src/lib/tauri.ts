@@ -18,6 +18,7 @@ import type {
   SaveAgentModelConfig,
   SaveScheduledTask,
   ScheduledTask,
+  SpeechEndpoint,
 } from "@/lib/agent-types";
 import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
@@ -390,6 +391,9 @@ export const api = {
   listAgentTasks: () => invoke<ScheduledTask[]>("list_agent_tasks"),
   saveAgentTask: (input: SaveScheduledTask) => invoke<ScheduledTask>("save_agent_task", { input }),
   deleteAgentTask: (taskId: string) => invoke<void>("delete_agent_task", { taskId }),
+  speechEndpoint: () => invoke<SpeechEndpoint | null>("speech_endpoint"),
+  transcribeDictation: (baseUrl: string, audio: number[], mime: string) =>
+    invoke<string>("transcribe_dictation", { baseUrl, audio, mime }),
   vindagentConfig: () => invoke<AgentModelConfig>("vindagent_config"),
   saveVindagentConfig: (input: SaveAgentModelConfig) =>
     invoke<AgentModelConfig>("save_vindagent_config", { input }),

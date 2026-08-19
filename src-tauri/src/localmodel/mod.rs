@@ -18,6 +18,7 @@
 //! | ¿Hay ya algo sirviendo un modelo? | [`endpoints::discover`] |
 //! | ¿Y si no hay nada, qué me descargo? | [`catalog::suggest`] |
 //! | ¿Y cómo instalo el motor que falta? | [`install::plan`] |
+//! | ¿Puedo dictar en vez de escribir? | [`speech::discover`] |
 //!
 //! # Por qué no se rastrea el disco entero
 //!
@@ -30,6 +31,7 @@
 pub mod catalog;
 pub mod endpoints;
 pub mod install;
+pub mod speech;
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

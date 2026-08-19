@@ -394,6 +394,8 @@ pub fn run() {
             commands::detect_agent_hosts,
             commands::local_model_survey,
             commands::vindagent_chat,
+            commands::speech_endpoint,
+            commands::transcribe_dictation,
             commands::vindagent_config,
             commands::list_agent_tasks,
             commands::save_agent_task,

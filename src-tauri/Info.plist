@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Añadidos a la ficha que Tauri genera para macOS.
+
+  Sin `NSMicrophoneUsageDescription`, macOS no enseña el diálogo de permiso:
+  cierra la aplicación en el momento de pedir el micrófono. El texto es el que
+  se lee en ese diálogo, así que dice para qué se usa y, sobre todo, qué no se
+  hace con lo grabado.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Para dictarle al agente de Vindexa en vez de escribirle. El audio se transcribe con un modelo de tu propio ordenador y no se guarda ni se envía a ninguna parte.</string>
+  </dict>
+</plist>

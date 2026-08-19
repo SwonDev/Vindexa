@@ -18,13 +18,22 @@
  * de deshacer.
  */
 
-import { IconAlertTriangle, IconLoader2, IconRobot, IconSend, IconX } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconLoader2,
+  IconMicrophone,
+  IconPlayerStopFilled,
+  IconRobot,
+  IconSend,
+  IconX,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { AgentModelConfig, ChatStep, LocalModelSurvey } from "@/lib/agent-types";
 import { formatRelativeDate } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
+import { useDictation } from "./use-dictation";
 import "./agent-chat.css";
 
 interface Turn {
@@ -80,6 +89,16 @@ export function AgentChatPanel({ onClose }: { onClose: () => void }) {
     staleTime: 30_000,
   });
   const config = useQuery({ queryKey: ["agent", "model-config"], queryFn: api.vindagentConfig });
+  const speech = useQuery({
+    queryKey: ["agent", "speech"],
+    queryFn: api.speechEndpoint,
+    staleTime: 60_000,
+  });
+  // Lo dictado se añade a lo que hubiera escrito: nadie pierde media frase por
+  // ponerse a hablar a mitad.
+  const dictation = useDictation(speech.data?.baseUrl, (text) =>
+    setDraft((current) => (current ? `${current} ${text}` : text)),
+  );
   const target = pickTarget(survey.data, config.data);
   const options = availableModels(survey.data);
   const chooseModel = useMutation({
@@ -248,7 +267,13 @@ export function AgentChatPanel({ onClose }: { onClose: () => void }) {
         >
           <textarea
             aria-label="Mensaje para el agente"
-            placeholder={target ? "Cuéntale qué has jugado…" : "Sin modelo disponible"}
+            placeholder={
+              dictation.state === "recording"
+                ? "Grabando… pulsa el cuadrado para terminar"
+                : target
+                  ? "Cuéntale qué has jugado…"
+                  : "Sin modelo disponible"
+            }
             value={draft}
             rows={2}
             disabled={!target || send.isPending}
@@ -262,6 +287,26 @@ export function AgentChatPanel({ onClose }: { onClose: () => void }) {
               }
             }}
           />
+          {dictation.available && (
+            <Button
+              type="button"
+              size="sm"
+              variant={dictation.state === "recording" ? "default" : "outline"}
+              aria-label={dictation.state === "recording" ? "Parar de dictar" : "Dictar"}
+              disabled={!target || dictation.state === "transcribing"}
+              onClick={() =>
+                dictation.state === "recording" ? dictation.stop() : void dictation.start()
+              }
+            >
+              {dictation.state === "transcribing" ? (
+                <IconLoader2 className="is-spinning" aria-hidden="true" />
+              ) : dictation.state === "recording" ? (
+                <IconPlayerStopFilled aria-hidden="true" />
+              ) : (
+                <IconMicrophone aria-hidden="true" />
+              )}
+            </Button>
+          )}
           <Button type="submit" size="sm" disabled={!target || send.isPending || !draft.trim()}>
             <IconSend aria-hidden="true" /> Enviar
           </Button>
