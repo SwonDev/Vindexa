@@ -68,7 +68,7 @@ pub const TOOLS: &[Tool] = &[
                             "kind": {
                                 "type": "string",
                                 "enum": ["biblioteca", "juego", "estados", "colecciones", "listas", "planificador", "avisos", "sesiones", "auditoria"],
-                                "description": "biblioteca: busca por texto. juego: ficha completa. estados/colecciones/listas/planificador/avisos: catálogos. sesiones: últimas partidas de un juego. auditoria: lo que tú mismo has hecho."
+                                "description": "biblioteca: busca por texto y devuelve una MUESTRA; el número real de coincidencias está en «matched», nunca cuentes los juegos que te lleguen. juego: ficha completa. estados: catálogo con el recuento de cada estado, que es de donde sale «cuántos tengo en X». colecciones/listas/planificador/avisos: catálogos. sesiones: últimas partidas de un juego. auditoria: lo que tú mismo has hecho."
                             },
                             "text": { "type": "string", "description": "Texto de búsqueda para «biblioteca»." },
                             "statusId": { "type": "string" },

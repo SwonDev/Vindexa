@@ -1153,9 +1153,19 @@ pub fn answer(connection: &Connection, query: &AgentQuery) -> AppResult<Value> {
                     .partial_cmp(&left.0)
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
+            // El total va **antes** de recortar. Sin él, quien lee la respuesta
+            // cuenta las filas que le han llegado y da esa cifra por buena:
+            // medido con un modelo real, contestó «tienes 20 juegos en Backlog»
+            // cuando había 215. Un recuento que no coincide con la biblioteca es
+            // peor que no dar ninguno.
+            let matched = rows.len();
             rows.truncate(limit as usize);
+            let shown = rows.len();
             Ok(json!({
-                "games": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>()
+                "games": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
+                "matched": matched,
+                "shown": shown,
+                "truncated": shown < matched,
             }))
         }
         AgentQuery::Game { game } => {

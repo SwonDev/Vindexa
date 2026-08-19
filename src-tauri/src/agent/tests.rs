@@ -2128,3 +2128,75 @@ fn un_identificador_que_no_es_de_ese_juego_se_rechaza() {
         .expect("leer");
     assert_eq!(fijado, 0, "no se toca el juego equivocado");
 }
+
+// ---------------------------------------------------------------------------
+// Recuentos que coinciden con la biblioteca
+// ---------------------------------------------------------------------------
+
+#[test]
+fn una_muestra_dice_cuantos_hay_de_verdad() {
+    // Es el fallo que se vio en Telegram: el modelo pidió la biblioteca con un
+    // límite, contó las filas que le llegaron y contestó «tienes 20 juegos en
+    // Backlog» cuando había 215. La respuesta tiene que llevar el total, y
+    // decir que lo que se enseña es una muestra.
+    let mut fixture = fixture();
+    for i in 0..30_u32 {
+        add_game(&fixture.connection, 1000 + i, &format!("Juego {i}"));
+    }
+    let token = issue_client(&mut fixture.connection, "Agente", &["biblioteca:leer"]);
+
+    let outcome = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token,
+            utterance: String::new(),
+            intent: AgentIntent::Query {
+                query: AgentQuery::Library {
+                    text: String::new(),
+                    status_id: None,
+                    limit: Some(5),
+                },
+            },
+        },
+    )
+    .expect("consultar");
+
+    let AgentOutcome::Answer { data, .. } = outcome else {
+        panic!("una consulta contesta con datos: {outcome:?}");
+    };
+    assert_eq!(data["shown"], serde_json::json!(5), "{data}");
+    assert_eq!(data["matched"], serde_json::json!(30), "{data}");
+    assert_eq!(data["truncated"], serde_json::json!(true), "{data}");
+    assert_eq!(data["games"].as_array().map(Vec::len), Some(5));
+}
+
+#[test]
+fn cuando_cabe_entero_no_se_dice_que_es_una_muestra() {
+    let mut fixture = fixture();
+    add_game(&fixture.connection, 2000, "Único");
+    let token = issue_client(&mut fixture.connection, "Agente", &["biblioteca:leer"]);
+
+    let outcome = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token,
+            utterance: String::new(),
+            intent: AgentIntent::Query {
+                query: AgentQuery::Library {
+                    text: String::new(),
+                    status_id: None,
+                    limit: Some(50),
+                },
+            },
+        },
+    )
+    .expect("consultar");
+
+    let AgentOutcome::Answer { data, .. } = outcome else {
+        panic!("una consulta contesta con datos: {outcome:?}");
+    };
+    assert_eq!(data["matched"], serde_json::json!(1));
+    assert_eq!(data["truncated"], serde_json::json!(false));
+}
