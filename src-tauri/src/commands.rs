@@ -879,6 +879,9 @@ pub async fn delete_steam_api_key(state: State<'_, AppState>) -> AppResult<()> {
 #[tauri::command]
 pub async fn verify_saved_steam_api_key(state: State<'_, AppState>) -> AppResult<bool> {
     let _credential_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    // Acto explícito: se vuelve a preguntar al llavero aunque la sesión hubiera
+    // recordado una negativa.
+    steam::secrets::forget_cached_api_key();
     database_read(&state, move |database| {
         let configured = steam::has_api_key()?;
         database.set_steam_api_key_configured(configured)?;
@@ -890,6 +893,7 @@ pub async fn verify_saved_steam_api_key(state: State<'_, AppState>) -> AppResult
 #[tauri::command]
 pub async fn sync_steam_library(state: State<'_, AppState>) -> AppResult<SteamSyncResult> {
     let _sync_guard = try_begin_steam_sync(state.steam_sync_lock.clone())?;
+    steam::secrets::forget_cached_api_key();
     let started_at = Utc::now().to_rfc3339();
     let (account, generation) = database_read(&state, move |database| {
         let generation = database.generation();

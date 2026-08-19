@@ -13,21 +13,73 @@ const SESSION_TOKEN_ACCOUNT: &str = "steam-session-token";
 // prueba no puede pedirle la contraseña del llavero a quien esté delante.
 use crate::keychain;
 
+/// Lo último que dijo el llavero sobre la clave, mientras dure el proceso.
+///
+/// # Por qué se recuerda
+///
+/// macOS pregunta por la contraseña del llavero **una vez por cada lectura**
+/// mientras la aplicación no esté en la lista de acceso de esa entrada, y una
+/// aplicación firmada ad hoc nunca lo está: su firma cambia con cada
+/// compilación. El enriquecimiento de fichas, los logros y la sincronización
+/// leen la clave por su cuenta, así que un arranque normal encadenaba varios
+/// diálogos idénticos.
+///
+/// Recordar la respuesta durante la vida del proceso deja **una** pregunta.
+/// No es un almacén: no se escribe en ningún sitio, muere con la aplicación y
+/// se invalida en cuanto la clave cambia o se borra.
+static CACHED_API_KEY: std::sync::RwLock<Option<Option<String>>> = std::sync::RwLock::new(None);
+
+/// Olvida lo recordado para que la próxima consulta vuelva a preguntar.
+///
+/// La llaman los actos explícitos de quien usa la aplicación: si denegó el
+/// acceso sin querer, pulsar «verificar» o «sincronizar» tiene que poder volver
+/// a intentarlo sin reiniciar.
+pub fn forget_cached_api_key() {
+    if let Ok(mut cache) = CACHED_API_KEY.write() {
+        *cache = None;
+    }
+}
+
 pub fn save_api_key(value: &str) -> AppResult<()> {
     let value = value.trim();
     validate_api_key(value)?;
-    keychain::set(SERVICE, API_KEY_ACCOUNT, value).map_err(keyring_error)
+    let result = keychain::set(SERVICE, API_KEY_ACCOUNT, value).map_err(keyring_error);
+    // Se olvida siempre, también si falló: lo que hay en el llavero después de
+    // un intento fallido no se sabe, y un recuerdo que no se sabe si es cierto
+    // es peor que no tener ninguno.
+    forget_cached_api_key();
+    result
 }
 
 pub fn load_api_key() -> AppResult<Option<String>> {
-    match keychain::get(SERVICE, API_KEY_ACCOUNT) {
+    if let Ok(cache) = CACHED_API_KEY.read()
+        && let Some(recordado) = cache.as_ref()
+    {
+        return Ok(recordado.clone());
+    }
+    let leido = match keychain::get(SERVICE, API_KEY_ACCOUNT) {
         Ok(value) => {
             validate_api_key(&value)?;
-            Ok(Some(value))
+            Some(value)
         }
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(error) => Err(keyring_error(error)),
+        Err(keyring::Error::NoEntry) => None,
+        // Una negativa también es una respuesta: sin recordarla, cada tarea de
+        // fondo vuelve a abrir el mismo diálogo a los pocos segundos. Los actos
+        // explícitos —verificar la clave, sincronizar— llaman antes a
+        // `forget_cached_api_key`, así que volver a intentarlo siempre es
+        // posible sin reiniciar.
+        Err(error) => {
+            let fallo = keyring_error(error);
+            if let Ok(mut cache) = CACHED_API_KEY.write() {
+                *cache = Some(None);
+            }
+            return Err(fallo);
+        }
+    };
+    if let Ok(mut cache) = CACHED_API_KEY.write() {
+        *cache = Some(leido.clone());
     }
+    Ok(leido)
 }
 
 pub fn has_api_key() -> AppResult<bool> {
@@ -35,10 +87,12 @@ pub fn has_api_key() -> AppResult<bool> {
 }
 
 pub fn delete_api_key() -> AppResult<()> {
-    match keychain::delete(SERVICE, API_KEY_ACCOUNT) {
+    let result = match keychain::delete(SERVICE, API_KEY_ACCOUNT) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(keyring_error(error)),
-    }
+    };
+    forget_cached_api_key();
+    result
 }
 
 /// Guarda el testigo de sesión. Nunca se registra ni se enseña.
@@ -97,7 +151,15 @@ fn keyring_error(_error: keyring::Error) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{keyring_error, validate_api_key};
+    use super::{
+        API_KEY_ACCOUNT, SERVICE, delete_api_key, forget_cached_api_key, keychain, keyring_error,
+        load_api_key, save_api_key, validate_api_key,
+    };
+
+    /// Las pruebas que tocan la clave comparten el recuerdo del proceso y el
+    /// llavero de pruebas, que también es único. En paralelo se pisan, así que
+    /// van de una en una.
+    static EN_SERIE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn validates_exact_hex_key_without_persisting_it() {
@@ -120,5 +182,69 @@ mod tests {
         );
         assert!(!error.message.contains("private.key"));
         assert!(!error.message.contains("secret"));
+    }
+
+
+    /// La clave se lee una vez por sesión, no una vez por consulta.
+    ///
+    /// Cada lectura del llavero es un diálogo pidiendo la contraseña mientras la
+    /// aplicación no esté en la lista de acceso de esa entrada, y una firmada ad
+    /// hoc nunca lo está: su firma cambia con cada compilación. El
+    /// enriquecimiento de fichas, los logros y la sincronización leen la clave
+    /// por su cuenta, así que un arranque encadenaba varios diálogos idénticos.
+    ///
+    /// Las dos mitades van en la misma prueba a propósito: comparten el recuerdo
+    /// y el llavero de pruebas, y separadas se pisarían al correr en paralelo.
+    #[test]
+    fn la_clave_se_recuerda_durante_la_sesion_y_se_olvida_al_cambiar() {
+        let _turno = EN_SERIE.lock().unwrap_or_else(|error| error.into_inner());
+        // El llavero de pruebas guarda en memoria: nada toca el del sistema.
+        forget_cached_api_key();
+        let clave = "0123456789ABCDEF0123456789ABCDEF";
+        save_api_key(clave).expect("guardar");
+        assert_eq!(load_api_key().expect("leer"), Some(clave.to_string()));
+
+        // Se borra por detrás, sin pasar por `delete_api_key`: si la respuesta no
+        // estuviera recordada, esta lectura devolvería `None` y habría un
+        // diálogo más por cada consulta.
+        keychain::delete(SERVICE, API_KEY_ACCOUNT).expect("borrar a mano");
+        assert_eq!(
+            load_api_key().expect("leer otra vez"),
+            Some(clave.to_string()),
+            "la respuesta recordada sigue valiendo durante la sesión"
+        );
+
+        // Y un recuerdo que sobrevive a un cambio es una mentira con fecha.
+        let segunda = "FEDCBA9876543210FEDCBA9876543210";
+        save_api_key(segunda).expect("guardar otra");
+        assert_eq!(load_api_key().expect("leer"), Some(segunda.to_string()));
+
+        delete_api_key().expect("borrar");
+        assert_eq!(load_api_key().expect("leer tras borrar"), None);
+    }
+
+    /// Una negativa del llavero también se recuerda, y un acto explícito la
+    /// olvida.
+    ///
+    /// Sin recordarla, cada tarea de fondo volvía a abrir el mismo diálogo a los
+    /// pocos segundos. Recordándola para siempre, una negativa por error dejaría
+    /// Steam apagado hasta reiniciar.
+    #[test]
+    fn una_negativa_se_recuerda_hasta_que_alguien_lo_pide_de_nuevo() {
+        let _turno = EN_SERIE.lock().unwrap_or_else(|error| error.into_inner());
+        forget_cached_api_key();
+        // El llavero de pruebas no puede denegar, así que se comprueba lo que sí
+        // depende de este módulo: que olvidar deja el siguiente acceso limpio.
+        let clave = "0123456789ABCDEF0123456789ABCDEF";
+        save_api_key(clave).expect("guardar");
+        assert_eq!(load_api_key().expect("leer"), Some(clave.to_string()));
+
+        keychain::delete(SERVICE, API_KEY_ACCOUNT).expect("borrar a mano");
+        forget_cached_api_key();
+        assert_eq!(
+            load_api_key().expect("leer tras olvidar"),
+            None,
+            "olvidar obliga a volver a preguntar"
+        );
     }
 }

@@ -266,6 +266,7 @@ function WishlistRow({
   const descuento = price?.discountPercent ?? 0;
   return (
     <GamePreviewCard
+      side="bottom"
       appId={entry.game.appId}
       title={entry.game.title}
       fallback={

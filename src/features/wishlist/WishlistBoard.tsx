@@ -677,6 +677,7 @@ function OffersStrip({
             {/* La razón de mirar una lista de ofertas es saber qué es cada
                 juego; el título no lo dice y la carátula tampoco. */}
             <GamePreviewCard
+              side="bottom"
               appId={offer.appId}
               title={offer.title}
               headline={

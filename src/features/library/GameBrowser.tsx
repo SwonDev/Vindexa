@@ -852,7 +852,7 @@ const GameRow = memo(function GameRow({
       organization={organization}
       shortcuts={shortcuts}
     >
-      <GamePreviewCard {...previewProps(game)} disabled={isDragging}>
+      <GamePreviewCard {...previewProps(game)} side="bottom" disabled={isDragging}>
         <article
           ref={(node) => {
             setDragNodeRef(node);

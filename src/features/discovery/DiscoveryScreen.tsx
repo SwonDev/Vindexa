@@ -739,6 +739,7 @@ function GameRadarList({
           {/* La carátula grande y sus capturas al detenerse: en una lista de
               iconos de veinticuatro píxeles, el título no dice qué es el juego. */}
           <GamePreviewCard
+            side="bottom"
             appId={game.appId}
             title={game.title}
             fallback={

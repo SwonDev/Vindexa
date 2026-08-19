@@ -156,6 +156,7 @@ function DealRow({
       <ContextMenuTrigger asChild>
         <li className="store-deals__item">
           <GamePreviewCard
+            side="bottom"
             appId={deal.appId}
             title={deal.title}
             fallback={

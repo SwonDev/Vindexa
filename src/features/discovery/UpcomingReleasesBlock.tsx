@@ -395,6 +395,7 @@ function UpcomingRow({
             todavía: sus capturas al detenerse valen más que en cualquier otra
             lista. */}
         <GamePreviewCard
+          side="bottom"
           appId={item.appId}
           title={item.title}
           fallback={

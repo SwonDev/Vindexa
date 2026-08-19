@@ -50,6 +50,14 @@ export interface GamePreviewCardProps {
   headline?: ReactNode | undefined;
   /** Desactiva la vista rápida (arrastre en curso, listas en movimiento). */
   disabled?: boolean;
+  /**
+   * Por qué lado sale.
+   *
+   * A la derecha de una carátula hay sitio; al lado de una fila que ocupa todo
+   * el ancho, no: se volteaba a la izquierda, se topaba con la barra lateral y
+   * salía cortada por el borde de la ventana. Las listas piden `bottom`.
+   */
+  side?: "right" | "bottom";
   children: ReactNode;
 }
 
@@ -76,7 +84,17 @@ type GamePreviewCardAllProps = GamePreviewCardProps &
  */
 export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllProps>(
   function GamePreviewCard(
-    { appId, title, fallback, facts, headline, disabled = false, children, ...rest },
+    {
+      appId,
+      title,
+      fallback,
+      facts,
+      headline,
+      disabled = false,
+      side = "right",
+      children,
+      ...rest
+    },
     ref,
   ) {
     const [open, setOpen] = useState(false);
@@ -95,10 +113,13 @@ export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllP
         <HoverCardPrimitive.Portal>
           <HoverCardPrimitive.Content
             className="game-preview"
-            side="right"
+            side={side}
             align="start"
             sideOffset={10}
-            collisionPadding={12}
+            // Nunca por encima de la barra superior: tapar la navegación
+            // mientras se recorre una lista con el ratón cambia una ayuda por un
+            // estorbo. El resto de bordes, con el margen de siempre.
+            collisionPadding={{ top: 96, right: 12, bottom: 12, left: 12 }}
             // No roba el foco ni el ratón: es una ayuda para mirar, no un panel
             // con el que interactuar. Quien quiera actuar tiene el clic derecho.
             onPointerDownOutside={(event) => event.preventDefault()}
