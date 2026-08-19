@@ -490,22 +490,24 @@
   min-height: 0;
   overflow: hidden;
 }
+/* Sólo aparece cuando hay algo que contar, así que se dimensiona por su
+   contenido en vez de reservar una fila fija: cuando no hay avisos, esa altura
+   vuelve a las carátulas. */
 .statusbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  padding: 0 12px;
+  gap: 16px;
+  padding: 5px 12px;
   border-top: 1px solid #313b48;
   background: #1d242d;
   color: var(--v-subtle);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-.statusbar__center {
-  color: var(--v-status-muted);
-}
-.statusbar > :last-child {
-  text-align: right;
+/* Un trabajo en curso se lee como estado; un problema pide más atención, pero
+   sin gritar: sigue siendo la línea más discreta de la pantalla. */
+.statusbar [data-kind="warning"] {
+  color: var(--v-warning);
 }
 kbd {
   padding: 1px 3px;

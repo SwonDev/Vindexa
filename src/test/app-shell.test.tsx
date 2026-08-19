@@ -192,8 +192,10 @@ describe("ciclo de carga de la aplicación", () => {
     renderAppShell();
 
     expect(screen.getByRole("status", { name: "Cargando juegos" })).toBeVisible();
-    expect(screen.getByText("Preparando biblioteca local…")).toBeVisible();
     expect(screen.getByRole("navigation", { name: "Secciones principales" })).toBeVisible();
+    // La barra de estado no dice «preparando»: que la base esté abriéndose ya
+    // lo cuenta la propia pantalla, y repetirlo sólo gastaba una fila de alto.
+    expect(screen.queryByText(/Preparando biblioteca local/)).toBeNull();
   });
 
   it("presenta un error recuperable cuando no puede abrir la base local", async () => {
@@ -266,7 +268,9 @@ describe("ciclo de carga de la aplicación", () => {
         name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam",
       }),
     ).toHaveAttribute("data-sync-state", "success");
-    expect(screen.getByText("Steam · sincronización correcta")).toBeVisible();
+    // Una sincronización correcta no se anuncia dos veces: lo dice la ficha de
+    // la cabecera y la barra de estado se queda callada.
+    expect(screen.queryByText("Steam · sincronización correcta")).toBeNull();
     firstRender.unmount();
 
     mockedApi.bootstrap.mockResolvedValueOnce(bootstrapWithSteamSync());
@@ -276,7 +280,35 @@ describe("ciclo de carga de la aplicación", () => {
         name: "Cuenta vinculada · sin sincronizar. Abrir ajustes de Steam",
       }),
     ).toHaveAttribute("data-sync-state", "never");
-    expect(screen.getByText("Steam · pendiente de sincronizar")).toBeVisible();
+    expect(screen.queryByText("Steam · pendiente de sincronizar")).toBeNull();
+  });
+
+  it("la barra de estado sólo aparece cuando hay algo que no se ve en otro sitio", async () => {
+    mockedApi.bootstrap.mockResolvedValue(bootstrapWithSteamSync("failed"));
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    mockedApi.metadataEnrichmentStatus.mockResolvedValue({
+      running: true,
+      totalGames: 2294,
+      freshMetadata: 1947,
+      queued: 347,
+      processing: 4,
+      retrying: 0,
+      succeeded: 1947,
+      unavailable: 0,
+      failed: 12,
+      steamDeckAvailability: "disabled",
+      steamDeckExplanation: "Sin una fuente documentada.",
+    });
+
+    renderAppShell();
+
+    // Trabajo en curso, con lo que falta —no con lo ya hecho, que no se puede
+    // accionar—; los fallos, para poder mirarlos; y el detalle de una
+    // sincronización rota, que el punto de color de la cabecera no cabe a
+    // explicar.
+    expect(await screen.findByText(/Completando fichas · faltan 347/)).toBeVisible();
+    expect(screen.getByText(/12 fichas no se han podido leer/)).toBeVisible();
+    expect(screen.getByText("Steam · sincronización fallida")).toBeVisible();
   });
 
   it("aplica la densidad persistida y mantiene métricas virtuales diferenciadas", async () => {

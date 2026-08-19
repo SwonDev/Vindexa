@@ -411,6 +411,28 @@ pub(crate) fn link_into_library(transaction: &Transaction<'_>) -> AppResult<usiz
         [],
     )?;
 
+    // Lo que la tienda sabe del DRM llega a la ficha, pero sólo donde no se
+    // sabía nada: un aviso oficial de la ficha de Steam es evidencia del juego
+    // concreto y una política general de tienda no puede pisarla. La marca es
+    // un dato de ficha y no se dibuja sobre la carátula (ver `steam::drm`).
+    transaction.execute(
+        "UPDATE games
+            SET drm_state = 'drm_free',
+                drm_evidence_json = json_array(
+                    json_object('source', 'storeCatalogue', 'matched', ?1)
+                ),
+                drm_checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE drm_state = 'unknown'
+            AND EXISTS (
+                SELECT 1 FROM external_games e
+                 WHERE e.local_app_id = games.app_id
+                   AND e.store = 'gog'
+                   AND e.drm_state = 'drm_free'
+            )",
+        params![crate::stores::GOG_CATALOGUE_EVIDENCE],
+    )?;
+
     // La carátula puede llegar más tarde que el juego —Epic la publica en otra
     // llamada—, así que se refresca sin pisar nada que ya tuviera valor.
     transaction.execute(

@@ -17,6 +17,12 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Cambiado
 
+- **La barra de estado sólo aparece cuando tiene algo que decir.** Repetía tres cosas que ya
+  están en pantalla —el recuento de la biblioteca, que lo dice la barra lateral; el estado de
+  Steam, que lo dice su ficha de la cabecera; y el detalle de SQLite, que no es noticia mientras
+  funcione— y a cambio se comía una fila de alto en todas las pantallas. Ahora enseña el trabajo
+  en curso y lo que ha salido mal, que es lo único que no se ve en ningún otro sitio, y cuando no
+  hay ni una cosa ni otra desaparece y esa altura vuelve a las carátulas.
 - **La ventana abre ocupando el espacio disponible.** El ajuste `maximized` no basta en macOS,
   donde «maximizar» es el *zoom* del sistema y lleva la ventana al tamaño que la aplicación
   declara como preferido: quedaba en 1440×870 sobre una pantalla útil de 1512×982. Ahora se mide
@@ -30,6 +36,12 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Corregido
 
+- **La marca DRM-Free de las tiendas no llegaba a la ficha.** Al integrar Epic, GOG e itch.io en
+  la biblioteca se quedó por el camino un dato que su catálogo sí tenía: GOG declara que todo lo
+  que vende va sin DRM, y aun así 44 de sus juegos figuraban como «sin dato». Ahora ese dato se
+  propaga, pero **sólo donde no se sabía nada**: un aviso oficial de la ficha de Steam es
+  evidencia del juego concreto y una política general de tienda no puede pisarla. Sigue sin
+  dibujarse sobre las carátulas: es un dato de ficha y se enseña con la evidencia que lo motiva.
 - **La barra superior se solapaba consigo misma en ventanas estrechas.** Cinco pestañas con
   rótulo no bajan de 540 px y su columna sólo tenía garantizados 400, así que lo que sobraba se
   pintaba encima de la tarjeta de cuenta: se llegaban a leer dos textos superpuestos. Ahora la

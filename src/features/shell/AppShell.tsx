@@ -523,6 +523,44 @@ export function AppShell() {
     );
   })();
 
+  /**
+   * Lo que la barra de estado tiene derecho a ocupar sitio para contar.
+   *
+   * El criterio es que no esté ya visible en otro lado: el número de juegos lo
+   * dice la barra lateral, el estado de Steam lo dice su ficha de la cabecera y
+   * que la base de datos funcione no es noticia. Queda el trabajo que está
+   * ocurriendo ahora y lo que ha salido mal.
+   */
+  const statusNotices = useMemo(() => {
+    const notices: { id: string; text: string; kind: "progress" | "warning" }[] = [];
+    if (metadata?.running) {
+      const pendientes = metadata.totalGames - metadata.freshMetadata;
+      notices.push({
+        id: "metadata",
+        kind: "progress",
+        text: `Completando fichas · faltan ${pendientes.toLocaleString("es-ES")} de ${metadata.totalGames.toLocaleString("es-ES")}`,
+      });
+    } else if (metadata?.retrying) {
+      notices.push({
+        id: "metadata-retry",
+        kind: "warning",
+        text: `Steam ha pedido esperar · ${metadata.retrying.toLocaleString("es-ES")} fichas en cola`,
+      });
+    }
+    if (metadata?.failed) {
+      notices.push({
+        id: "metadata-failed",
+        kind: "warning",
+        text: `${metadata.failed.toLocaleString("es-ES")} fichas no se han podido leer`,
+      });
+    }
+    // El punto de color de la cabecera dice que algo va mal; aquí cabe el qué.
+    if (steamHealth?.state === "failed") {
+      notices.push({ id: "steam", kind: "warning", text: steamHealth.footer });
+    }
+    return notices;
+  }, [metadata, steamHealth]);
+
   const platform = /Macintosh|Mac OS X/.test(navigator.userAgent) ? "macos" : "other";
   const density = bootstrap?.preferences.density ?? "compact";
 
@@ -672,31 +710,21 @@ export function AppShell() {
         <main className="app-content">
           <Suspense fallback={<LoadingState label="Abriendo sección" />}>{content}</Suspense>
         </main>
-        <footer className="statusbar">
-          <span>
-            {bootstrap
-              ? [
-                  `Biblioteca · ${bootstrap.stats.totalGames.toLocaleString("es-ES")} juegos`,
-                  `${bootstrap.stats.installedGames.toLocaleString("es-ES")} instalados`,
-                  // El catálogo de Family va aparte porque tenerlo a la vista no
-                  // es tenerlo en propiedad. Se nombra aquí igualmente: es la
-                  // cifra que falta al comparar con el cliente de Steam, y sin
-                  // ella parece que esos juegos no están.
-                  ...(bootstrap.stats.familyCatalogGames > 0
-                    ? [
-                        `${bootstrap.stats.familyCatalogGames.toLocaleString("es-ES")} en Steam Family`,
-                      ]
-                    : []),
-                ].join(" · ")
-              : "Preparando biblioteca local…"}
-          </span>
-          <span className="statusbar__center">
-            {metadata
-              ? `SQLite · metadatos ${metadata.freshMetadata.toLocaleString("es-ES")}/${metadata.totalGames.toLocaleString("es-ES")}${metadata.retrying ? " · en pausa" : metadata.running ? " · indexando" : ""}${metadata.failed ? ` · ${metadata.failed.toLocaleString("es-ES")} errores` : ""}`
-              : "SQLite · datos locales"}
-          </span>
-          <span>{steamHealth?.footer ?? "Steam no vinculado"}</span>
-        </footer>
+        {/* La barra de estado sólo existe cuando tiene algo que decir.
+            Repetía tres cosas que ya están en pantalla —el recuento de la
+            biblioteca, el estado de Steam y el detalle de SQLite— y a cambio se
+            comía una fila de alto en todas las pantallas. Ahora enseña trabajo
+            en curso y avisos, que es lo único que no se ve en ningún otro
+            sitio, y cuando no hay ni una cosa ni otra desaparece. */}
+        {statusNotices.length > 0 && (
+          <footer className="statusbar" role="status">
+            {statusNotices.map((notice) => (
+              <span key={notice.id} data-kind={notice.kind}>
+                {notice.text}
+              </span>
+            ))}
+          </footer>
+        )}
         {paletteOpen && (
           <Suspense fallback={null}>
             <CommandPalette
