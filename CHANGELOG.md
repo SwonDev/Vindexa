@@ -8,6 +8,11 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **Vídeos del juego en su propia ficha.** El panel que ya existía en Deseados —con su
+  reproductor sin seguimiento— pasa a estar también en la ficha de cualquier juego de la
+  biblioteca, en una pestaña propia. La dirección del marco la construye Rust y apunta a
+  `youtube-nocookie.com`, el único origen que la política de contenido de la ventana admite:
+  reproduce sin el rastreo habitual y sin que la página pueda llevarte a ningún otro sitio.
 - **Acciones rápidas con el botón derecho en la barra lateral.** Una colección cambia de color y
   de icono desde su propio menú, sin abrir el editor; y sobre una tienda, «Abrir en el navegador
   integrado» la abre con la sesión que ya tengas iniciada en ella, porque cada una guarda la suya

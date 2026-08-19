@@ -24,6 +24,10 @@ vi.mock("@/lib/tauri", () => ({
     saveTag: vi.fn(),
     deleteTag: vi.fn(),
     setGameTags: vi.fn(),
+    listGameVideos: vi.fn(),
+    saveGameVideo: vi.fn(),
+    deleteGameVideo: vi.fn(),
+    reorderGameVideos: vi.fn(),
     listGameSessions: vi.fn(),
     saveGameSession: vi.fn(),
     deleteGameSession: vi.fn(),
@@ -491,6 +495,31 @@ describe("ficha inmersiva de juego", () => {
     await waitFor(() => expect(mockedApi.listGameDlc).toHaveBeenCalledWith(620, "visible"));
     // El resumen ya estaba en caché por el contador: la pestaña no vuelve a pedirlo.
     expect(mockedApi.dlcSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("reproduce vídeos del juego sin salir de la ficha", async () => {
+    const user = userEvent.setup();
+    mockedApi.listGameVideos.mockResolvedValue([
+      {
+        id: "vid-1",
+        appId: 620,
+        kind: "gameplay",
+        title: "Media hora de partida",
+        url: "https://www.youtube.com/watch?v=abc123",
+        // La dirección del marco la construye Rust: la interfaz no la fabrica,
+        // y es la única forma de que apunte al origen sin seguimiento que la
+        // política de contenido admite.
+        embedUrl: "https://www.youtube-nocookie.com/embed/abc123",
+        position: 0,
+        createdAt: "2026-08-19T10:00:00.000Z",
+      },
+    ]);
+    renderSheet();
+
+    await user.click(await screen.findByRole("tab", { name: "Vídeos" }));
+
+    expect(await screen.findByText("Media hora de partida")).toBeVisible();
+    await waitFor(() => expect(mockedApi.listGameVideos).toHaveBeenCalledWith(620));
   });
 
   it("muestra el tiempo jugado reciente de las últimas dos semanas", async () => {

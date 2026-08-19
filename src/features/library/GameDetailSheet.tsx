@@ -70,6 +70,7 @@ import "@/features/library/game-detail.css";
 import { DLC_SUMMARY_STALE_MS, GameDlcPanel } from "@/features/library/GameDlcPanel";
 import { PersonalJournal } from "@/features/library/PersonalJournal";
 import { PriorityExplanation } from "@/features/library/PriorityExplanation";
+import { GameVideoPanel } from "@/features/wishlist/GameVideoPanel";
 import {
   formatBytes,
   formatDate,
@@ -926,6 +927,7 @@ export function GameDetailSheet({
                     <span className="detail-tab-count">{dlcSummaryQuery.data.total}</span>
                   ) : null}
                 </TabsTrigger>
+                <TabsTrigger value="videos">Vídeos</TabsTrigger>
                 <TabsTrigger value="journal">Registro</TabsTrigger>
                 <TabsTrigger value="history">Actividad</TabsTrigger>
               </TabsList>
@@ -1009,6 +1011,21 @@ export function GameDetailSheet({
                   key={`dlc-${detail.appId}`}
                   appId={detail.appId}
                   title={detail.title}
+                />
+              </TabsContent>
+              <TabsContent value="videos">
+                {/* El mismo panel que usa Deseados. La dirección del `iframe`
+                    la construye Rust y apunta a `youtube-nocookie.com`, el
+                    único origen que la política de contenido de la ventana
+                    admite en un marco: reproduce sin el seguimiento habitual de
+                    YouTube y sin que la página pueda llevarte a ningún otro
+                    sitio. */}
+                <GameVideoPanel
+                  key={`videos-${detail.appId}`}
+                  appId={detail.appId}
+                  title={detail.title}
+                  headerUrl={detail.headerUrl}
+                  coverUrl={detail.coverUrl}
                 />
               </TabsContent>
               <TabsContent value="journal">
