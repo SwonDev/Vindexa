@@ -15,6 +15,7 @@ import {
   IconKeyboard,
   IconLoader2,
   IconRefresh,
+  IconRobot,
   IconRoute,
   IconShieldLock,
   IconTrash,
@@ -55,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AgentsPanel } from "@/features/settings/AgentsPanel";
 import { describeFamilyStatus, describeFamilySync } from "@/features/settings/family-session";
 import { OrganizationSettings } from "@/features/settings/OrganizationSettings";
 import { StoresPanel } from "@/features/settings/StoresPanel";
@@ -93,7 +95,15 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: SettingsDialogProps) {
   const [section, setSection] = useState<
-    "steam" | "stores" | "organization" | "appearance" | "shortcuts" | "data" | "privacy" | "about"
+    | "steam"
+    | "stores"
+    | "agents"
+    | "organization"
+    | "appearance"
+    | "shortcuts"
+    | "data"
+    | "privacy"
+    | "about"
   >("steam");
   return (
     <Dialog open={dialogOpen} onOpenChange={onOpenChange}>
@@ -117,6 +127,12 @@ export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: Se
               icon={IconBuildingStore}
               label="Tiendas"
               onClick={() => setSection("stores")}
+            />
+            <SettingsNavItem
+              active={section === "agents"}
+              icon={IconRobot}
+              label="Agentes"
+              onClick={() => setSection("agents")}
             />
             <SettingsNavItem
               active={section === "organization"}
@@ -158,6 +174,7 @@ export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: Se
           <div className="settings-pane">
             {section === "steam" && <SteamSettings bootstrap={bootstrap} />}
             {section === "stores" && <StoresPanel />}
+            {section === "agents" && <AgentsPanel />}
             {section === "organization" && <OrganizationSettings bootstrap={bootstrap} />}
             {section === "appearance" && <AppearanceSettings bootstrap={bootstrap} />}
             {section === "shortcuts" && <ShortcutSettings bootstrap={bootstrap} />}

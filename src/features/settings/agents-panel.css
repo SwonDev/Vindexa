@@ -1,0 +1,238 @@
+/* -----------------------------------------------------------------------------
+   Agentes con acceso a Vindexa.
+
+   Reutiliza `settings-heading`, `settings-hint`, `inline-notice` y `button-row`
+   del resto de Ajustes; aquí sólo está lo que no existía. Mismos radios de 0 a
+   3 px, misma densidad y ningún color literal: todo sale de los tokens.
+   -------------------------------------------------------------------------- */
+
+.agents-panel {
+  display: grid;
+  gap: 14px;
+}
+
+/* El testigo se enseña una vez. El bloque avisa de eso con el mismo lenguaje
+   que el resto de avisos importantes: borde lateral, no un color de fondo. */
+.agent-token {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+  padding: 12px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-warning);
+  background: var(--v-surface-raised);
+}
+
+.agent-token p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-token__value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.agent-token__value code {
+  overflow-x: auto;
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid var(--v-surface-selected);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-form {
+  display: grid;
+  gap: 11px;
+  justify-items: start;
+  padding: 12px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+}
+
+.agent-form > label {
+  display: grid;
+  gap: 5px;
+  width: min(100%, 420px);
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-scopes {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agent-scopes legend {
+  padding: 0 0 4px;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+/* Cada permiso dice qué permite, no cómo se llama por dentro: es lo único que
+   hace falta leer para decidir si se marca. */
+.agent-scope {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.agent-scope strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.agent-scope small {
+  display: block;
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+.agent-list,
+.agent-audit {
+  display: grid;
+  gap: 9px;
+}
+
+.agent-list h4,
+.agent-audit h4 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-row {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--v-surface-selected);
+  background: var(--v-surface-raised);
+}
+
+/* Un agente en pausa se distingue sin apagarlo del todo: sigue siendo legible,
+   porque hay que poder leer qué permisos tiene antes de reactivarlo. */
+.agent-row[data-enabled="false"] {
+  opacity: 0.72;
+}
+
+.agent-row__identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-row__identity strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-row__identity span {
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+.agent-row__scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-row__scopes li {
+  padding: 2px 7px;
+  border: 1px solid var(--v-surface-selected);
+  color: var(--v-muted);
+  font-size: 10px;
+}
+
+.agent-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-row__actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-audit ul {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-audit li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  background: var(--v-surface-raised);
+}
+
+.agent-audit li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-audit strong {
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-audit em {
+  color: var(--v-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.agent-audit span {
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+.agent-audit span[data-kind="error"] {
+  color: var(--v-error);
+}
+
+/* Lo que salió mal o quedó a la espera se distingue por un borde lateral, no
+   por el color del texto: el estado es del registro, no de lo que dice. */
+.agent-audit li[data-result="failed"],
+.agent-audit li[data-result="rejected"] {
+  box-shadow: inset 2px 0 0 var(--v-error);
+}
+
+.agent-audit li[data-result="pending"] {
+  box-shadow: inset 2px 0 0 var(--v-warning);
+}
+
+.agent-audit li[data-result="undone"] {
+  box-shadow: inset 2px 0 0 var(--v-subtle);
+}

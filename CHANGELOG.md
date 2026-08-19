@@ -8,6 +8,13 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **Apartado de Agentes en Ajustes.** El puente que permite a un agente externo ordenar tu
+  biblioteca —registrar sesiones, cambiar estados, crear colecciones, planificar— llevaba tiempo
+  escrito en Rust, pero no había forma de emitirle un testigo, así que no se podía usar. Ahora se
+  emite desde Ajustes, con permisos por ámbito, y se ve lo que cada agente ha hecho, con deshacer.
+  Las cuatro barreras siguen intactas: no se abre ningún puerto de escucha, el testigo se enseña
+  una sola vez —Vindexa guarda su huella con sal—, un agente sólo puede hacer aquello para lo que
+  se le dio permiso y no puede aprobar sus propias acciones destructivas.
 - **La biblioteca acusa el tacto.** La librería de microinteracciones del proyecto —inspirada en
   el catálogo de SmoothUI y reescrita para la estética densa y sin rebote de `DESIGN.md`— ya se
   usaba en Colecciones y en Listas curadas, pero no en la biblioteca. Ahora las tarjetas y las
