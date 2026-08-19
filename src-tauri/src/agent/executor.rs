@@ -1303,11 +1303,34 @@ pub fn answer(connection: &Connection, query: &AgentQuery) -> AppResult<Value> {
                     "note": row.get::<_, String>(5)?,
                 }))
             })?;
-            Ok(json!({ "sessions": rows.collect::<Result<Vec<_>, _>>()? }))
+            let sessions = rows.collect::<Result<Vec<_>, _>>()?;
+            // El total sale de contar, no de mirar cuántas caben: quien lea
+            // esto preguntaba «cuántas partidas», y responder con el tamaño de
+            // la página es dar una cifra falsa con toda la confianza.
+            let matched: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM game_sessions WHERE app_id = ?1",
+                [app_id],
+                |row| row.get(0),
+            )?;
+            let shown = sessions.len();
+            Ok(json!({
+                "sessions": sessions,
+                "matched": matched,
+                "shown": shown,
+                "truncated": (shown as i64) < matched,
+            }))
         }
         AgentQuery::Audit { limit } => {
             let entries = audit::list(connection, limit.unwrap_or(20))?;
-            Ok(json!({ "entries": entries }))
+            let matched: i64 =
+                connection.query_row("SELECT COUNT(*) FROM agent_audit_log", [], |row| row.get(0))?;
+            let shown = entries.len();
+            Ok(json!({
+                "entries": entries,
+                "matched": matched,
+                "shown": shown,
+                "truncated": (shown as i64) < matched,
+            }))
         }
     }
 }

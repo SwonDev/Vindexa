@@ -2200,3 +2200,44 @@ fn cuando_cabe_entero_no_se_dice_que_es_una_muestra() {
     assert_eq!(data["matched"], serde_json::json!(1));
     assert_eq!(data["truncated"], serde_json::json!(false));
 }
+
+#[test]
+fn las_sesiones_tambien_dicen_cuantas_hay() {
+    // La misma trampa que la biblioteca: preguntando «cuántas partidas he
+    // echado» y devolviendo una página, la respuesta parece un recuento.
+    let mut fixture = fixture();
+    add_game(&fixture.connection, 4242, "Un juego");
+    for i in 0..12 {
+        fixture
+            .connection
+            .execute(
+                "INSERT INTO game_sessions(id, app_id, started_at) VALUES (?1, 4242, ?2)",
+                rusqlite::params![format!("s{i}"), format!("2026-08-{:02}T10:00:00Z", i + 1)],
+            )
+            .expect("insertar sesión");
+    }
+    let token = issue_client(&mut fixture.connection, "Agente", &["biblioteca:leer"]);
+
+    let outcome = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token,
+            utterance: String::new(),
+            intent: AgentIntent::Query {
+                query: AgentQuery::Sessions {
+                    game: GameSelector { app_id: Some(4242), name: None },
+                    limit: Some(3),
+                },
+            },
+        },
+    )
+    .expect("consultar");
+
+    let AgentOutcome::Answer { data, .. } = outcome else {
+        panic!("una consulta contesta con datos: {outcome:?}");
+    };
+    assert_eq!(data["shown"], serde_json::json!(3), "{data}");
+    assert_eq!(data["matched"], serde_json::json!(12), "{data}");
+    assert_eq!(data["truncated"], serde_json::json!(true), "{data}");
+}
