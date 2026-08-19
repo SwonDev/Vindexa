@@ -64,6 +64,22 @@ pub async fn refresh(database: &Database, limit: u32) -> AppResult<PriceRefreshR
                     .without_price
                     .saturating_add(precios.without_price.len() as u32)
                     .saturating_add(precios.unavailable.len() as u32);
+                // Y se guarda **qué** contestó, porque «preguntado y sin precio»
+                // no es «sin preguntar». Sin esto, la pantalla decía que había
+                // cuatrocientos cincuenta juegos sin consultar que sí se habían
+                // consultado. Un fallo al guardarlo no tumba la tanda: se
+                // volverá a preguntar mañana.
+                let momento = Utc::now();
+                let _ = database.record_price_absences(
+                    &precios.without_price,
+                    crate::db::pricing::ABSENCE_NO_PRICE,
+                    momento,
+                );
+                let _ = database.record_price_absences(
+                    &precios.unavailable,
+                    crate::db::pricing::ABSENCE_UNAVAILABLE,
+                    momento,
+                );
                 for observation in precios.prices {
                     match database.record_price_observation(&observation, Utc::now()) {
                         Ok(recorded) => {

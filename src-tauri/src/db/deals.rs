@@ -22,19 +22,54 @@
 //! diferencia en vez de fingir un cero.
 
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppResult;
-use crate::steam::deals::StoreDeal;
+
+/// Una oferta lista para guardar, venga de la tienda que venga.
+///
+/// Las dos tiendas se normalizan aquí porque a partir de este punto todo es
+/// igual: se descarta lo que ya es tuyo, se puntúa contra el mismo modelo y se
+/// enseña en la misma lista. Lo que cambia —cómo se piden, qué traen de más— se
+/// queda en cada lector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncomingDeal {
+    /// `steam` o `gog`.
+    pub store: String,
+    /// Identificador **en esa tienda**. Los catálogos no comparten numeración.
+    pub external_id: String,
+    /// AppID de Steam cuando lo hay: es lo que permite enseñar sus capturas.
+    pub app_id: Option<u32>,
+    pub title: String,
+    pub store_url: String,
+    pub image_url: Option<String>,
+    pub final_cents: i64,
+    pub initial_cents: i64,
+    pub discount_percent: u8,
+    pub currency: String,
+    pub source: String,
+    /// Rasgos, si la tienda los entrega con la oferta. Vacío significa «hay que
+    /// pedirlos aparte», que es el caso de Steam.
+    pub genres: Vec<String>,
+    pub categories: Vec<String>,
+    pub developer: Option<String>,
+    pub publisher: Option<String>,
+    pub facets_known: bool,
+}
 
 /// Una oferta lista para enseñar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DealCandidate {
-    pub app_id: u32,
+    pub store: String,
+    pub external_id: String,
+    /// AppID de Steam cuando lo hay; `null` en GOG.
+    pub app_id: Option<u32>,
     pub title: String,
     pub header_url: Option<String>,
+    /// Adónde lleva «abrir en la tienda». Cada tienda tiene la suya.
+    pub store_url: String,
     pub final_cents: i64,
     pub initial_cents: i64,
     pub discount_percent: u8,
@@ -59,9 +94,13 @@ pub struct DealSyncReport {
 }
 
 /// Guarda una tanda de ofertas, saltándose lo que ya es tuyo.
+///
+/// La tanda es **de una tienda**: lo que no venga en ella se borra sólo de esa
+/// tienda. Si se borrara todo, traer las de GOG haría desaparecer las de Steam.
 pub fn sync(
     connection: &mut Connection,
-    deals: &[StoreDeal],
+    store: &str,
+    deals: &[IncomingDeal],
     now: DateTime<Utc>,
 ) -> AppResult<DealSyncReport> {
     let mut report = DealSyncReport {
@@ -72,76 +111,94 @@ pub fn sync(
     let transaction = connection.transaction()?;
 
     for deal in deals {
-        // Lo tuyo no es una oferta que descubrir. Se comprueba en las dos
-        // listas: la biblioteca y los deseados, que viven en tablas distintas.
-        let conocido: bool = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM games WHERE app_id = ?1)
-                 OR EXISTS(SELECT 1 FROM wishlist_entries WHERE app_id = ?1)
-                 OR EXISTS(SELECT 1 FROM catalog_wishlist_entries WHERE app_id = ?1)",
-            [deal.app_id],
-            |row| row.get(0),
-        )?;
-        if conocido {
-            report.already_known = report.already_known.saturating_add(1);
-            continue;
+        // Lo tuyo no es una oferta que descubrir. Sólo se puede comprobar con
+        // AppID de Steam, que es como Vindexa identifica lo que posees; una
+        // oferta de GOG sin equivalencia se enseña igual, porque esconderla
+        // sería esconder algo que quizá no tienes.
+        if let Some(app_id) = deal.app_id {
+            let conocido: bool = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM games WHERE app_id = ?1)
+                     OR EXISTS(SELECT 1 FROM wishlist_entries WHERE app_id = ?1)
+                     OR EXISTS(SELECT 1 FROM catalog_wishlist_entries WHERE app_id = ?1)",
+                [app_id],
+                |row| row.get(0),
+            )?;
+            if conocido {
+                report.already_known = report.already_known.saturating_add(1);
+                continue;
+            }
         }
 
-        let nuevo = transaction.execute(
+        transaction.execute(
             "INSERT INTO store_deals(
-                 app_id, title, header_url, final_cents, initial_cents,
-                 discount_percent, currency, source, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(app_id) DO UPDATE SET
+                 store, external_id, app_id, title, store_url, image_url,
+                 final_cents, initial_cents, discount_percent, currency, source,
+                 genres_json, categories_json, developer, publisher,
+                 facets_fetched_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+             ON CONFLICT(store, external_id) DO UPDATE SET
+                 app_id = excluded.app_id,
                  title = excluded.title,
-                 header_url = excluded.header_url,
+                 store_url = excluded.store_url,
+                 image_url = excluded.image_url,
                  final_cents = excluded.final_cents,
                  initial_cents = excluded.initial_cents,
                  discount_percent = excluded.discount_percent,
                  currency = excluded.currency,
                  source = excluded.source,
+                 -- Los rasgos sólo se pisan cuando la tanda los trae: en Steam
+                 -- llegan después, y sobrescribirlos con vacío obligaría a
+                 -- pedirlos otra vez en cada pasada.
+                 genres_json = CASE WHEN ?16 IS NULL THEN genres_json ELSE excluded.genres_json END,
+                 categories_json = CASE WHEN ?16 IS NULL THEN categories_json ELSE excluded.categories_json END,
+                 developer = CASE WHEN ?16 IS NULL THEN developer ELSE excluded.developer END,
+                 publisher = CASE WHEN ?16 IS NULL THEN publisher ELSE excluded.publisher END,
+                 facets_fetched_at = COALESCE(excluded.facets_fetched_at, facets_fetched_at),
                  updated_at = excluded.updated_at",
             params![
+                deal.store,
+                deal.external_id,
                 deal.app_id,
                 deal.title,
-                deal.header_url,
+                deal.store_url,
+                deal.image_url,
                 deal.final_cents,
                 deal.initial_cents,
                 i64::from(deal.discount_percent),
                 deal.currency,
-                deal.source.as_str(),
+                deal.source,
+                serde_json::to_string(&deal.genres).unwrap_or_else(|_| "[]".to_string()),
+                serde_json::to_string(&deal.categories).unwrap_or_else(|_| "[]".to_string()),
+                deal.developer,
+                deal.publisher,
+                deal.facets_known.then(|| sello.clone()),
                 sello,
             ],
         )?;
-        // `execute` devuelve 1 tanto al insertar como al actualizar; lo nuevo se
-        // reconoce porque su `first_seen_at` es de esta misma tanda.
-        if nuevo > 0 {
-            let recien: bool = transaction.query_row(
-                "SELECT first_seen_at >= ?2 FROM store_deals WHERE app_id = ?1",
-                params![deal.app_id, sello],
-                |row| row.get(0),
-            )?;
-            if recien {
-                report.discovered = report.discovered.saturating_add(1);
-            }
+        let recien: bool = transaction.query_row(
+            "SELECT first_seen_at >= ?3 FROM store_deals WHERE store = ?1 AND external_id = ?2",
+            params![deal.store, deal.external_id, sello],
+            |row| row.get(0),
+        )?;
+        if recien {
+            report.discovered = report.discovered.saturating_add(1);
         }
     }
 
     // Lo que ya no está rebajado deja de estar: una oferta caducada que sigue en
-    // pantalla es peor que ninguna oferta.
-    let vigentes: Vec<u32> = deals.iter().map(|deal| deal.app_id).collect();
+    // pantalla lleva a la tienda a pagar el precio completo creyendo que hay
+    // descuento. Sólo se limpia la tienda de esta tanda.
+    let vigentes: Vec<&String> = deals.iter().map(|deal| &deal.external_id).collect();
     if vigentes.is_empty() {
-        transaction.execute("DELETE FROM store_deals", [])?;
+        transaction.execute("DELETE FROM store_deals WHERE store = ?1", [store])?;
     } else {
-        let marcadores = vigentes
-            .iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!("DELETE FROM store_deals WHERE app_id NOT IN ({marcadores})");
-        let referencias: Vec<&dyn rusqlite::ToSql> = vigentes
-            .iter()
-            .map(|id| id as &dyn rusqlite::ToSql)
-            .collect();
+        let marcadores = vigentes.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql =
+            format!("DELETE FROM store_deals WHERE store = ? AND external_id NOT IN ({marcadores})");
+        let mut referencias: Vec<&dyn rusqlite::ToSql> = vec![&store];
+        for id in &vigentes {
+            referencias.push(*id as &dyn rusqlite::ToSql);
+        }
         transaction.execute(&sql, referencias.as_slice())?;
     }
 
@@ -149,11 +206,15 @@ pub fn sync(
     Ok(report)
 }
 
-/// Ofertas a las que aún no se les han pedido los rasgos para puntuarlas.
+/// Ofertas de Steam a las que aún no se les han pedido los rasgos.
+///
+/// Sólo de Steam: GOG los entrega con la propia oferta, así que nunca están
+/// pendientes.
 pub fn pending_facets(connection: &Connection, limit: u32) -> AppResult<Vec<u32>> {
     let mut statement = connection.prepare(
         "SELECT app_id FROM store_deals
-          WHERE facets_fetched_at IS NULL AND dismissed_at IS NULL
+          WHERE store = 'steam' AND app_id IS NOT NULL
+            AND facets_fetched_at IS NULL AND dismissed_at IS NULL
           ORDER BY discount_percent DESC, app_id ASC
           LIMIT ?1",
     )?;
@@ -180,7 +241,7 @@ pub fn save_facets(
                 developer = ?4,
                 publisher = ?5,
                 facets_fetched_at = ?6
-          WHERE app_id = ?1",
+          WHERE store = 'steam' AND app_id = ?1",
         params![
             app_id,
             serde_json::to_string(genres).unwrap_or_else(|_| "[]".to_string()),
@@ -200,29 +261,34 @@ pub fn save_facets(
 /// esconde: puede ser lo que todavía no se ha podido mirar.
 pub fn list(connection: &Connection, limit: u32) -> AppResult<Vec<DealCandidate>> {
     let mut statement = connection.prepare(
-        "SELECT app_id, title, header_url, final_cents, initial_cents,
-                discount_percent, currency, source, match_score, match_reason
+        "SELECT store, external_id, app_id, title, image_url, store_url,
+                final_cents, initial_cents, discount_percent, currency, source,
+                match_score, match_reason
            FROM store_deals
           WHERE dismissed_at IS NULL
           ORDER BY match_score IS NULL ASC,
                    match_score DESC,
                    discount_percent DESC,
-                   app_id ASC
+                   store ASC,
+                   external_id ASC
           LIMIT ?1",
     )?;
     let filas = statement
         .query_map([limit], |row| {
             Ok(DealCandidate {
-                app_id: row.get(0)?,
-                title: row.get(1)?,
-                header_url: row.get(2)?,
-                final_cents: row.get(3)?,
-                initial_cents: row.get(4)?,
-                discount_percent: row.get::<_, i64>(5)?.clamp(0, 100) as u8,
-                currency: row.get(6)?,
-                source: row.get(7)?,
-                match_score: row.get(8)?,
-                match_reason: row.get(9)?,
+                store: row.get(0)?,
+                external_id: row.get(1)?,
+                app_id: row.get(2)?,
+                title: row.get(3)?,
+                header_url: row.get(4)?,
+                store_url: row.get(5)?,
+                final_cents: row.get(6)?,
+                initial_cents: row.get(7)?,
+                discount_percent: row.get::<_, i64>(8)?.clamp(0, 100) as u8,
+                currency: row.get(9)?,
+                source: row.get(10)?,
+                match_score: row.get(11)?,
+                match_reason: row.get(12)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -230,10 +296,34 @@ pub fn list(connection: &Connection, limit: u32) -> AppResult<Vec<DealCandidate>
 }
 
 /// Descarta una oferta para que deje de aparecer.
-pub fn dismiss(connection: &Connection, app_id: u32, now: DateTime<Utc>) -> AppResult<()> {
+/// A dónde lleva «abrir en la tienda» esa oferta, si sigue viva.
+///
+/// La dirección sale de la base, no del frente: así lo que se abre es lo que
+/// Vindexa guardó al traer la oferta, y no una dirección compuesta en la
+/// interfaz. Aun así, la ventana vuelve a comprobarla contra su lista de
+/// destinos permitidos.
+pub fn url_of(connection: &Connection, store: &str, external_id: &str) -> AppResult<String> {
+    let url: Option<String> = connection
+        .query_row(
+            "SELECT store_url FROM store_deals WHERE store = ?1 AND external_id = ?2",
+            params![store, external_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    url.ok_or_else(|| {
+        crate::error::AppError::validation("Esa oferta ya no está entre las que hay guardadas.")
+    })
+}
+
+pub fn dismiss(
+    connection: &Connection,
+    store: &str,
+    external_id: &str,
+    now: DateTime<Utc>,
+) -> AppResult<()> {
     connection.execute(
-        "UPDATE store_deals SET dismissed_at = ?2 WHERE app_id = ?1",
-        params![app_id, now.to_rfc3339()],
+        "UPDATE store_deals SET dismissed_at = ?3 WHERE store = ?1 AND external_id = ?2",
+        params![store, external_id, now.to_rfc3339()],
     )?;
     Ok(())
 }
@@ -242,7 +332,6 @@ pub fn dismiss(connection: &Connection, app_id: u32, now: DateTime<Utc>) -> AppR
 mod tests {
     use super::*;
     use crate::db::migrations;
-    use crate::steam::deals::DealSource;
     use chrono::TimeZone;
 
     fn database() -> Connection {
@@ -254,16 +343,48 @@ mod tests {
         connection
     }
 
-    fn oferta(app_id: u32, title: &str, discount: u8) -> StoreDeal {
-        StoreDeal {
-            app_id,
+    /// Una rebaja de Steam: identificada por AppID y **sin** rasgos, que es como
+    /// llegan de verdad.
+    fn steam(app_id: u32, title: &str, discount: u8) -> IncomingDeal {
+        IncomingDeal {
+            store: "steam".to_string(),
+            external_id: app_id.to_string(),
+            app_id: Some(app_id),
             title: title.to_string(),
-            header_url: None,
+            store_url: format!("https://store.steampowered.com/app/{app_id}/"),
+            image_url: None,
             final_cents: 999,
             initial_cents: 1999,
             discount_percent: discount,
             currency: "EUR".to_string(),
-            source: DealSource::Specials,
+            source: "specials".to_string(),
+            genres: Vec::new(),
+            categories: Vec::new(),
+            developer: None,
+            publisher: None,
+            facets_known: false,
+        }
+    }
+
+    /// Una rebaja de GOG: sin AppID y **con** rasgos.
+    fn gog(product_id: &str, title: &str, discount: u8) -> IncomingDeal {
+        IncomingDeal {
+            store: "gog".to_string(),
+            external_id: product_id.to_string(),
+            app_id: None,
+            title: title.to_string(),
+            store_url: format!("https://www.gog.com/game/{product_id}"),
+            image_url: None,
+            final_cents: 999,
+            initial_cents: 1999,
+            discount_percent: discount,
+            currency: "EUR".to_string(),
+            source: "discounted".to_string(),
+            genres: vec!["Rol".to_string()],
+            categories: Vec::new(),
+            developer: Some("Estudio".to_string()),
+            publisher: None,
+            facets_known: true,
         }
     }
 
@@ -282,7 +403,8 @@ mod tests {
 
         let report = sync(
             &mut connection,
-            &[oferta(10, "Ya lo tengo", 50), oferta(20, "Nuevo", 30)],
+            "steam",
+            &[steam(10, "Ya lo tengo", 50), steam(20, "Nuevo", 30)],
             at(10),
         )
         .expect("guardar");
@@ -291,7 +413,7 @@ mod tests {
 
         let lista = list(&connection, 10).expect("listar");
         assert_eq!(lista.len(), 1);
-        assert_eq!(lista[0].app_id, 20);
+        assert_eq!(lista[0].app_id, Some(20));
     }
 
     #[test]
@@ -309,7 +431,8 @@ mod tests {
             )
             .expect("insertar deseado");
 
-        let report = sync(&mut connection, &[oferta(30, "Deseado", 60)], at(10)).expect("guardar");
+        let report =
+            sync(&mut connection, "steam", &[steam(30, "Deseado", 60)], at(10)).expect("guardar");
         assert_eq!(report.already_known, 1);
         assert!(list(&connection, 10).expect("listar").is_empty());
     }
@@ -321,24 +444,59 @@ mod tests {
         let mut connection = database();
         sync(
             &mut connection,
-            &[oferta(20, "Primera", 30), oferta(21, "Segunda", 40)],
+            "steam",
+            &[steam(20, "Primera", 30), steam(21, "Segunda", 40)],
             at(10),
         )
         .expect("primera tanda");
         assert_eq!(list(&connection, 10).expect("listar").len(), 2);
 
-        sync(&mut connection, &[oferta(21, "Segunda", 40)], at(12)).expect("segunda tanda");
+        sync(&mut connection, "steam", &[steam(21, "Segunda", 40)], at(12))
+            .expect("segunda tanda");
         let lista = list(&connection, 10).expect("listar");
         assert_eq!(lista.len(), 1);
-        assert_eq!(lista[0].app_id, 21);
+        assert_eq!(lista[0].app_id, Some(21));
     }
 
     #[test]
     fn sin_ofertas_no_queda_nada_viejo_en_pantalla() {
         let mut connection = database();
-        sync(&mut connection, &[oferta(20, "Una", 30)], at(10)).expect("guardar");
-        sync(&mut connection, &[], at(12)).expect("tanda vacía");
+        sync(&mut connection, "steam", &[steam(20, "Una", 30)], at(10)).expect("guardar");
+        sync(&mut connection, "steam", &[], at(12)).expect("tanda vacía");
         assert!(list(&connection, 10).expect("listar").is_empty());
+    }
+
+    #[test]
+    fn una_tanda_de_una_tienda_no_borra_las_de_la_otra() {
+        // Cada tienda se trae por su lado. Si limpiar la tanda de GOG barriera
+        // toda la tabla, las rebajas de Steam desaparecerían cada seis horas y
+        // volverían sólo en la vuelta siguiente.
+        let mut connection = database();
+        sync(&mut connection, "steam", &[steam(20, "De Steam", 30)], at(10)).expect("Steam");
+        sync(&mut connection, "gog", &[gog("1207", "De GOG", 70)], at(10)).expect("GOG");
+        assert_eq!(list(&connection, 10).expect("listar").len(), 2);
+
+        // GOG deja de rebajar el suyo; el de Steam sigue rebajado.
+        sync(&mut connection, "gog", &[], at(12)).expect("GOG vacío");
+        let lista = list(&connection, 10).expect("listar");
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].store, "steam");
+    }
+
+    #[test]
+    fn dos_tiendas_pueden_usar_el_mismo_numero_sin_pisarse() {
+        // GOG numera sus productos a su manera: que un número coincida con un
+        // AppID de Steam no es imposible, y sería otro juego distinto.
+        let mut connection = database();
+        sync(&mut connection, "steam", &[steam(1207, "El de Steam", 30)], at(10))
+            .expect("Steam");
+        sync(&mut connection, "gog", &[gog("1207", "El de GOG", 70)], at(10)).expect("GOG");
+
+        let lista = list(&connection, 10).expect("listar");
+        assert_eq!(lista.len(), 2);
+        let titulos: Vec<&str> = lista.iter().map(|deal| deal.title.as_str()).collect();
+        assert!(titulos.contains(&"El de Steam"));
+        assert!(titulos.contains(&"El de GOG"));
     }
 
     #[test]
@@ -346,21 +504,27 @@ mod tests {
         let mut connection = database();
         sync(
             &mut connection,
-            &[oferta(20, "Sin puntuar", 90), oferta(21, "Puntuado", 10)],
+            "steam",
+            &[steam(20, "Sin puntuar", 90), steam(21, "Puntuado", 10)],
             at(10),
         )
         .expect("guardar");
         connection
             .execute(
-                "UPDATE store_deals SET match_score = 72.5, match_reason = 'Coincide' WHERE app_id = 21",
+                "UPDATE store_deals SET match_score = 72.5, match_reason = 'Coincide'
+                  WHERE store = 'steam' AND external_id = '21'",
                 [],
             )
             .expect("puntuar");
 
         let lista = list(&connection, 10).expect("listar");
-        assert_eq!(lista[0].app_id, 21, "lo puntuado va primero aunque rebaje menos");
+        assert_eq!(
+            lista[0].app_id,
+            Some(21),
+            "lo puntuado va primero aunque rebaje menos"
+        );
         assert_eq!(lista[0].match_score, Some(72.5));
-        assert_eq!(lista[1].app_id, 20);
+        assert_eq!(lista[1].app_id, Some(20));
         assert_eq!(lista[1].match_score, None, "sin puntuar no es cero");
     }
 
@@ -369,7 +533,8 @@ mod tests {
         let mut connection = database();
         sync(
             &mut connection,
-            &[oferta(20, "Poco", 10), oferta(21, "Mucho", 80)],
+            "steam",
+            &[steam(20, "Poco", 10), steam(21, "Mucho", 80)],
             at(10),
         )
         .expect("guardar");
@@ -377,9 +542,48 @@ mod tests {
     }
 
     #[test]
+    fn una_oferta_de_gog_no_se_queda_esperando_una_ficha_que_no_existe() {
+        // Sus rasgos llegan con la propia oferta, y no hay ficha de Steam que
+        // pedir: dejarla pendiente sería esperar para siempre.
+        let mut connection = database();
+        sync(&mut connection, "gog", &[gog("1207", "De GOG", 70)], at(10)).expect("guardar");
+        assert!(pending_facets(&connection, 10).expect("pendientes").is_empty());
+
+        let guardados: String = connection
+            .query_row(
+                "SELECT genres_json FROM store_deals WHERE store = 'gog'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("leer géneros");
+        assert!(guardados.contains("Rol"));
+    }
+
+    #[test]
+    fn una_tanda_sin_rasgos_no_borra_los_que_ya_se_sabian() {
+        // La ficha se pide una vez y vale para las seis horas siguientes; si la
+        // tanda de Steam los machacara con vacíos, se volverían a pedir sin fin.
+        let mut connection = database();
+        sync(&mut connection, "steam", &[steam(20, "Una", 30)], at(10)).expect("guardar");
+        save_facets(
+            &connection,
+            20,
+            &["Acción".to_string()],
+            &["Un jugador".to_string()],
+            Some("Estudio"),
+            Some("Editor"),
+            at(11),
+        )
+        .expect("guardar rasgos");
+
+        sync(&mut connection, "steam", &[steam(20, "Una", 45)], at(16)).expect("segunda tanda");
+        assert!(pending_facets(&connection, 10).expect("pendientes").is_empty());
+    }
+
+    #[test]
     fn con_los_rasgos_guardados_deja_de_estar_pendiente() {
         let mut connection = database();
-        sync(&mut connection, &[oferta(20, "Una", 30)], at(10)).expect("guardar");
+        sync(&mut connection, "steam", &[steam(20, "Una", 30)], at(10)).expect("guardar");
         save_facets(
             &connection,
             20,
@@ -394,10 +598,25 @@ mod tests {
     }
 
     #[test]
-    fn lo_descartado_deja_de_aparecer() {
+    fn lo_descartado_deja_de_aparecer_y_solo_en_su_tienda() {
         let mut connection = database();
-        sync(&mut connection, &[oferta(20, "Una", 30)], at(10)).expect("guardar");
-        dismiss(&connection, 20, at(11)).expect("descartar");
-        assert!(list(&connection, 10).expect("listar").is_empty());
+        sync(&mut connection, "steam", &[steam(1207, "El de Steam", 30)], at(10))
+            .expect("Steam");
+        sync(&mut connection, "gog", &[gog("1207", "El de GOG", 70)], at(10)).expect("GOG");
+
+        dismiss(&connection, "gog", "1207", at(11)).expect("descartar");
+        let lista = list(&connection, 10).expect("listar");
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].store, "steam");
+    }
+
+    #[test]
+    fn cada_oferta_lleva_su_propio_enlace_a_la_tienda() {
+        // Abrir una rebaja de GOG en la tienda de Steam llevaría a otro sitio, o
+        // a ninguno.
+        let mut connection = database();
+        sync(&mut connection, "gog", &[gog("1207", "De GOG", 70)], at(10)).expect("guardar");
+        let lista = list(&connection, 10).expect("listar");
+        assert_eq!(lista[0].store_url, "https://www.gog.com/game/1207");
     }
 }

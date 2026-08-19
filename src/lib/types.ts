@@ -1442,6 +1442,17 @@ export interface WishlistPriceStatus {
   /** `final - objetivo`. Negativo significa por debajo del objetivo. */
   differenceCents?: number;
   meetsTarget: boolean;
+  /**
+   * Qué contestó la tienda la última vez que se preguntó y no hubo precio.
+   *
+   * `no_price`: respondió por el juego y no publica precio —sin fecha de
+   * salida, gratuito o retirado—. `unavailable`: no reconoció el AppID.
+   * Ausente: no se ha preguntado nunca. Los tres casos son distintos y la
+   * pantalla los dice distinto.
+   */
+  absence?: "no_price" | "unavailable" | null;
+  /** Cuándo llegó esa respuesta. */
+  absenceCheckedAt?: string | null;
 }
 
 /**
@@ -1463,9 +1474,22 @@ export interface GamePreview {
  * no «no te interesa». Cero sería una afirmación que nadie ha comprobado.
  */
 export interface DealCandidate {
-  appId: number;
+  /** `steam` o `gog`. Los dos catálogos no comparten numeración. */
+  store: string;
+  /** Identificador dentro de esa tienda. Con `store`, identifica la oferta. */
+  externalId: string;
+  /**
+   * AppID de Steam cuando lo hay; `null` en GOG.
+   *
+   * Es lo que permite cruzarla con tu biblioteca, enseñar sus capturas y
+   * pasarla a deseados. Sin él, esas tres cosas no se pueden hacer, y se dice
+   * en vez de inventar una equivalencia por título.
+   */
+  appId?: number | null;
   title: string;
   headerUrl?: string | null;
+  /** Ficha en su tienda. Cada tienda tiene la suya. */
+  storeUrl: string;
   finalCents: number;
   initialCents: number;
   discountPercent: number;

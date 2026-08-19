@@ -252,12 +252,20 @@ pub fn run() {
                     loop {
                         match steam::deal_radar::run_if_due(&database).await {
                             Ok(Some(report)) => {
+                                // Una tienda caída se nombra: sin eso, la lista
+                                // corta parecería la lista entera.
+                                let faltan = if report.unavailable.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(" Sin respuesta: {}.", report.unavailable.join(", "))
+                                };
                                 eprintln!(
-                                    "Vindexa: ofertas al día ({} recibidas, {} nuevas, {} ya tuyas, {} puntuadas).",
+                                    "Vindexa: ofertas al día ({} recibidas, {} nuevas, {} ya tuyas, {} puntuadas).{}",
                                     report.received,
                                     report.discovered,
                                     report.already_known,
-                                    report.scored
+                                    report.scored,
+                                    faltan
                                 );
                             }
                             Ok(None) => {}
@@ -469,6 +477,7 @@ pub fn run() {
             commands::game_preview,
             commands::store_deals,
             commands::dismiss_store_deal,
+            commands::open_store_deal,
             commands::epic_free_games,
             commands::dismiss_epic_free_game,
             commands::open_epic_free_game,

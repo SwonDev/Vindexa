@@ -188,7 +188,16 @@ export const api = {
   gamePreview: (appId: number) => invoke<GamePreview>("game_preview", { appId }),
   /** Rebajas que aún no son tuyas, ordenadas por afinidad con tu historial. */
   storeDeals: (limit?: number) => invoke<DealCandidate[]>("store_deals", { limit }),
-  dismissStoreDeal: (appId: number) => invoke<void>("dismiss_store_deal", { appId }),
+  dismissStoreDeal: (store: string, externalId: string) =>
+    invoke<void>("dismiss_store_deal", { store, externalId }),
+  /**
+   * Abre la ficha de una oferta en el navegador integrado de su tienda.
+   *
+   * Se manda la pareja tienda-identificador, no la dirección: la resuelve el
+   * backend con lo que él guardó al traer la oferta.
+   */
+  openStoreDeal: (store: string, externalId: string) =>
+    invoke<void>("open_store_deal", { store, externalId }),
   epicFreeGames: (refresh?: boolean) =>
     invoke<EpicFreeOffer[]>("epic_free_games", { refresh: refresh ?? false }),
   dismissEpicFreeGame: (offerId: string) => invoke<void>("dismiss_epic_free_game", { offerId }),

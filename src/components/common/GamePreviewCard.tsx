@@ -40,7 +40,14 @@ const OPEN_DELAY_MS = 420;
 const ROTATE_MS = 1_400;
 
 export interface GamePreviewCardProps {
-  appId: number;
+  /**
+   * AppID de Steam, si lo hay.
+   *
+   * Las capturas salen de la ficha de Steam. Una oferta de GOG no tiene AppID
+   * y no las va a tener: con `null` no se pide nada y el emergente enseña la
+   * imagen de la tienda y los datos, que ya es más de lo que había.
+   */
+  appId: number | null | undefined;
   title: string;
   /** Lo que se pinta mientras no hay captura: la carátula que ya está en pantalla. */
   fallback?: ReactNode | undefined;
@@ -149,7 +156,7 @@ function PreviewBody({
   open,
   reducedMotion,
 }: {
-  appId: number;
+  appId: number | null | undefined;
   title: string;
   fallback?: ReactNode | undefined;
   facts?: readonly { label: string; value: string }[] | undefined;
@@ -164,7 +171,8 @@ function PreviewBody({
   // Las capturas se piden al abrirse, una sola vez por juego y sesión: el
   // backend guarda lo que la tienda diga, incluida la ausencia de capturas.
   useEffect(() => {
-    if (!open || pedido.current === appId) return;
+    // Sin AppID no hay ficha que pedir: las capturas son de Steam.
+    if (!open || appId == null || pedido.current === appId) return;
     pedido.current = appId;
     let vigente = true;
     api

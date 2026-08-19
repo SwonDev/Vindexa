@@ -2257,25 +2257,30 @@ pub fn score_deals(connection: &mut Connection, now: DateTime<Utc>) -> AppResult
     let updated_at = timestamp(now);
 
     struct Candidate {
-        app_id: u32,
+        // Se identifica por tienda e identificador. Las ofertas de GOG no
+        // tienen AppID, y leer un nulo como entero rompería la tanda entera:
+        // una sola oferta de GOG dejaría sin puntuar también las de Steam.
+        store: String,
+        external_id: String,
         facets: Vec<(Facet, String)>,
     }
 
     let candidates = {
         let mut statement = connection.prepare(
-            "SELECT app_id, genres_json, categories_json, developer, publisher
+            "SELECT store, external_id, genres_json, categories_json, developer, publisher
                FROM store_deals
               WHERE dismissed_at IS NULL AND facets_fetched_at IS NOT NULL
-              ORDER BY app_id ASC",
+              ORDER BY store ASC, external_id ASC",
         )?;
         statement
             .query_map([], |row| {
-                let genres = parse_facet_list(&row.get::<_, String>(1)?);
-                let categories = parse_facet_list(&row.get::<_, String>(2)?);
-                let developer: Option<String> = row.get(3)?;
-                let publisher: Option<String> = row.get(4)?;
+                let genres = parse_facet_list(&row.get::<_, String>(2)?);
+                let categories = parse_facet_list(&row.get::<_, String>(3)?);
+                let developer: Option<String> = row.get(4)?;
+                let publisher: Option<String> = row.get(5)?;
                 Ok(Candidate {
-                    app_id: row.get(0)?,
+                    store: row.get(0)?,
+                    external_id: row.get(1)?,
                     facets: upcoming_facets(
                         &genres,
                         &categories,
@@ -2291,13 +2296,19 @@ pub fn score_deals(connection: &mut Connection, now: DateTime<Utc>) -> AppResult
     {
         let mut update = transaction.prepare_cached(
             "UPDATE store_deals
-                SET match_score = ?2, match_reason = ?3, updated_at = ?4
-              WHERE app_id = ?1",
+                SET match_score = ?3, match_reason = ?4, updated_at = ?5
+              WHERE store = ?1 AND external_id = ?2",
         )?;
         for candidate in &candidates {
             let result = affinity_for(&candidate.facets, &weights);
             let reason = compose_match_reason(&result, &minutes);
-            update.execute(params![candidate.app_id, result.score, reason, updated_at])?;
+            update.execute(params![
+                candidate.store,
+                candidate.external_id,
+                result.score,
+                reason,
+                updated_at
+            ])?;
         }
     }
     transaction.commit()?;
@@ -3435,5 +3446,64 @@ mod tests {
             )
             .expect("releer marca");
         assert_eq!(updated_at, "2020-01-01T00:00:00.000Z");
+    }
+
+    /// Una oferta sin AppID no puede tumbar la tanda entera.
+    ///
+    /// GOG guarda `app_id` nulo. Cuando la puntuación se leía como entero, la
+    /// primera oferta de GOG con rasgos hacía fallar la consulta y **ninguna**
+    /// oferta quedaba puntuada, tampoco las de Steam.
+    #[test]
+    fn una_oferta_de_gog_no_deja_sin_puntuar_a_las_de_steam() {
+        let mut connection = database();
+        // Historial: horas en un género concreto, que es de donde sale el gusto.
+        insert_game_full(
+            &connection,
+            10,
+            "Lo jugado",
+            &["Rol"],
+            None,
+            60 * 40,
+            "2024-01-01T00:00:00Z",
+        );
+        learn_taste(&mut connection, now()).expect("aprender");
+
+        connection
+            .execute_batch(
+                "INSERT INTO store_deals(store, external_id, title, store_url, app_id,
+                        final_cents, initial_cents, discount_percent, currency,
+                        genres_json, facets_fetched_at)
+                 VALUES ('gog', '1207658930', 'El de GOG',
+                         'https://www.gog.com/game/x', NULL,
+                         999, 2999, 66, 'EUR', '[\"Rol\"]', '2026-08-18T11:00:00Z');
+                 INSERT INTO store_deals(store, external_id, title, store_url, app_id,
+                        final_cents, initial_cents, discount_percent, currency,
+                        genres_json, facets_fetched_at)
+                 VALUES ('steam', '379720', 'El de Steam',
+                         'https://store.steampowered.com/app/379720/', 379720,
+                         499, 1999, 75, 'EUR', '[\"Rol\"]', '2026-08-18T11:00:00Z');",
+            )
+            .expect("sembrar ofertas");
+
+        let puntuadas = score_deals(&mut connection, now()).expect("puntuar");
+        assert_eq!(puntuadas, 2);
+
+        let sin_puntuar: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM store_deals WHERE match_score IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar");
+        assert_eq!(sin_puntuar, 0, "las dos tiendas se puntúan con el mismo modelo");
+
+        let razon: String = connection
+            .query_row(
+                "SELECT match_reason FROM store_deals WHERE store = 'gog'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("leer razón");
+        assert!(razon.contains("Rol"), "la razón nombra lo que la sostiene: {razon}");
     }
 }

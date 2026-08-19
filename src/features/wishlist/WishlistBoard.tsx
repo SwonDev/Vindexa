@@ -1068,8 +1068,12 @@ function WishlistCard({
                     )}
                   </>
                 ) : (
-                  <b className="wishlist-card__observed-amount" data-missing="true">
-                    sin precio
+                  <b
+                    className="wishlist-card__observed-amount"
+                    data-missing="true"
+                    title={price.verdict}
+                  >
+                    {price.missingLabel ?? "sin precio"}
                   </b>
                 )}
                 {/* Cuándo se miró y qué significa sólo se dicen cuando hay algo

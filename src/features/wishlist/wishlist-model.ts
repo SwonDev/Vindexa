@@ -244,6 +244,13 @@ export interface PriceLine {
   /** Cuándo se miró, en palabras. */
   observed: string;
   freshness: PriceFreshness | "missing";
+  /**
+   * Qué se escribe donde iría el importe cuando no lo hay.
+   *
+   * «Sin precio» y «no a la venta» no son lo mismo, y la diferencia la sabe el
+   * backend, no la pantalla.
+   */
+  missingLabel?: string;
   /** Relación con el objetivo, o por qué no la hay. Nunca queda vacío. */
   verdict: string;
   meetsTarget: boolean;
@@ -276,6 +283,41 @@ export function observedLabel(observedAt: string, freshness: PriceFreshness): st
  * 3. **El importe nunca aparece solo.** Siempre lleva su moneda y la fecha en
  *    la que se observó.
  */
+/**
+ * Por qué no hay precio, en las palabras exactas de lo que pasó.
+ *
+ * Son tres cosas distintas y decirlas como una sola fue el fallo: la pantalla
+ * escribía «sin precio consultado» sobre cuatrocientos cincuenta juegos que sí
+ * se habían consultado —la tienda había respondido que no los pone a la venta—.
+ */
+export function describeMissingPrice(status?: WishlistPriceStatus): {
+  label: string;
+  detail: string;
+} {
+  if (status?.absence === "no_price") {
+    const cuando = status.absenceCheckedAt
+      ? ` Consultado ${formatRelativeDate(status.absenceCheckedAt)}.`
+      : "";
+    return {
+      label: "no a la venta",
+      detail: `La tienda respondió y no publica precio: sin fecha de salida, gratuito o retirado.${cuando}`,
+    };
+  }
+  if (status?.absence === "unavailable") {
+    const cuando = status.absenceCheckedAt
+      ? ` Consultado ${formatRelativeDate(status.absenceCheckedAt)}.`
+      : "";
+    return {
+      label: "no está en la tienda",
+      detail: `La tienda no reconoce este juego: retirado, o no disponible en tu región.${cuando}`,
+    };
+  }
+  return {
+    label: "sin precio",
+    detail: "Todavía no se ha consultado el precio de este juego.",
+  };
+}
+
 export function describePrice(entry: WishlistEntry, status?: WishlistPriceStatus): PriceLine {
   const targetCents = status?.targetCents ?? entry.targetPriceCents;
   const targetCurrency = status?.targetCurrency ?? entry.currency;
@@ -289,16 +331,18 @@ export function describePrice(entry: WishlistEntry, status?: WishlistPriceStatus
   const others = status?.otherCurrencies ?? [];
 
   if (!price) {
+    const ausencia = describeMissingPrice(status);
     const verdict = others.length
       ? `Sólo hay precio en ${others.join(", ")}${
           targetCurrency ? `, y tu objetivo está en ${targetCurrency}` : ""
         }: no se comparan.`
       : target
-        ? `Objetivo ${target}. Todavía no se ha consultado el precio.`
-        : "Sin precio objetivo ni precio consultado.";
+        ? `Objetivo ${target}. ${ausencia.detail}`
+        : ausencia.detail;
     return {
-      observed: "Sin consultar",
+      observed: status?.absence ? "Consultado, sin precio" : "Sin consultar",
       freshness: "missing",
+      missingLabel: ausencia.label,
       verdict,
       meetsTarget: false,
     };
@@ -342,6 +386,10 @@ export interface PriceCoverage {
   caveat: string;
   /** Juegos con descuento vigente según el último precio observado. */
   onSale: number;
+  /** Preguntados, y la tienda no publica precio: sin fecha, gratuitos o retirados. */
+  unlisted: number;
+  /** Ni preguntados todavía. Es lo único que un repaso puede arreglar. */
+  unasked: number;
 }
 
 /**
@@ -360,13 +408,28 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
   const meetingTarget = statuses.filter((status) => status.comparable && status.meetsTarget).length;
   const onSale = statuses.filter((status) => (status.price?.discountPercent ?? 0) > 0).length;
 
+  // Sin precio hay tres motivos distintos y decirlos como uno solo era acusar
+  // a la aplicación de no haber mirado cuatrocientas cincuenta veces: la tienda
+  // había contestado, y lo que contestó es que esos juegos no publican precio.
+  const sinPublicar = statuses.filter(
+    (status) =>
+      !status.price && (status.absence === "no_price" || status.absence === "unavailable"),
+  ).length;
+  const sinPreguntar = total - withPrice - sinPublicar;
+
   const caveats: string[] = [];
-  if (withPrice < total) {
-    const missing = total - withPrice;
+  if (sinPublicar > 0) {
     caveats.push(
-      missing === 1
+      sinPublicar === 1
+        ? "1 juego que la tienda no pone a la venta"
+        : `${sinPublicar.toLocaleString("es-ES")} juegos que la tienda no pone a la venta`,
+    );
+  }
+  if (sinPreguntar > 0) {
+    caveats.push(
+      sinPreguntar === 1
         ? "1 juego sin precio consultado"
-        : `${missing.toLocaleString("es-ES")} juegos sin precio consultado`,
+        : `${sinPreguntar.toLocaleString("es-ES")} juegos sin precio consultado`,
     );
   }
   if (stale > 0) {
@@ -385,6 +448,8 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
     headline: total === 0 ? "Sin precios" : `${withPrice} de ${total} con precio`,
     caveat: caveats.length ? `${caveats.join("; ")}.` : "",
     onSale,
+    unlisted: sinPublicar,
+    unasked: sinPreguntar,
   };
 }
 

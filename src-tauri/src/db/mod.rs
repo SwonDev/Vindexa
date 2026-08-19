@@ -960,6 +960,16 @@ impl Database {
         pricing::record_observation(&mut self.open()?, observation, now)
     }
 
+    /// Guarda que la tienda respondió por estos juegos sin dar precio.
+    pub fn record_price_absences(
+        &self,
+        app_ids: &[u32],
+        outcome: &str,
+        now: DateTime<Utc>,
+    ) -> AppResult<usize> {
+        pricing::record_absences(&mut self.open()?, app_ids, outcome, now)
+    }
+
     pub fn game_prices(&self, app_id: u32, now: DateTime<Utc>) -> AppResult<Vec<GamePrice>> {
         pricing::prices_for_game(&self.open()?, app_id, now)
     }
@@ -1021,11 +1031,12 @@ impl Database {
 
     pub fn sync_store_deals(
         &self,
-        deals: &[crate::steam::deals::StoreDeal],
+        store: &str,
+        incoming: &[deals::IncomingDeal],
         now: DateTime<Utc>,
     ) -> AppResult<deals::DealSyncReport> {
         let mut connection = self.open()?;
-        deals::sync(&mut connection, deals, now)
+        deals::sync(&mut connection, store, incoming, now)
     }
 
     pub fn pending_deal_facets(&self, limit: u32) -> AppResult<Vec<u32>> {
@@ -1060,8 +1071,18 @@ impl Database {
         deals::list(&self.open()?, limit)
     }
 
-    pub fn dismiss_store_deal(&self, app_id: u32, now: DateTime<Utc>) -> AppResult<()> {
-        deals::dismiss(&self.open()?, app_id, now)
+    /// La dirección de una oferta en su tienda.
+    pub fn store_deal_url(&self, store: &str, external_id: &str) -> AppResult<String> {
+        deals::url_of(&self.open()?, store, external_id)
+    }
+
+    pub fn dismiss_store_deal(
+        &self,
+        store: &str,
+        external_id: &str,
+        now: DateTime<Utc>,
+    ) -> AppResult<()> {
+        deals::dismiss(&self.open()?, store, external_id, now)
     }
 
     // --- Regalos de Epic ---------------------------------------------------

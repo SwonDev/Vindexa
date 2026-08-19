@@ -1309,12 +1309,38 @@ pub async fn store_deals(
     blocking(move || database.store_deals(limit)).await
 }
 
-/// Descarta una oferta para que deje de aparecer.
+/// Lleva a la ficha de la oferta en el navegador integrado de su tienda.
+///
+/// La dirección **no** llega desde la interfaz: se lee de la base con la pareja
+/// tienda-identificador. Componerla en el frente convertiría este comando en un
+/// «abre lo que te diga», y el navegador integrado guarda sesiones iniciadas.
 #[tauri::command]
-pub async fn dismiss_store_deal(state: State<'_, AppState>, app_id: u32) -> AppResult<()> {
+pub async fn open_store_deal(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    store: String,
+    external_id: String,
+) -> AppResult<()> {
+    let database = state.database.clone();
+    let tienda = store.clone();
+    let url = blocking(move || database.store_deal_url(&tienda, &external_id)).await?;
+    store_window::open_store_url(&app, &store, &url).await
+}
+
+/// Descarta una oferta para que deje de aparecer.
+///
+/// Hacen falta las dos partes: los catálogos de Steam y GOG no comparten
+/// numeración, y descartar «el 1207658930» sin decir de qué tienda es podría
+/// tapar un juego distinto en la otra.
+#[tauri::command]
+pub async fn dismiss_store_deal(
+    state: State<'_, AppState>,
+    store: String,
+    external_id: String,
+) -> AppResult<()> {
     let database = state.database.clone();
     let now = Utc::now();
-    blocking(move || database.dismiss_store_deal(app_id, now)).await
+    blocking(move || database.dismiss_store_deal(&store, &external_id, now)).await
 }
 
 // --- Regalos de Epic ----------------------------------------------------------

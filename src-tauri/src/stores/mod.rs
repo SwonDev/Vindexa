@@ -69,6 +69,7 @@ pub mod epic_api;
 pub mod epic_free;
 pub mod gog;
 pub mod gog_api;
+pub mod gog_deals;
 pub(crate) mod heroic;
 pub mod itch;
 pub mod launch;

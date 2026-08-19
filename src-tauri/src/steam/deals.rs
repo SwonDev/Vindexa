@@ -168,10 +168,21 @@ fn parse_item(item: &serde_json::Value, source: DealSource) -> Option<StoreDeal>
         .and_then(serde_json::Value::as_str)
         .filter(|value| value.len() == 3)?
         .to_uppercase();
+    // Un juego a precio completo no es una oferta. El escaparate de más
+    // vendidos mezcla las dos cosas, y enseñar un 49,99 € sin rebaja bajo el
+    // título «Ofertas para ti» es una promesa que la fila no cumple. Sin un
+    // precio de referencia **mayor** tampoco: «−25 %» junto a dos importes
+    // iguales es un descuento que nadie puede comprobar.
+    if initial_cents <= final_cents {
+        return None;
+    }
     let discount_percent = item
         .get("discount_percent")
         .and_then(serde_json::Value::as_i64)
-        .unwrap_or(0)
+        .filter(|percent| *percent > 0)
+        // A veces la rebaja llega sólo en los importes; se calcula con ellos
+        // en vez de enseñar un cero al lado de dos precios distintos.
+        .unwrap_or(((initial_cents - final_cents) * 100) / initial_cents)
         .clamp(0, 100) as u8;
 
     let header_url = item
@@ -215,9 +226,11 @@ mod tests {
             { "id": 55, "name": "Sin moneda", "final_price": 100 }
           ] },
           "top_sellers": { "items": [
-            { "id": 730, "name": "Counter-Strike 2", "discount_percent": 0,
-              "final_price": 0, "currency": "EUR",
+            { "id": 730, "name": "Counter-Strike 2", "discount_percent": 20,
+              "original_price": 1000, "final_price": 800, "currency": "EUR",
               "header_image": "http://cdn.inseguro/730/header.jpg" },
+            { "id": 892970, "name": "Valheim a precio completo",
+              "discount_percent": 0, "final_price": 1999, "currency": "EUR" },
             { "id": 1771300, "name": "Kingdom Come: Deliverance II",
               "discount_percent": 0, "final_price": 5999, "currency": "EUR" }
           ] }
@@ -253,6 +266,20 @@ mod tests {
     }
 
     #[test]
+    fn lo_que_no_esta_rebajado_no_es_una_oferta() {
+        // El escaparate de más vendidos mezcla rebajas con precios completos.
+        // Un 49,99 € sin descuento bajo el título «Ofertas para ti» es una
+        // promesa que la fila no cumple.
+        let ofertas = parse(&respuesta(), &[DealSource::TopSellers]).expect("analizar");
+        assert!(
+            !ofertas.iter().any(|deal| deal.app_id == 892_970),
+            "un precio completo no entra: {ofertas:?}"
+        );
+        assert!(ofertas.iter().all(|deal| deal.discount_percent > 0
+            || deal.initial_cents > deal.final_cents));
+    }
+
+    #[test]
     fn un_juego_en_dos_escaparates_se_queda_con_el_mayor_descuento() {
         let ofertas = parse(
             &respuesta(),
@@ -268,7 +295,9 @@ mod tests {
     }
 
     #[test]
-    fn sin_precio_de_referencia_no_se_inventa_un_descuento() {
+    fn sin_precio_de_referencia_no_hay_rebaja_que_ensenar() {
+        // Antes se dejaba pasar con «0 %» y el precio repetido a los dos lados.
+        // Una fila así ocupa sitio en una sección de ofertas sin ser una.
         let bytes = serde_json::to_vec(&serde_json::json!({
           "specials": { "items": [
             { "id": 42, "name": "Sin referencia", "final_price": 999, "currency": "EUR" }
@@ -276,8 +305,20 @@ mod tests {
         }))
         .expect("serializar");
         let ofertas = parse(&bytes, &[DealSource::Specials]).expect("analizar");
-        assert_eq!(ofertas[0].initial_cents, 999);
-        assert_eq!(ofertas[0].discount_percent, 0);
+        assert!(ofertas.is_empty(), "{ofertas:?}");
+    }
+
+    #[test]
+    fn una_rebaja_que_solo_viene_en_los_importes_se_calcula() {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+          "specials": { "items": [
+            { "id": 42, "name": "Sin porcentaje", "original_price": 2000,
+              "final_price": 1500, "currency": "EUR" }
+          ] }
+        }))
+        .expect("serializar");
+        let ofertas = parse(&bytes, &[DealSource::Specials]).expect("analizar");
+        assert_eq!(ofertas[0].discount_percent, 25);
     }
 
     #[test]

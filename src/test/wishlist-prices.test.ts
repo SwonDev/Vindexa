@@ -92,7 +92,29 @@ describe("precio observado en la tarjeta", () => {
 
   it("sin objetivo ni precio lo dice sin rodeos", () => {
     const line = describePrice(entry());
-    expect(line.verdict).toBe("Sin precio objetivo ni precio consultado.");
+    expect(line.verdict).toBe("Todavía no se ha consultado el precio de este juego.");
+    expect(line.missingLabel).toBe("sin precio");
+    expect(line.observed).toBe("Sin consultar");
+  });
+
+  /**
+   * «Preguntado y sin precio» no es «sin preguntar».
+   *
+   * La pantalla decía «451 juegos sin precio consultado» sobre juegos que se
+   * habían consultado los 451: la tienda respondió que no los pone a la venta.
+   */
+  it("distingue lo que la tienda no vende de lo que no se ha mirado", () => {
+    const noVenta = describePrice(
+      entry(),
+      status({ absence: "no_price", absenceCheckedAt: "2026-08-19T10:00:00Z" }),
+    );
+    expect(noVenta.missingLabel).toBe("no a la venta");
+    expect(noVenta.observed).toBe("Consultado, sin precio");
+    expect(noVenta.verdict).toContain("no publica precio");
+
+    const retirado = describePrice(entry(), status({ absence: "unavailable" }));
+    expect(retirado.missingLabel).toBe("no está en la tienda");
+    expect(retirado.verdict).toContain("no reconoce este juego");
   });
 
   it("un objetivo en euros y un precio en dólares no se comparan", () => {
@@ -227,6 +249,21 @@ describe("cobertura de precios de la lista", () => {
     ]);
     expect(resumen.headline).toBe("1 de 3 con precio");
     expect(resumen.caveat).toContain("2 juegos sin precio consultado");
+  });
+
+  it("separa lo que la tienda no vende de lo que nadie ha mirado", () => {
+    // Decirlo como una sola cifra acusaba a la aplicación de no haber mirado
+    // cuatrocientas cincuenta veces seguidas.
+    const resumen = summarizePrices([
+      status({ appId: 1, price: price({ appId: 1 }) }),
+      status({ appId: 2, absence: "no_price", absenceCheckedAt: "2026-08-19T10:00:00Z" }),
+      status({ appId: 3, absence: "unavailable" }),
+      status({ appId: 4 }),
+    ]);
+    expect(resumen.unlisted).toBe(2);
+    expect(resumen.unasked).toBe(1);
+    expect(resumen.caveat).toContain("2 juegos que la tienda no pone a la venta");
+    expect(resumen.caveat).toContain("1 juego sin precio consultado");
   });
 
   it("cuenta aparte los precios caducados", () => {

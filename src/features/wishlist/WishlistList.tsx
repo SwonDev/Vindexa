@@ -13,7 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCents, observedLabel, WISHLIST_BUCKETS } from "@/features/wishlist/wishlist-model";
+import {
+  describeMissingPrice,
+  formatCents,
+  observedLabel,
+  WISHLIST_BUCKETS,
+} from "@/features/wishlist/wishlist-model";
 import type {
   WishlistBucketId,
   WishlistEntry,
@@ -334,9 +339,15 @@ function WishlistRow({
             </>
           ) : (
             // Un precio que no se ha podido consultar no escribe cuatro líneas
-            // diciendo que no se sabe: escribe una palabra.
-            <span className="wishlist-list__amount" data-unknown="true">
-              sin precio
+            // diciendo que no se sabe: escribe una palabra. Y la palabra
+            // distingue «no lo hemos mirado» de «la tienda no lo vende», que
+            // era lo que la pantalla confundía.
+            <span
+              className="wishlist-list__amount"
+              data-unknown="true"
+              title={describeMissingPrice(status).detail}
+            >
+              {describeMissingPrice(status).label}
             </span>
           )}
         </span>

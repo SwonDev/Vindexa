@@ -65,6 +65,19 @@ pub const MAX_HISTORY_POINTS: u32 = 400;
 /// acotada, no para racionar peticiones.
 pub const MAX_REFRESH_BATCH: u32 = 2_000;
 
+/// Horas que se respeta la respuesta «este juego no tiene precio publicado».
+///
+/// Un juego sin fecha de salida no estrena precio de un día para otro, y uno
+/// retirado no vuelve. Volver a preguntar cada seis horas por cuatrocientos
+/// cincuenta juegos así es gastar la cola en lo único que se sabe que no va a
+/// contestar; una vez al día es de sobra, y el día que estrene precio se nota
+/// como mucho un día después.
+pub const ABSENCE_HOURS: i64 = 24;
+
+/// Qué contestó la tienda cuando no hubo precio.
+pub const ABSENCE_NO_PRICE: &str = "no_price";
+pub const ABSENCE_UNAVAILABLE: &str = "unavailable";
+
 /// Vigencia de una observación. Es una palabra, no un booleano, porque la
 /// interfaz necesita distinguir «recién mirado» de «hace días» sin inventarse
 /// el umbral por su cuenta.
@@ -193,6 +206,15 @@ pub struct WishlistPriceStatus {
     /// `final - objetivo`. Negativo significa por debajo del objetivo.
     pub difference_cents: Option<i64>,
     pub meets_target: bool,
+    /// Qué contestó la tienda la última vez que se preguntó sin obtener precio:
+    /// `no_price`, `unavailable`, o nada si nunca se ha preguntado.
+    ///
+    /// Es lo que separa «no lo hemos mirado» de «lo hemos mirado y la tienda no
+    /// publica precio». Sin esto, la pantalla acusaba a la aplicación de no
+    /// haber mirado cuatrocientas cincuenta veces.
+    pub absence: Option<String>,
+    /// Cuándo se recibió esa respuesta.
+    pub absence_checked_at: Option<String>,
 }
 
 /// Recuento de lo que hizo un barrido de precios.
@@ -475,6 +497,9 @@ pub fn record_observation(
 
     let alert = evaluate_alert(&transaction, observation.app_id, now)?;
     transaction.commit()?;
+
+    // Si tenía apuntado «la tienda no publica precio», ya no es verdad.
+    forget_absence(connection, observation.app_id)?;
 
     let price = price_for(connection, observation.app_id, &currency, now)?
         .ok_or_else(|| AppError::not_found("El precio registrado ya no está disponible."))?;
@@ -777,6 +802,13 @@ pub fn wishlist_price_statuses(
             (Some(target), Some(price)) => Some(price.final_cents - target),
             _ => None,
         };
+        // Sólo interesa cuando no hay precio que enseñar: con precio, lo que
+        // contestó la tienda hace dos semanas no aporta nada.
+        let (absence, absence_checked_at) = if chosen.is_some() {
+            (None, None)
+        } else {
+            absence_of(connection, app_id)?
+        };
         statuses.push(WishlistPriceStatus {
             app_id,
             target_cents,
@@ -786,9 +818,66 @@ pub fn wishlist_price_statuses(
             comparable,
             difference_cents,
             meets_target: difference_cents.is_some_and(|difference| difference <= 0),
+            absence,
+            absence_checked_at,
         });
     }
     Ok(statuses)
+}
+
+/// Lo que contestó la tienda la última vez que no hubo precio.
+fn absence_of(connection: &Connection, app_id: u32) -> AppResult<(Option<String>, Option<String>)> {
+    let fila: Option<(String, String)> = connection
+        .query_row(
+            "SELECT outcome, checked_at FROM game_price_checks WHERE app_id = ?1",
+            [app_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(match fila {
+        Some((outcome, checked_at)) => (Some(outcome), Some(checked_at)),
+        None => (None, None),
+    })
+}
+
+/// Guarda que la tienda respondió por estos juegos y no dio precio.
+///
+/// No es un precio de cero ni un juego gratuito: es una respuesta, y guardarla
+/// es lo que permite decir la verdad en pantalla y dejar de reintentar cada seis
+/// horas algo que no va a cambiar hoy.
+pub fn record_absences(
+    connection: &mut Connection,
+    app_ids: &[u32],
+    outcome: &str,
+    now: DateTime<Utc>,
+) -> AppResult<usize> {
+    if !matches!(outcome, ABSENCE_NO_PRICE | ABSENCE_UNAVAILABLE) {
+        return Err(AppError::validation(
+            "Esa no es una respuesta de precio que se pueda guardar.",
+        ));
+    }
+    let sello = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let transaction = connection.transaction()?;
+    {
+        let mut statement = transaction.prepare_cached(
+            "INSERT INTO game_price_checks(app_id, checked_at, outcome)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(app_id) DO UPDATE
+                SET checked_at = excluded.checked_at,
+                    outcome = excluded.outcome",
+        )?;
+        for app_id in app_ids {
+            statement.execute(params![app_id, sello, outcome])?;
+        }
+    }
+    transaction.commit()?;
+    Ok(app_ids.len())
+}
+
+/// Borra la respuesta guardada de un juego: acaba de aparecer su precio.
+fn forget_absence(connection: &Connection, app_id: u32) -> AppResult<()> {
+    connection.execute("DELETE FROM game_price_checks WHERE app_id = ?1", [app_id])?;
+    Ok(())
 }
 
 /// Juegos de deseados a los que toca volver a preguntar el precio: primero los
@@ -808,18 +897,27 @@ pub fn stale_wishlist_app_ids(
     };
     let cutoff =
         (now - chrono::Duration::hours(FRESH_HOURS)).to_rfc3339_opts(SecondsFormat::Millis, true);
+    // Lo que la tienda contestó hace poco que no tiene precio se deja en paz
+    // hasta mañana: preguntarlo otra vez a las seis horas gasta la cola en lo
+    // único que se sabe que no va a contestar.
+    let absence_cutoff =
+        (now - chrono::Duration::hours(ABSENCE_HOURS)).to_rfc3339_opts(SecondsFormat::Millis, true);
     let mut statement = connection.prepare(
         "SELECT w.app_id,
-                (SELECT MAX(p.observed_at) FROM game_prices p WHERE p.app_id = w.app_id) AS seen
+                (SELECT MAX(p.observed_at) FROM game_prices p WHERE p.app_id = w.app_id) AS seen,
+                (SELECT c.checked_at FROM game_price_checks c WHERE c.app_id = w.app_id) AS asked
            FROM (SELECT app_id FROM wishlist_entries
                   UNION ALL
                  SELECT app_id FROM catalog_wishlist_entries) w
-          WHERE seen IS NULL OR seen < ?1
+          WHERE (seen IS NULL OR seen < ?1)
+            AND (asked IS NULL OR asked < ?2)
           ORDER BY seen IS NOT NULL ASC, seen ASC, w.app_id ASC
-          LIMIT ?2",
+          LIMIT ?3",
     )?;
     let ids = statement
-        .query_map(params![cutoff, limit], |row| row.get::<_, u32>(0))?
+        .query_map(params![cutoff, absence_cutoff, limit], |row| {
+            row.get::<_, u32>(0)
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ids)
 }
@@ -1307,5 +1405,77 @@ mod tests {
                 .contains("ni en la biblioteca ni en deseados"),
             "{error}"
         );
+    }
+
+    /// «Sin precio consultado» y «sin precio publicado» no son lo mismo.
+    ///
+    /// La pantalla decía «451 juegos sin precio consultado» sobre juegos que se
+    /// habían consultado los 451: la tienda respondió y no publica precio.
+    #[test]
+    fn un_juego_preguntado_sin_precio_no_figura_como_sin_preguntar() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Sin fecha de salida");
+
+        // Antes de preguntar: no se sabe nada, y así se dice.
+        let antes = wishlist_price_statuses(&connection, at(1, 12)).expect("estados");
+        assert_eq!(antes[0].absence, None);
+        assert_eq!(antes[0].absence_checked_at, None);
+
+        record_absences(&mut connection, &[10], ABSENCE_NO_PRICE, at(1, 12)).expect("guardar");
+
+        let despues = wishlist_price_statuses(&connection, at(1, 13)).expect("estados");
+        assert_eq!(despues[0].absence.as_deref(), Some(ABSENCE_NO_PRICE));
+        assert!(despues[0].absence_checked_at.is_some());
+        assert!(despues[0].price.is_none(), "sigue sin haber precio que enseñar");
+    }
+
+    #[test]
+    fn lo_que_la_tienda_acaba_de_decir_que_no_tiene_precio_no_se_repregunta_hoy() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Sin fecha");
+        catalog_wish(&connection, 20, "Este sí tiene");
+
+        // Sin nada apuntado, los dos están en la cola.
+        assert_eq!(
+            stale_wishlist_app_ids(&connection, at(1, 12), 0).expect("cola"),
+            vec![10, 20]
+        );
+
+        record_absences(&mut connection, &[10], ABSENCE_NO_PRICE, at(1, 12)).expect("guardar");
+        assert_eq!(
+            stale_wishlist_app_ids(&connection, at(1, 18), 0).expect("cola"),
+            vec![20],
+            "seis horas después no se vuelve a preguntar por lo mismo"
+        );
+        // Pasado un día sí: un juego sin fecha puede estrenar precio.
+        assert_eq!(
+            stale_wishlist_app_ids(&connection, at(2, 13), 0).expect("cola"),
+            vec![10, 20]
+        );
+    }
+
+    #[test]
+    fn cuando_por_fin_aparece_el_precio_se_olvida_la_respuesta_vieja() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Ya tiene precio");
+        record_absences(&mut connection, &[10], ABSENCE_NO_PRICE, at(1, 12)).expect("guardar");
+
+        record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 13))
+            .expect("registrar");
+
+        let estados = wishlist_price_statuses(&connection, at(1, 14)).expect("estados");
+        assert!(estados[0].price.is_some());
+        assert_eq!(estados[0].absence, None, "la respuesta vieja ya no es verdad");
+        let quedan: i64 = connection
+            .query_row("SELECT COUNT(*) FROM game_price_checks", [], |row| row.get(0))
+            .expect("contar");
+        assert_eq!(quedan, 0);
+    }
+
+    #[test]
+    fn una_respuesta_inventada_no_se_guarda() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Uno");
+        assert!(record_absences(&mut connection, &[10], "carísimo", at(1, 12)).is_err());
     }
 }

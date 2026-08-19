@@ -19,6 +19,13 @@ import type { DealCandidate } from "@/lib/types";
 /**
  * Rebajas que todavía no son tuyas, ordenadas por lo que te gusta.
  *
+ * # Dos tiendas
+ *
+ * Steam y GOG. Cada fila dice de cuál es, porque el precio de una no se paga en
+ * la otra. Las de GOG no tienen AppID de Steam: no se puede enseñar sus
+ * capturas ni pasarlas a deseados —que se llevan por AppID—, y eso se dice en
+ * el menú en vez de ofrecer un botón que no haría nada.
+ *
  * # Por qué no es un escaparate
  *
  * La tienda ya sabe enseñar rebajas. Lo que no sabe es cuáles te interesan, y
@@ -52,22 +59,31 @@ export function StoreDealsBlock() {
   });
 
   const dismiss = useMutation({
-    mutationFn: (deal: DealCandidate) => api.dismissStoreDeal(deal.appId),
+    mutationFn: (deal: DealCandidate) => api.dismissStoreDeal(deal.store, deal.externalId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["store-deals"] }),
     onError: (cause) => setError(getErrorMessage(cause)),
   });
   const openStore = useMutation({
-    mutationFn: (deal: DealCandidate) => api.openStore(deal.appId),
+    // La dirección la resuelve el backend con la pareja tienda-identificador:
+    // así una oferta de GOG abre GOG y una de Steam abre Steam, sin que la
+    // interfaz componga direcciones.
+    mutationFn: (deal: DealCandidate) => api.openStoreDeal(deal.store, deal.externalId),
     onError: (cause) => setError(getErrorMessage(cause)),
   });
   const wish = useMutation({
-    mutationFn: (deal: DealCandidate) =>
-      api.saveWishlistEntry({
+    mutationFn: (deal: DealCandidate) => {
+      // Los deseados se llevan por AppID de Steam. Sin él no hay nada que
+      // guardar, y adivinarlo por el título sería inventar una equivalencia.
+      if (deal.appId == null) {
+        throw new Error("Los deseados se llevan por AppID de Steam y esta oferta no tiene.");
+      }
+      return api.saveWishlistEntry({
         appId: deal.appId,
         bucket: "waiting_sale",
         priority: 0,
         note: "",
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["store-deals"] });
       void queryClient.invalidateQueries({ queryKey: ["wishlist-overview"] });
@@ -112,7 +128,7 @@ export function StoreDealsBlock() {
         <ul className="store-deals__list">
           {visibles.map((deal) => (
             <DealRow
-              key={deal.appId}
+              key={`${deal.store}:${deal.externalId}`}
               deal={deal}
               busy={dismiss.isPending || openStore.isPending || wish.isPending}
               onOpen={() => openStore.mutate(deal)}
@@ -157,11 +173,11 @@ function DealRow({
         <li className="store-deals__item">
           <GamePreviewCard
             side="bottom"
-            appId={deal.appId}
+            appId={deal.appId ?? null}
             title={deal.title}
             fallback={
               <Artwork
-                appId={deal.appId}
+                appId={deal.appId ?? undefined}
                 src={deal.headerUrl ?? undefined}
                 title={deal.title}
                 kind="header"
@@ -187,6 +203,11 @@ function DealRow({
                 <span className="store-deals__discount" data-empty="true" aria-hidden="true" />
               )}
               <span className="store-deals__title">{deal.title}</span>
+              {/* De qué tienda es: el mismo juego cuesta cosas distintas en
+                  cada una, y sin decirlo el precio no significa nada. */}
+              <span className="store-deals__store" data-store={deal.store}>
+                {storeName(deal.store)}
+              </span>
               {/* La coincidencia sólo se enseña cuando se ha podido calcular:
                   sin rasgos no hay puntuación, y un cero sería una afirmación. */}
               {deal.matchScore != null && (
@@ -211,9 +232,14 @@ function DealRow({
         <ContextMenuItem disabled={busy} onSelect={onOpen}>
           <IconExternalLink aria-hidden="true" /> Abrir en la tienda oficial
         </ContextMenuItem>
-        <ContextMenuItem disabled={busy} onSelect={onWish}>
+        <ContextMenuItem disabled={busy || deal.appId == null} onSelect={onWish}>
           <IconHeartPlus aria-hidden="true" /> Añadir a deseados
         </ContextMenuItem>
+        {deal.appId == null && (
+          <ContextMenuLabel className="store-deals__hint">
+            Los deseados se llevan por AppID de Steam, y esta oferta es de {storeName(deal.store)}.
+          </ContextMenuLabel>
+        )}
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" disabled={busy} onSelect={onDismiss}>
           <IconX aria-hidden="true" /> No me interesa
@@ -221,6 +247,13 @@ function DealRow({
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+/** Cómo se llama cada tienda por escrito. */
+function storeName(store: string): string {
+  if (store === "gog") return "GOG";
+  if (store === "steam") return "Steam";
+  return store;
 }
 
 /** Sólo lo que se sabe. Una razón vacía no ocupa una fila diciendo nada. */
@@ -233,6 +266,7 @@ function facts(deal: DealCandidate): { label: string; value: string }[] {
   if (deal.matchReason.trim()) {
     salida.push({ label: "Por qué", value: deal.matchReason.trim() });
   }
+  salida.push({ label: "Tienda", value: storeName(deal.store) });
   return salida;
 }
 
