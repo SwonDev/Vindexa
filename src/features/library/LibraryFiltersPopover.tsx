@@ -1,4 +1,5 @@
 import { IconAdjustmentsHorizontal, IconInfoCircle, IconX } from "@tabler/icons-react";
+import { StaggerList } from "@/components/motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -363,7 +364,19 @@ export function LibraryFiltersPopover({
       </Popover>
 
       {chips.length > 0 && (
-        <div className="filter-chips" role="status" aria-label="Filtros activos">
+        // Los filtros activos aparecen escalonados. Es la única señal de que se
+        // ha aplicado algo —la lista de debajo simplemente cambia— y verlos
+        // entrar uno detrás de otro cuenta que son varios sin tener que
+        // contarlos. Aquí no hay arrastre, así que nada se pelea por la misma
+        // transformación.
+        <StaggerList
+          as="div"
+          className="filter-chips"
+          role="status"
+          aria-label="Filtros activos"
+          itemAsChild
+          stepMs={18}
+        >
           {chips.map((chip) => (
             <button
               key={chip.key}
@@ -377,7 +390,7 @@ export function LibraryFiltersPopover({
               <IconX aria-hidden="true" size={12} />
             </button>
           ))}
-        </div>
+        </StaggerList>
       )}
     </>
   );

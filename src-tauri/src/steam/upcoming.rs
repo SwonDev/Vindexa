@@ -31,6 +31,8 @@
 use crate::db::Database;
 use crate::db::priority::{ImportedUpcomingRelease, UpcomingImportSummary};
 use crate::error::AppResult;
+use chrono::Utc;
+use rusqlite::OptionalExtension;
 use crate::steam::store_api::{self, StoreBundleOutcome};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -209,8 +211,119 @@ fn mark_checked(database: &Database, candidates: &[(u32, String)]) -> AppResult<
     Ok(())
 }
 
+/// Cada cuánto se repasa la lista de deseados por su cuenta.
+///
+/// Doce horas: los lanzamientos no cambian de fecha cada rato, y cada pasada
+/// son sesenta peticiones a la tienda. Menos sería gastar red para nada; más,
+/// enterarse tarde de que algo ya ha salido.
+const AUTO_INTERVAL_HOURS: i64 = 12;
+
+/// Clave en `app_settings` con la última pasada automática.
+const LAST_AUTO_KEY: &str = "upcoming_last_auto_refresh";
+
+/// Repasa los próximos lanzamientos si toca, sin que nadie lo pida.
+///
+/// # Por qué automático
+///
+/// La sección existía entera —traer los deseados que aún no han salido,
+/// aprender qué te gusta y puntuarlos— y sólo corría al pulsar un botón que
+/// nadie sabía que había que pulsar. Medido sobre una biblioteca real con
+/// novecientos deseados: cero lanzamientos guardados y cero pesos aprendidos.
+/// Una recomendación que hay que pedir a mano no recomienda nada.
+///
+/// # Qué hace exactamente, y en qué orden
+///
+/// 1. Trae una tanda de deseados y guarda los que aún no han salido.
+/// 2. Aprende del historial qué te gusta.
+/// 3. Puntúa los candidatos contra ese modelo.
+///
+/// El orden importa: puntuar antes de aprender daría la puntuación del modelo
+/// anterior. Nada de esto sale del ordenador salvo preguntar a la tienda por
+/// fechas de salida, que es lo mismo que ya hace la sincronización.
+pub async fn maintain_if_due(database: &Database) -> AppResult<Option<UpcomingRefreshReport>> {
+    if !is_due(database)? {
+        return Ok(None);
+    }
+    let report = refresh_from_wishlist(database).await?;
+    // Aprender y puntuar son baratos y locales: se hacen aunque la tanda no
+    // haya traído nada nuevo, porque el historial de juego sí ha cambiado.
+    database.learn_taste()?;
+    database.score_upcoming_releases()?;
+    mark_done(database)?;
+    Ok(Some(report))
+}
+
+fn is_due(database: &Database) -> AppResult<bool> {
+    let connection = database.open()?;
+    let last: Option<String> = connection
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = ?1",
+            [LAST_AUTO_KEY],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(last) = last else {
+        return Ok(true);
+    };
+    // Un sello que no se entiende es un sello que no sirve: se vuelve a pasar.
+    let Ok(moment) = chrono::DateTime::parse_from_rfc3339(&last) else {
+        return Ok(true);
+    };
+    Ok(Utc::now().signed_duration_since(moment.with_timezone(&Utc))
+        >= chrono::Duration::hours(AUTO_INTERVAL_HOURS))
+}
+
+fn mark_done(database: &Database) -> AppResult<()> {
+    let connection = database.open()?;
+    connection.execute(
+        "INSERT INTO app_settings(key, value, updated_at)
+         VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        rusqlite::params![LAST_AUTO_KEY, Utc::now().to_rfc3339()],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn la_primera_vez_siempre_toca() {
+        // Sin sello no hay nada aprendido: es justo el caso que dejaba la
+        // sección vacía para siempre.
+        let (_directory, database) = base_para_vencimiento();
+        assert!(is_due(&database).expect("comprobar"));
+    }
+
+    fn base_para_vencimiento() -> (tempfile::TempDir, Database) {
+        let directory = tempfile::tempdir().expect("directorio temporal");
+        let database = Database::new(directory.path().join("vindexa.sqlite3"));
+        database.initialize().expect("inicializar");
+        (directory, database)
+    }
+
+    #[test]
+    fn recien_repasado_no_se_repite() {
+        let (_directory, database) = base_para_vencimiento();
+        mark_done(&database).expect("marcar");
+        assert!(!is_due(&database).expect("comprobar"));
+    }
+
+    #[test]
+    fn un_sello_ilegible_se_trata_como_si_no_hubiera() {
+        // Un valor que no se entiende no puede significar «ya está hecho»:
+        // sería quedarse sin repasar para siempre por un dato corrupto.
+        let (_directory, database) = base_para_vencimiento();
+        let connection = database.open().expect("abrir");
+        connection
+            .execute(
+                "INSERT INTO app_settings(key, value) VALUES (?1, 'ayer por la tarde')",
+                [LAST_AUTO_KEY],
+            )
+            .expect("escribir");
+        drop(connection);
+        assert!(is_due(&database).expect("comprobar"));
+    }
+
     use super::*;
     use tempfile::TempDir;
 

@@ -40,6 +40,7 @@ import {
   DragFeedbackSurface,
   type DropState,
   PressableSurface,
+  RevealOnScroll,
   ShimmerSkeleton,
 } from "@/components/motion";
 import {
@@ -580,182 +581,188 @@ function CuratedListDetail({ list }: { list: CuratedList }) {
   };
 
   return (
-    <section className="curated-detail" aria-label={`Contenido de ${list.name}`}>
-      <header className="curated-detail__head">
-        <span
-          className="curated-detail__accent"
-          style={{ backgroundColor: accentToken(list.accent) }}
-          aria-hidden="true"
-        />
-        <p className="curated-detail__title">
-          <strong>{list.name}</strong>
-          <data value={detail.data?.total ?? list.gameCount}>
-            {gameCountLabel(detail.data?.total ?? list.gameCount)}
-          </data>
-        </p>
-        <p className="curated-detail__meta">
-          <span className="curated-detail__kind">{curatedKindLabel(list.kind)}</span>
-          {list.description && <span>{list.description}</span>}
-        </p>
-      </header>
+    // El detalle se remonta al cambiar de lista, así que aparece cada vez: es
+    // lo que cuenta que el contenido de abajo ya es de otra lista, en lugar de
+    // que el bloque cambie de golpe y haya que releerlo para saberlo. Va sobre
+    // la sección, que no se arrastra; lo de dentro sí, y por eso no se toca.
+    <RevealOnScroll asChild>
+      <section className="curated-detail" aria-label={`Contenido de ${list.name}`}>
+        <header className="curated-detail__head">
+          <span
+            className="curated-detail__accent"
+            style={{ backgroundColor: accentToken(list.accent) }}
+            aria-hidden="true"
+          />
+          <p className="curated-detail__title">
+            <strong>{list.name}</strong>
+            <data value={detail.data?.total ?? list.gameCount}>
+              {gameCountLabel(detail.data?.total ?? list.gameCount)}
+            </data>
+          </p>
+          <p className="curated-detail__meta">
+            <span className="curated-detail__kind">{curatedKindLabel(list.kind)}</span>
+            {list.description && <span>{list.description}</span>}
+          </p>
+        </header>
 
-      <div className="curated-detail__add">
-        <GamePicker
-          label={`Añadir a ${list.name}`}
-          placeholder="Nombre del juego"
-          disabledAppIds={present}
-          disabledHint="Ya está en la lista"
-          busyAppId={add.isPending ? add.variables : undefined}
-          onPick={(game) => add.mutate(game.appId)}
-        />
-      </div>
+        <div className="curated-detail__add">
+          <GamePicker
+            label={`Añadir a ${list.name}`}
+            placeholder="Nombre del juego"
+            disabledAppIds={present}
+            disabledHint="Ya está en la lista"
+            busyAppId={add.isPending ? add.variables : undefined}
+            onPick={(game) => add.mutate(game.appId)}
+          />
+        </div>
 
-      {message ? (
-        <p className="operation-message wishlist-message" role="status">
-          {message}
-        </p>
-      ) : (
-        <span className="sr-only" role="status" aria-live="polite" />
-      )}
+        {message ? (
+          <p className="operation-message wishlist-message" role="status">
+            {message}
+          </p>
+        ) : (
+          <span className="sr-only" role="status" aria-live="polite" />
+        )}
 
-      {detail.isPending ? (
-        <ul className="curated-items" aria-busy="true">
-          {Array.from({ length: 4 }, (_, slot) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: huecos idénticos sin identidad propia
-            <li key={slot} className="curated-item curated-item--skeleton" aria-hidden="true">
-              <ShimmerSkeleton aspectRatio="2 / 3" width={34} radiusPx={2} />
-              <ShimmerSkeleton height={12} width="55%" radiusPx={2} />
-            </li>
-          ))}
-        </ul>
-      ) : detail.isError ? (
-        <p className="wishlist-empty" role="alert">
-          <strong>No se pudo leer el contenido</strong>
-          {getErrorMessage(detail.error)}
-          <Button variant="outline" size="sm" onClick={() => void detail.refetch()}>
-            Reintentar
-          </Button>
-        </p>
-      ) : !items.length ? (
-        <p className="wishlist-empty">
-          <strong>La lista está vacía</strong>
-          Busca un juego arriba y añádelo. El orden en que los pongas es el argumento de la lista.
-        </p>
-      ) : (
-        <ul className="curated-items">
-          {items.map((item, index) => (
-            <li
-              key={item.game.appId}
-              className="curated-item"
-              data-highlight={item.highlight}
-              data-position={index + 1}
-            >
-              <span className="curated-item__rank" aria-hidden="true">
-                {index + 1}
-              </span>
-              <span className="curated-item__cover" aria-hidden="true">
-                <Artwork
-                  appId={item.game.appId}
-                  src={item.game.coverUrl}
-                  title={item.game.title}
-                  kind="cover"
-                />
-              </span>
-              <div className="curated-item__body">
-                <p className="curated-item__title">{item.game.title}</p>
-                {noteDraft?.appId === item.game.appId ? (
-                  <div className="curated-item__editor">
-                    <Textarea
-                      rows={2}
-                      value={noteDraft.note}
-                      maxLength={400}
-                      aria-label={`Nota de ${item.game.title}`}
-                      onChange={(event) =>
-                        setNoteDraft({ appId: item.game.appId, note: event.currentTarget.value })
-                      }
-                    />
-                    <Button
-                      size="xs"
-                      disabled={busy}
-                      onClick={() =>
-                        update.mutate({
-                          appId: item.game.appId,
-                          note: noteDraft.note.trim(),
-                          highlight: item.highlight,
-                        })
-                      }
+        {detail.isPending ? (
+          <ul className="curated-items" aria-busy="true">
+            {Array.from({ length: 4 }, (_, slot) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: huecos idénticos sin identidad propia
+              <li key={slot} className="curated-item curated-item--skeleton" aria-hidden="true">
+                <ShimmerSkeleton aspectRatio="2 / 3" width={34} radiusPx={2} />
+                <ShimmerSkeleton height={12} width="55%" radiusPx={2} />
+              </li>
+            ))}
+          </ul>
+        ) : detail.isError ? (
+          <p className="wishlist-empty" role="alert">
+            <strong>No se pudo leer el contenido</strong>
+            {getErrorMessage(detail.error)}
+            <Button variant="outline" size="sm" onClick={() => void detail.refetch()}>
+              Reintentar
+            </Button>
+          </p>
+        ) : !items.length ? (
+          <p className="wishlist-empty">
+            <strong>La lista está vacía</strong>
+            Busca un juego arriba y añádelo. El orden en que los pongas es el argumento de la lista.
+          </p>
+        ) : (
+          <ul className="curated-items">
+            {items.map((item, index) => (
+              <li
+                key={item.game.appId}
+                className="curated-item"
+                data-highlight={item.highlight}
+                data-position={index + 1}
+              >
+                <span className="curated-item__rank" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span className="curated-item__cover" aria-hidden="true">
+                  <Artwork
+                    appId={item.game.appId}
+                    src={item.game.coverUrl}
+                    title={item.game.title}
+                    kind="cover"
+                  />
+                </span>
+                <div className="curated-item__body">
+                  <p className="curated-item__title">{item.game.title}</p>
+                  {noteDraft?.appId === item.game.appId ? (
+                    <div className="curated-item__editor">
+                      <Textarea
+                        rows={2}
+                        value={noteDraft.note}
+                        maxLength={400}
+                        aria-label={`Nota de ${item.game.title}`}
+                        onChange={(event) =>
+                          setNoteDraft({ appId: item.game.appId, note: event.currentTarget.value })
+                        }
+                      />
+                      <Button
+                        size="xs"
+                        disabled={busy}
+                        onClick={() =>
+                          update.mutate({
+                            appId: item.game.appId,
+                            note: noteDraft.note.trim(),
+                            highlight: item.highlight,
+                          })
+                        }
+                      >
+                        {update.isPending && <IconLoader2 className="is-spinning" />} Guardar nota
+                      </Button>
+                      <Button variant="ghost" size="xs" onClick={() => setNoteDraft(undefined)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="curated-item__note"
+                      aria-label={`Editar la nota de ${item.game.title}`}
+                      onClick={() => setNoteDraft({ appId: item.game.appId, note: item.note })}
                     >
-                      {update.isPending && <IconLoader2 className="is-spinning" />} Guardar nota
-                    </Button>
-                    <Button variant="ghost" size="xs" onClick={() => setNoteDraft(undefined)}>
-                      Cancelar
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="curated-item__note"
-                    aria-label={`Editar la nota de ${item.game.title}`}
-                    onClick={() => setNoteDraft({ appId: item.game.appId, note: item.note })}
+                      {item.note || "Añadir una nota"}
+                    </button>
+                  )}
+                </div>
+                <span className="curated-item__actions">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={
+                      item.highlight
+                        ? `Quitar destacado a ${item.game.title}`
+                        : `Destacar ${item.game.title}`
+                    }
+                    aria-pressed={item.highlight}
+                    disabled={busy}
+                    onClick={() =>
+                      update.mutate({
+                        appId: item.game.appId,
+                        note: item.note,
+                        highlight: !item.highlight,
+                      })
+                    }
                   >
-                    {item.note || "Añadir una nota"}
-                  </button>
-                )}
-              </div>
-              <span className="curated-item__actions">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={
-                    item.highlight
-                      ? `Quitar destacado a ${item.game.title}`
-                      : `Destacar ${item.game.title}`
-                  }
-                  aria-pressed={item.highlight}
-                  disabled={busy}
-                  onClick={() =>
-                    update.mutate({
-                      appId: item.game.appId,
-                      note: item.note,
-                      highlight: !item.highlight,
-                    })
-                  }
-                >
-                  {item.highlight ? <IconStarFilled /> : <IconStar />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Subir ${item.game.title}`}
-                  disabled={busy || index === 0}
-                  onClick={() => moveItem(index, -1)}
-                >
-                  <IconArrowUp />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Bajar ${item.game.title}`}
-                  disabled={busy || index === items.length - 1}
-                  onClick={() => moveItem(index, 1)}
-                >
-                  <IconArrowDown />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Quitar ${item.game.title} de ${list.name}`}
-                  disabled={busy}
-                  onClick={() => removeItem.mutate(item.game.appId)}
-                >
-                  <IconX />
-                </Button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+                    {item.highlight ? <IconStarFilled /> : <IconStar />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Subir ${item.game.title}`}
+                    disabled={busy || index === 0}
+                    onClick={() => moveItem(index, -1)}
+                  >
+                    <IconArrowUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Bajar ${item.game.title}`}
+                    disabled={busy || index === items.length - 1}
+                    onClick={() => moveItem(index, 1)}
+                  >
+                    <IconArrowDown />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Quitar ${item.game.title} de ${list.name}`}
+                    disabled={busy}
+                    onClick={() => removeItem.mutate(item.game.appId)}
+                  >
+                    <IconX />
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </RevealOnScroll>
   );
 }
 

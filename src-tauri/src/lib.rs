@@ -135,6 +135,37 @@ pub fn run() {
                 });
             }
 
+            // Los próximos lanzamientos se repasan solos cada doce horas.
+            // Estaba todo escrito y sólo corría al pulsar un botón que nadie
+            // sabía que había que pulsar: medido sobre una biblioteca real con
+            // novecientos deseados, cero lanzamientos guardados y cero pesos
+            // aprendidos. Una recomendación que hay que pedir a mano no
+            // recomienda nada.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Se espera a que la ventana esté servida: esto tarda
+                    // sesenta peticiones a la tienda y no puede competir con la
+                    // primera pintada.
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    match steam::upcoming::maintain_if_due(&database).await {
+                        Ok(Some(report)) => {
+                            eprintln!(
+                                "Vindexa: próximos lanzamientos al día ({} revisados, {} por revisar).",
+                                report.checked, report.pending
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!(
+                                "Vindexa: no se pudieron repasar los lanzamientos: {}",
+                                error.message
+                            );
+                        }
+                    }
+                });
+            }
+
             let startup_recovery = db::recovery::StartupRecovery::prepare(database.clone());
             let metadata_enrichment =
                 Arc::new(steam::metadata_enrichment::MetadataEnrichmentCoordinator::default());
