@@ -51,6 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EpicFreeBlock } from "@/features/discovery/EpicFreeBlock";
 import { UpcomingReleasesBlock } from "@/features/discovery/UpcomingReleasesBlock";
 import {
   type GameQuickActions,
@@ -436,6 +437,9 @@ export function DiscoveryScreen({
               abre con la respuesta, no con el historial. Ambos bloques van
               juntos a propósito —una fecha que te interesa se convierte en un
               aviso sin salir de aquí. */}
+          {/* Lo que caduca va primero: un regalo de Epic dura una semana y no
+              vuelve, mientras que un lanzamiento previsto sigue ahí mañana. */}
+          <EpicFreeBlock />
           <UpcomingReleasesBlock />
           <NotificationRulesPanel />
           <PublicationsBlock

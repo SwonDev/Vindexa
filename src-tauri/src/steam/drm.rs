@@ -19,8 +19,10 @@
 //!
 //! # Reglas
 //!
-//! 1. `third_party_drm` si `drm_notice` o `ext_user_account_notice` nombran un
-//!    DRM o un lanzador de terceros, o si una categoría lo exige. `legal_notice`
+//! 1. `third_party_drm` si existe `ext_user_account_notice` —la tienda sólo
+//!    rellena ese campo cuando el juego exige la cuenta de otra empresa—, si
+//!    `drm_notice` nombra un DRM o un lanzador de terceros, o si una categoría
+//!    lo exige. `legal_notice`
 //!    solo cuenta cuando nombra una tecnología anti-tamper concreta (Denuvo,
 //!    SecuROM…): el aviso legal está lleno de marcas registradas y mencionar
 //!    «Ubisoft» o «Rockstar» ahí no demuestra ningún requisito.
@@ -341,6 +343,32 @@ pub fn classify(signals: &DrmSignals<'_>) -> DrmAssessment {
         let normalized = normalize(text);
         collect(&normalized, THIRD_PARTY_PATTERNS, source, &mut third_party);
         collect(&normalized, STEAM_PATTERNS, source, &mut steam);
+    }
+
+    // Que exista `ext_user_account_notice` **es** la señal.
+    //
+    // Steam sólo rellena ese campo cuando el juego exige una cuenta de otra
+    // empresa; en la ficha se enseña literalmente como «Requiere una cuenta de
+    // terceros». La marca que nombra es decoración, y depender de reconocerla
+    // deja fuera todo lo que no esté en la lista.
+    //
+    // Comprobado contra la tienda en español el 19 de agosto de 2026:
+    //
+    // ```text
+    // Red Dead Redemption 2  → «Rockstar Games (permite la vinculación a una cuenta de Steam)»
+    // Assassin's Creed Valhalla → «Ubisoft Connect account (permite la vinculación…)»
+    // Call of Duty           → «Activision Account (permite la vinculación…)»
+    // The Sims 4             → «EA Account (permite la vinculación…)»
+    // ```
+    //
+    // De esos cuatro, la lista de marcas sólo reconocía dos. Los otros dos se
+    // clasificaban como `unknown`, y en inglés se reconocían tres: el veredicto
+    // dependía del idioma en que se hubiera preguntado, que es exactamente la
+    // clase de dato que no se puede sostener. Hay una prueba por cada uno.
+    if let Some(text) = ext_notice.as_deref()
+        && third_party.is_empty()
+    {
+        third_party.push(DrmEvidence::new(SOURCE_EXT_ACCOUNT, truncate(text)));
     }
 
     for category in signals.categories {
@@ -689,6 +717,52 @@ mod tests {
                 .matched
                 .starts_with("Este juego requiere")
         );
+    }
+
+    /// Las cuatro formas españolas reales, medidas contra la tienda.
+    ///
+    /// Con la clasificación por marcas sólo dos de estas cuatro salían
+    /// clasificadas, y en inglés salían tres: el veredicto dependía del idioma
+    /// en que se hubiera preguntado.
+    #[test]
+    fn una_cuenta_de_terceros_se_reconoce_aunque_no_conozcamos_la_marca() {
+        for aviso in [
+            "Rockstar Games (permite la vinculación a una cuenta de Steam)",
+            "Ubisoft Connect account (permite la vinculación a una cuenta de Steam)",
+            "Activision Account (permite la vinculación a una cuenta de Steam)",
+            "EA Account (permite la vinculación a una cuenta de Steam)",
+            "Cuenta de una empresa que aún no existe",
+        ] {
+            let assessment = classify(&DrmSignals {
+                ext_user_account_notice: Some(aviso),
+                store_response_complete: true,
+                ..signals(None, None, None)
+            });
+            assert_eq!(assessment.state, DrmState::ThirdPartyDrm, "{aviso}");
+            assert!(
+                assessment
+                    .evidence
+                    .iter()
+                    .any(|evidence| evidence.matched.contains(aviso)
+                        || aviso.contains(&evidence.matched)),
+                "la evidencia cita el aviso: {:?}",
+                assessment.evidence
+            );
+        }
+    }
+
+    #[test]
+    fn sin_aviso_de_cuenta_externa_la_regla_nueva_no_inventa_nada() {
+        // La regla mira que el campo **exista**, no que diga algo concreto: un
+        // campo vacío o ausente sigue significando que no hay cuenta externa.
+        for vacio in [None, Some(""), Some("   ")] {
+            let assessment = classify(&DrmSignals {
+                ext_user_account_notice: vacio,
+                store_response_complete: true,
+                ..signals(None, None, None)
+            });
+            assert_eq!(assessment.state, DrmState::DrmFree, "{vacio:?}");
+        }
     }
 
     #[test]

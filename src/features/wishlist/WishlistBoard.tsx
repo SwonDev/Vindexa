@@ -71,6 +71,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { GamePicker } from "@/features/wishlist/GamePicker";
 import { GameVideoPanel } from "@/features/wishlist/GameVideoPanel";
+import { WishlistList } from "@/features/wishlist/WishlistList";
 import {
   applyBoardMove,
   bucketMeta,
@@ -121,11 +122,20 @@ export function WishlistBoard({
   pending,
   error,
   onRetry,
+  layout = "buckets",
 }: {
   overview?: WishlistOverview | undefined;
   pending: boolean;
   error?: unknown;
   onRetry: () => void;
+  /**
+   * Cómo se enseña la lista.
+   *
+   * Las dos formas comparten este componente porque comparten todo lo demás:
+   * los precios, las mutaciones y el menú de cada juego. Duplicarlo para
+   * cambiar la disposición habría duplicado también las nueve mutaciones.
+   */
+  layout?: "buckets" | "list";
 }) {
   const queryClient = useQueryClient();
   const sensors = useSensors(
@@ -468,7 +478,10 @@ export function WishlistBoard({
         </div>
       )}
 
-      {offers.length > 0 && (
+      {/* En lista no: la propia lista abre ordenada por descuento y enseña los
+          mismos juegos. Dos listas de lo mismo, una encima de otra, era la
+          mitad de la pantalla repetida. */}
+      {layout !== "list" && offers.length > 0 && (
         <OffersStrip
           offers={offers}
           onSelect={(appId) => setSelectedAppId(appId)}
@@ -476,69 +489,120 @@ export function WishlistBoard({
         />
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        accessibility={{ announcements, screenReaderInstructions }}
-        onDragStart={({ active }) => setActiveAppId(parseWishlistDragId(active.id))}
-        onDragCancel={() => {
-          setActiveAppId(undefined);
-          setMessage({ tone: "info", text: "Movimiento cancelado; nada cambió." });
-        }}
-        onDragEnd={onDragEnd}
-      >
-        <div className="wishlist-lanes">
-          {board.map((lane) => (
-            <WishlistLane
-              key={lane.bucket}
-              lane={lane}
-              busy={busy}
-              dragging={activeAppId !== undefined}
-              selectedAppId={selected?.game.appId}
-              owned={owned}
-              priceByAppId={priceByAppId}
-              onSelect={setSelectedAppId}
-              onMoveWithin={(index, direction) =>
-                commitReorder(lane.bucket, index, index + direction)
-              }
-              onMoveTo={(appId, bucket) => commitMove(appId, bucket)}
-              onRemove={(entry) => remove.mutate(entry)}
-              onOpenStore={(entry) => abrirTienda.mutate(entry)}
-              onAdd={(appId, title) => addGame(lane.bucket, appId, title)}
-              adding={save.isPending}
-            />
-          ))}
+      {/* En lista no hay arrastre: mover de carril se hace desde el menú de cada
+          fila, que es lo que funciona cuando hay mil cuatrocientas. El tablero
+          conserva el arrastre íntegro. */}
+      {layout === "list" ? (
+        <div className="wishlist-split" data-editing={Boolean(selected)}>
+          <WishlistList
+            overview={overview}
+            prices={prices.data ?? []}
+            onSelect={setSelectedAppId}
+            {...(selected ? { selectedAppId: selected.game.appId } : {})}
+            renderRowMenu={(entry, children) => (
+              <WishlistCardContextMenu
+                entry={entry}
+                bucket={entry.bucket}
+                index={0}
+                total={0}
+                busy={busy}
+                onSelect={() => setSelectedAppId(entry.game.appId)}
+                onMoveWithin={() => undefined}
+                onMoveTo={(bucket) => commitMove(entry.game.appId, bucket)}
+                onRemove={() => remove.mutate(entry)}
+                onOpenStore={() => abrirTienda.mutate(entry)}
+              >
+                {children}
+              </WishlistCardContextMenu>
+            )}
+          />
+          {/* El editor de la entrada elegida va al lado, no debajo: apilado
+            empujaba la lista fuera de la pantalla y dejaba el sitio de mil
+            cuatrocientos juegos ocupado por un formulario. */}
+          {selected && (
+            <div className="wishlist-split__editor">
+              <WishlistEntryEditor
+                key={selected.game.appId}
+                entry={selected}
+                busy={busy}
+                onSave={(input) => save.mutate(input)}
+              />
+            </div>
+          )}
         </div>
-        <DragOverlay dropAnimation={null}>
-          {activeAppId !== undefined
-            ? (() => {
-                const entry = findEntry(board, activeAppId);
-                return entry ? (
-                  <div className="wishlist-drag-ghost" role="presentation">
-                    <span className="wishlist-drag-ghost__cover" aria-hidden="true">
-                      <Artwork
-                        appId={entry.game.appId}
-                        src={entry.game.coverUrl}
-                        title={entry.game.title}
-                        kind="cover"
-                      />
-                    </span>
-                    <strong>{entry.game.title}</strong>
-                  </div>
-                ) : null;
-              })()
-            : null}
-        </DragOverlay>
-      </DndContext>
-
-      {selected ? (
-        <WishlistEntryEditor
-          key={selected.game.appId}
-          entry={selected}
-          busy={busy}
-          onSave={(input) => save.mutate(input)}
-        />
       ) : (
+        <div className="wishlist-split" data-editing={Boolean(selected)}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            accessibility={{ announcements, screenReaderInstructions }}
+            onDragStart={({ active }) => setActiveAppId(parseWishlistDragId(active.id))}
+            onDragCancel={() => {
+              setActiveAppId(undefined);
+              setMessage({ tone: "info", text: "Movimiento cancelado; nada cambió." });
+            }}
+            onDragEnd={onDragEnd}
+          >
+            <div className="wishlist-lanes">
+              {board.map((lane) => (
+                <WishlistLane
+                  key={lane.bucket}
+                  lane={lane}
+                  busy={busy}
+                  dragging={activeAppId !== undefined}
+                  selectedAppId={selected?.game.appId}
+                  owned={owned}
+                  priceByAppId={priceByAppId}
+                  onSelect={setSelectedAppId}
+                  onMoveWithin={(index, direction) =>
+                    commitReorder(lane.bucket, index, index + direction)
+                  }
+                  onMoveTo={(appId, bucket) => commitMove(appId, bucket)}
+                  onRemove={(entry) => remove.mutate(entry)}
+                  onOpenStore={(entry) => abrirTienda.mutate(entry)}
+                  onAdd={(appId, title) => addGame(lane.bucket, appId, title)}
+                  adding={save.isPending}
+                />
+              ))}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {activeAppId !== undefined
+                ? (() => {
+                    const entry = findEntry(board, activeAppId);
+                    return entry ? (
+                      <div className="wishlist-drag-ghost" role="presentation">
+                        <span className="wishlist-drag-ghost__cover" aria-hidden="true">
+                          <Artwork
+                            appId={entry.game.appId}
+                            src={entry.game.coverUrl}
+                            title={entry.game.title}
+                            kind="cover"
+                          />
+                        </span>
+                        <strong>{entry.game.title}</strong>
+                      </div>
+                    ) : null;
+                  })()
+                : null}
+            </DragOverlay>
+          </DndContext>
+          {/* El editor va al lado, nunca debajo: apilado bajo cuatro carriles de
+            altura libre, su formulario los aplastaba hasta dejarlos en una
+            franja de cien píxeles. */}
+          {selected && (
+            <div className="wishlist-split__editor">
+              <WishlistEntryEditor
+                key={selected.game.appId}
+                entry={selected}
+                busy={busy}
+                onSave={(input) => save.mutate(input)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {entries.length === 0 && (
         <div className="wishlist-empty">
           <strong>Los deseados están vacíos</strong>
           Añade un juego a cualquiera de los cuatro carriles y podrás anotarle un precio objetivo,
@@ -661,6 +725,20 @@ function WishlistLane({
   adding: boolean;
 }) {
   const meta = bucketMeta(lane.bucket);
+  /**
+   * Cuántas tarjetas se pintan en un carril.
+   *
+   * El tablero existe para arrastrar, y arrastrar exige que cada tarjeta esté
+   * en el DOM: no se puede virtualizar sin romper el gesto. Con mil cuatrocientas
+   * en una columna, el navegador se arrastra y la columna no se acaba nunca.
+   *
+   * Así que se pintan las primeras y se **dice** cuántas quedan, con el camino a
+   * la vista que sí las enseña todas. Recortar en silencio sería peor que el
+   * problema que resuelve.
+   */
+  const LANE_LIMIT = 60;
+  const visibles = lane.items.slice(0, LANE_LIMIT);
+  const ocultas = lane.items.length - visibles.length;
   const { setNodeRef, isOver } = useDroppable({ id: wishlistBucketDropId(lane.bucket) });
   const [pickerOpen, setPickerOpen] = useState(false);
   const dropState: DropState = isOver ? "over" : dragging ? "active" : "idle";
@@ -707,11 +785,11 @@ function WishlistLane({
       >
         <div className="wishlist-lane__body" ref={setNodeRef}>
           <SortableContext
-            items={lane.items.map((entry) => wishlistDragId(entry.game.appId))}
+            items={visibles.map((entry) => wishlistDragId(entry.game.appId))}
             strategy={verticalListSortingStrategy}
           >
             {lane.items.length ? (
-              lane.items.map((entry, index) => (
+              visibles.map((entry, index) => (
                 <WishlistCard
                   key={entry.game.appId}
                   entry={entry}
@@ -731,6 +809,14 @@ function WishlistLane({
               ))
             ) : (
               <p className="wishlist-lane__empty">{meta.empty}</p>
+            )}
+            {ocultas > 0 && (
+              /* Lo que no se pinta se dice. Un recorte callado se lee como
+                 «esto es todo lo que hay». */
+              <p className="wishlist-lane__truncated" role="status">
+                {`Se enseñan ${visibles.length} de ${lane.items.length.toLocaleString("es-ES")}.`}
+                <span>Cambia a la vista Lista para verlos todos.</span>
+              </p>
             )}
           </SortableContext>
         </div>
@@ -927,13 +1013,12 @@ function WishlistCard({
                     ))}
                   </span>
                 )}
-                {target ? (
+                {/* Sin objetivo no se escribe «Sin precio objetivo»: en una
+                    lista de mil cuatrocientos, esa frase se repite mil
+                    cuatrocientas veces sin decir nada que no diga su ausencia. */}
+                {target && (
                   <span className="wishlist-card__price">
                     <IconCoin aria-hidden="true" /> {target}
-                  </span>
-                ) : (
-                  <span className="wishlist-card__price" data-missing="true">
-                    Sin precio objetivo
                   </span>
                 )}
                 {entry.note && (
@@ -962,11 +1047,19 @@ function WishlistCard({
                   </>
                 ) : (
                   <b className="wishlist-card__observed-amount" data-missing="true">
-                    Precio desconocido
+                    sin precio
                   </b>
                 )}
-                <span className="wishlist-card__observed-when">{price.observed}</span>
-                <span className="wishlist-card__observed-verdict">{price.verdict}</span>
+                {/* Cuándo se miró y qué significa sólo se dicen cuando hay algo
+                    que decir. Con la lista sin consultar, «Sin consultar» +
+                    «Sin precio objetivo ni precio consultado» eran dos líneas
+                    afirmando lo mismo bajo una tercera que ya lo decía. */}
+                {price.amount && (
+                  <>
+                    <span className="wishlist-card__observed-when">{price.observed}</span>
+                    <span className="wishlist-card__observed-verdict">{price.verdict}</span>
+                  </>
+                )}
                 {price.lowest && (
                   <span className="wishlist-card__observed-low">
                     Mínimo visto por Vindexa: {price.lowest}

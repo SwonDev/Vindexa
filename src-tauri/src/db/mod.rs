@@ -3,6 +3,7 @@ mod catalog;
 pub mod curated;
 pub mod discovery;
 pub mod dlc;
+pub mod epic_free;
 pub mod family_catalog;
 mod library;
 pub mod library_dnd;
@@ -11,6 +12,7 @@ pub(crate) mod migrations;
 pub mod notifications;
 pub mod organization;
 pub mod personal;
+pub mod preview;
 pub mod pricing;
 pub mod priority;
 pub mod recovery;
@@ -975,6 +977,65 @@ impl Database {
         now: DateTime<Utc>,
     ) -> AppResult<Vec<WishlistPriceStatus>> {
         pricing::wishlist_price_statuses(&self.open()?, now)
+    }
+
+    /// Guarda sólo el veredicto de DRM de un juego.
+    ///
+    /// Lo usa la pasada ligera: el resto de la ficha ya está y no se toca.
+    /// `drm_checked_at` queda sellado aunque el veredicto siga siendo
+    /// desconocido, para no volver a preguntar por lo mismo mañana.
+    pub fn save_drm_assessment(
+        &self,
+        app_id: u32,
+        assessment: &rich_metadata::DrmAssessment,
+    ) -> AppResult<()> {
+        let mut connection = self.open()?;
+        rich_metadata::save(
+            &mut connection,
+            app_id,
+            &RichMetadataUpdate {
+                drm: Some(assessment.clone()),
+                ..RichMetadataUpdate::default()
+            },
+        )
+    }
+
+    /// Capturas guardadas de un juego, sin salir a la red.
+    pub fn stored_preview(&self, app_id: u32) -> AppResult<preview::GamePreview> {
+        preview::stored(&self.open()?, app_id)
+    }
+
+    /// Guarda las capturas que la tienda ha dado, incluida su ausencia.
+    pub fn save_preview(
+        &self,
+        app_id: u32,
+        thumbnails: &[String],
+        now: DateTime<Utc>,
+    ) -> AppResult<preview::GamePreview> {
+        let mut connection = self.open()?;
+        preview::save(&mut connection, app_id, thumbnails, now)
+    }
+
+    // --- Regalos de Epic ---------------------------------------------------
+
+    /// Guarda una tanda de regalos y deja aviso de lo que sea noticia.
+    pub fn sync_epic_free_offers(
+        &self,
+        games: &[crate::stores::epic_free::EpicFreeGame],
+        now: DateTime<Utc>,
+    ) -> AppResult<epic_free::EpicFreeSyncReport> {
+        let mut connection = self.open()?;
+        epic_free::sync(&mut connection, games, now)
+    }
+
+    /// Lo guardado, cruzado con la biblioteca.
+    pub fn epic_free_offers(&self, now: DateTime<Utc>) -> AppResult<Vec<epic_free::EpicFreeOffer>> {
+        epic_free::list(&self.open()?, now)
+    }
+
+    /// Descarta un regalo para que deje de aparecer.
+    pub fn dismiss_epic_free_offer(&self, offer_id: &str, now: DateTime<Utc>) -> AppResult<()> {
+        epic_free::dismiss(&self.open()?, offer_id, now)
     }
 
     pub fn stale_wishlist_price_targets(

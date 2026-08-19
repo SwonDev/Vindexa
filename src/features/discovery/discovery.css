@@ -1444,3 +1444,122 @@
     background: color-mix(in srgb, var(--v-surface-raised) 55%, transparent);
   }
 }
+
+/* --- Regalos de Epic ------------------------------------------------------
+   Va arriba del carril porque es lo único que caduca: un lanzamiento previsto
+   sigue ahí mañana, un regalo de Epic no. Comparte la caja de `signal-block`
+   —mismo borde, mismo fondo, misma cabecera— para no introducir una tarjeta
+   distinta en una columna que ya tiene seis. */
+.epic-free {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.epic-free__head {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.epic-free__head > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--v-lime);
+}
+
+.epic-free__head h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epic-free__count {
+  color: var(--v-lime);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.epic-free__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.epic-free__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.epic-free__item:last-child {
+  border-bottom: 0;
+}
+
+/* Lo anunciado se lee, pero no compite con lo que ya se puede reclamar. */
+.epic-free__item[data-state="upcoming"] {
+  opacity: 0.62;
+}
+
+.epic-free__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.epic-free__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epic-free__meta {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+/* El precio de fuera de la promoción va tachado: es lo que **no** se paga. */
+.epic-free__was {
+  color: var(--v-muted);
+  text-decoration: line-through;
+}
+
+.epic-free__owned {
+  color: var(--v-muted);
+}
+
+.epic-free__note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--v-subtle);
+  font-size: 11px;
+}

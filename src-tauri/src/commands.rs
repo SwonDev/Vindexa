@@ -58,7 +58,6 @@ static PRICE_REFRESH_LOCK: Mutex<()> = Mutex::const_new(());
 /// Mismo ritmo que el enriquecimiento de fichas. `appdetails` no documenta
 /// su límite de peticiones, así que se reutiliza el intervalo que Vindexa ya
 /// considera prudente en lugar de inventar uno nuevo.
-const PRICE_REQUEST_INTERVAL: Duration = Duration::from_millis(750);
 /// Días que se conserva un aviso ya descartado.
 ///
 /// Tres meses: lo bastante para que alguien pueda revisar qué pasó el trimestre
@@ -1255,60 +1254,90 @@ pub async fn refresh_wishlist_prices(
     state: State<'_, AppState>,
     limit: Option<u32>,
 ) -> AppResult<PriceRefreshReport> {
+    // El cerrojo evita que el botón y la tanda automática se pisen: dos
+    // barridos a la vez sólo consiguen que la tienda corte a los dos.
     let _guard = PRICE_REFRESH_LOCK.lock().await;
+    let database = state.database.clone();
     let requested = limit.unwrap_or(0);
-    let now = Utc::now();
-    let candidates = database_read(&state, move |database| {
-        database.stale_wishlist_price_targets(now, requested)
-    })
-    .await?;
+    steam::prices::refresh(&database, requested).await
+}
 
-    let mut report = PriceRefreshReport::default();
-    for (indice, lote) in candidates
-        .chunks(steam::store_api::MAX_PRICE_BATCH)
-        .enumerate()
-    {
-        if indice > 0 {
-            sleep(PRICE_REQUEST_INTERVAL).await;
-        }
-        match steam::store_api::fetch_prices(lote).await {
-            Ok(precios) => {
-                // Los tres desenlaces del lote se cuentan por separado: un
-                // precio desconocido no es un precio de cero, y un AppID que la
-                // tienda no reconoce tampoco es un juego gratuito.
-                report.without_price = report
-                    .without_price
-                    .saturating_add(precios.without_price.len() as u32)
-                    .saturating_add(precios.unavailable.len() as u32);
-                for observation in precios.prices {
-                    let observed_at = Utc::now();
-                    let recorded = database_read(&state, move |database| {
-                        database.record_price_observation(&observation, observed_at)
-                    })
-                    .await?;
-                    report.observed = report.observed.saturating_add(1);
-                    if recorded.changed {
-                        report.changed = report.changed.saturating_add(1);
-                    }
-                    if recorded.alert.is_some_and(|alert| alert.created) {
-                        report.alerts = report.alerts.saturating_add(1);
-                    }
-                }
-            }
-            Err(failure) => {
-                // Falla el lote entero, así que suman todos sus juegos: decir
-                // que ha fallado uno cuando han quedado cien sin consultar
-                // sería mentir sobre el alcance del problema.
-                report.failed = report.failed.saturating_add(lote.len() as u32);
-                // Steam ha pedido esperar: se espera. Insistir sólo empeora el
-                // límite para el resto de los lotes.
-                if let Some(delay) = failure.retry_after {
-                    sleep(delay).await;
-                }
-            }
+// --- Vista rápida -------------------------------------------------------------
+
+/// Las capturas que enseña el emergente al pasar el ratón por encima.
+///
+/// Lee lo guardado y, sólo si nunca se preguntó, le pide a la tienda las
+/// miniaturas: la respuesta filtrada pesa menos de un kilobyte. Un juego sin
+/// capturas queda marcado como preguntado para no repetir la consulta en cada
+/// pasada del ratón.
+#[tauri::command]
+pub async fn game_preview(
+    state: State<'_, AppState>,
+    app_id: u32,
+) -> AppResult<crate::db::preview::GamePreview> {
+    let database = state.database.clone();
+    let guardado = {
+        let database = database.clone();
+        blocking(move || database.stored_preview(app_id)).await?
+    };
+    if guardado.checked {
+        return Ok(guardado);
+    }
+    // Un fallo de red no vacía la vista: se devuelve lo que hubiera, sin marcar
+    // el juego como preguntado, para volver a intentarlo más tarde.
+    let Ok(capturas) = steam::store_api::fetch_screenshots(app_id).await else {
+        return Ok(guardado);
+    };
+    let now = Utc::now();
+    blocking(move || database.save_preview(app_id, &capturas, now)).await
+}
+
+// --- Regalos de Epic ----------------------------------------------------------
+
+/// Los juegos que Epic regala esta semana, con lo que Vindexa sabe de tu
+/// biblioteca encima.
+///
+/// `refresh` decide si además se le pregunta a Epic. Sin él sólo se devuelve lo
+/// guardado, que es lo que quiere la pantalla al abrirse: enseñar algo al
+/// instante y no esperar a una petición de red.
+#[tauri::command]
+pub async fn epic_free_games(
+    state: State<'_, AppState>,
+    refresh: Option<bool>,
+) -> AppResult<Vec<crate::db::epic_free::EpicFreeOffer>> {
+    let database = state.database.clone();
+    if refresh.unwrap_or(false) {
+        // Un fallo de red no deja la pantalla en blanco: se enseña lo último
+        // que se supo y el fallo se cuenta aparte.
+        if let Ok(juegos) = stores::epic_free::fetch("ES", "es-ES").await {
+            let now = Utc::now();
+            let database = database.clone();
+            blocking(move || database.sync_epic_free_offers(&juegos, now)).await?;
         }
     }
-    Ok(report)
+    let now = Utc::now();
+    blocking(move || database.epic_free_offers(now)).await
+}
+
+/// Descarta un regalo para que deje de aparecer y de avisar.
+#[tauri::command]
+pub async fn dismiss_epic_free_game(
+    state: State<'_, AppState>,
+    offer_id: String,
+) -> AppResult<()> {
+    let database = state.database.clone();
+    let now = Utc::now();
+    blocking(move || database.dismiss_epic_free_offer(&offer_id, now)).await
+}
+
+/// Lleva a la ficha del regalo en el navegador integrado de Epic.
+///
+/// Vindexa **no** reclama el juego por ti: hacerlo exigiría conducir tu sesión
+/// por un flujo de compra. Lo que hace es dejarte en la página exacta, donde ya
+/// estás identificado, a un clic de «Obtener».
+#[tauri::command]
+pub async fn open_epic_free_game(app: AppHandle, url: String) -> AppResult<()> {
+    store_window::open_store_url(&app, "epic", &url).await
 }
 
 // --- Archivado de biblioteca --------------------------------------------------

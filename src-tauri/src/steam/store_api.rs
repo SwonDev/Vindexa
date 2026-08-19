@@ -1,6 +1,7 @@
 use crate::db::StoreMetadataUpdate;
 use crate::db::pricing::{self, PriceObservation};
 use crate::db::rich_metadata::{
+    DrmAssessment,
     DescriptionBlock, GameMediaItem, GameMediaKind, MAX_BLOCK_CHARS, MAX_DESCRIPTION_BLOCKS,
     MAX_LANGUAGES_CHARS, MAX_LIST_ITEMS, MAX_MEDIA_ITEMS, MAX_NOTICE_CHARS, MAX_STRUCTURED_CHARS,
     MAX_URL_CHARS, RichMetadataUpdate, StructuredDescription,
@@ -451,6 +452,163 @@ pub struct PriceBatch {
 ///
 /// El lote se pide con `filters=price_overview`, así que la respuesta trae sólo
 /// el bloque de precio y no la ficha entera. Un AppID repetido se pide una vez.
+/// Sólo las miniaturas de las capturas de un juego.
+///
+/// Es lo que alimenta la vista rápida al pasar el ratón. La respuesta filtrada
+/// por `screenshots` es minúscula —medido sobre Hollow Knight: Silksong, 588
+/// bytes para diez capturas—, así que se puede pedir al vuelo la primera vez
+/// que alguien se detiene sobre un juego.
+///
+/// `Ok(vec![])` significa que la tienda contestó y ese juego no publica
+/// capturas. Es un dato, no un fallo: quien llama lo guarda para no volver a
+/// preguntar.
+pub async fn fetch_screenshots(app_id: u32) -> Result<Vec<String>, StoreMetadataFailure> {
+    if app_id == 0 {
+        return Err(AppError::validation("El AppID de Steam no es válido.").into());
+    }
+    let bytes = descargar(
+        store_client().map_err(StoreMetadataFailure::from)?,
+        STORE_DETAILS_ENDPOINT,
+        &[
+            ("appids", app_id.to_string()),
+            ("filters", "screenshots".to_string()),
+            ("cc", STORE_COUNTRY.to_string()),
+            ("l", "spanish".to_string()),
+        ],
+    )
+    .await?;
+    parse_screenshots(app_id, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Analiza la respuesta de capturas. Separado de la red para poder comprobarlo.
+pub fn parse_screenshots(app_id: u32, bytes: &[u8]) -> AppResult<Vec<String>> {
+    let raiz: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_store_invalid_json",
+            "La tienda devolvió una respuesta que no se puede leer.",
+        )
+    })?;
+    let Some(entrada) = raiz.get(app_id.to_string()) else {
+        return Ok(Vec::new());
+    };
+    if entrada.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Ok(Vec::new());
+    }
+    let Some(capturas) = entrada
+        .pointer("/data/screenshots")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Ok(Vec::new());
+    };
+    Ok(capturas
+        .iter()
+        .filter_map(|captura| {
+            captura
+                .get("path_thumbnail")
+                .and_then(serde_json::Value::as_str)
+        })
+        // Sólo `https`: la miniatura se pinta dentro de la ventana de la
+        // aplicación y una imagen por texto plano es tráfico observable.
+        .filter(|url| url.starts_with("https://"))
+        .map(str::to_string)
+        .collect())
+}
+
+/// Sólo los avisos de DRM y las categorías de un juego.
+///
+/// Sirve para completar el veredicto de DRM de una biblioteca ya enriquecida
+/// sin volver a bajar capturas, vídeos y valoraciones que ya se tienen: medido
+/// sobre Red Dead Redemption 2, la respuesta pasa de 17.118 a 8.402 bytes.
+///
+/// Va de uno en uno a propósito. Comprobado contra la tienda el 19 de agosto de
+/// 2026: con cualquier filtro que no sea `price_overview`, pedir dos AppID
+/// devuelve `null` en vez de dos fichas.
+///
+/// Devuelve `Ok(None)` cuando la tienda contesta que no conoce el juego —
+/// retirado, regional, o nunca publicado—: no es un fallo y no debe reintentarse
+/// como si lo fuera.
+pub async fn fetch_drm_signals(
+    app_id: u32,
+) -> Result<Option<DrmAssessment>, StoreMetadataFailure> {
+    if app_id == 0 {
+        return Err(AppError::validation("El AppID de Steam no es válido.").into());
+    }
+    let bytes = descargar(
+        store_client().map_err(StoreMetadataFailure::from)?,
+        STORE_DETAILS_ENDPOINT,
+        &[
+            ("appids", app_id.to_string()),
+            // Comprobado contra la tienda: `drm_notice` no es una sección
+            // válida —pedirla sola devuelve `data: []`—; los tres avisos viajan
+            // dentro de `basic`. Con `basic,categories` la respuesta de Red Dead
+            // Redemption 2 baja de 17.118 a 8.402 bytes: se quedan fuera
+            // capturas, vídeos, valoraciones y paquetes, que es lo que pesa.
+            ("filters", "basic,categories".to_string()),
+            ("cc", STORE_COUNTRY.to_string()),
+            ("l", "spanish".to_string()),
+        ],
+    )
+    .await?;
+    parse_drm_signals(app_id, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Analiza la respuesta filtrada y la convierte en un veredicto.
+///
+/// Separado de la red para poder comprobarlo con respuestas guardadas, que es
+/// donde está el riesgo: el formato de la tienda cambia solo.
+pub fn parse_drm_signals(app_id: u32, bytes: &[u8]) -> AppResult<Option<DrmAssessment>> {
+    let raiz: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_store_invalid_json",
+            "La tienda devolvió una respuesta que no se puede leer.",
+        )
+    })?;
+    let entrada = raiz.get(app_id.to_string());
+    let Some(entrada) = entrada else {
+        return Ok(None);
+    };
+    if entrada.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Ok(None);
+    }
+    // Una ficha retirada devuelve `data: []` en vez de un objeto.
+    let Some(data) = entrada.get("data").and_then(serde_json::Value::as_object) else {
+        return Ok(None);
+    };
+
+    let aviso = |clave: &str| -> Option<String> {
+        data.get(clave)
+            .and_then(serde_json::Value::as_str)
+            .map(|value| sanitize_bounded_text(value, MAX_NOTICE_CHARS))
+            .filter(|value| !value.is_empty())
+    };
+    let drm_notice = aviso("drm_notice");
+    let ext_user_account_notice = aviso("ext_user_account_notice");
+    let legal_notice = aviso("legal_notice");
+    let categories = data
+        .get("categories")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("description").and_then(serde_json::Value::as_str))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(Some(drm::classify(&DrmSignals {
+        drm_notice: drm_notice.as_deref(),
+        ext_user_account_notice: ext_user_account_notice.as_deref(),
+        legal_notice: legal_notice.as_deref(),
+        categories: &categories,
+        // La gratuidad no entra en la decisión —hay una prueba que lo
+        // demuestra— y esta pasada no pide ese bloque, así que se manda el
+        // valor neutro en vez de inventarlo.
+        is_free: false,
+        store_response_complete: true,
+    })))
+}
+
 pub async fn fetch_prices(app_ids: &[u32]) -> Result<PriceBatch, StoreMetadataFailure> {
     let mut pedidos: Vec<u32> = Vec::with_capacity(app_ids.len().min(MAX_PRICE_BATCH));
     let mut vistos = HashSet::new();

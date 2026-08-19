@@ -208,6 +208,16 @@ pub struct PriceRefreshReport {
     pub failed: u32,
 }
 
+impl PriceRefreshReport {
+    /// Juegos sobre los que se supo algo: con precio, o con la certeza de que
+    /// no lo tienen. Lo fallado queda fuera a propósito, porque de eso no se
+    /// sabe nada y contarlo como resuelto sería exactamente la mentira que
+    /// llevó a enseñar «5 de 1.410».
+    pub fn resolved(&self) -> u32 {
+        self.observed.saturating_add(self.without_price)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Vigencia
 // ---------------------------------------------------------------------------
@@ -569,18 +579,35 @@ fn format_amount(cents: i64, currency: &str) -> String {
     format!("{},{:02} {currency}", cents / 100, cents % 100)
 }
 
+/// ¿Vindexa conoce este juego, sea porque se posee o porque se desea?
+///
+/// Un precio es interesante justo cuando el juego **no** se tiene, así que atar
+/// la comprobación a `games` dejaba fuera a casi todos los deseados: los
+/// importados de Steam viven en `catalog_games` mientras no se compren. Con la
+/// comprobación estrecha, el primero de ellos abortaba el refresco entero y la
+/// pantalla quedaba con cinco precios de mil cuatrocientos.
+///
+/// Se comprueba igualmente algo: guardar el precio de un AppID que no está en
+/// ninguna de las dos listas dejaría filas que nadie enseña ni limpia.
 fn ensure_game_exists(connection: &Connection, app_id: u32) -> AppResult<()> {
     if app_id == 0 {
         return Err(AppError::validation("El juego indicado no es válido."));
     }
     connection
         .query_row(
-            "SELECT 1 FROM games WHERE app_id = ?1",
+            "SELECT 1 FROM games WHERE app_id = ?1
+              UNION ALL
+             SELECT 1 FROM catalog_games WHERE app_id = ?1
+             LIMIT 1",
             [app_id],
             |_| Ok(()),
         )
         .optional()?
-        .ok_or_else(|| AppError::not_found(format!("El juego {app_id} no está en la biblioteca.")))
+        .ok_or_else(|| {
+            AppError::not_found(format!(
+                "El juego {app_id} no está ni en la biblioteca ni en deseados."
+            ))
+        })
 }
 
 /// Borra todo lo observado de un juego. Sirve para cuando la persona quita el
@@ -838,6 +865,26 @@ mod tests {
             .expect("insertar deseado");
     }
 
+    /// Un deseado que **no** está en la biblioteca: vive en el catálogo.
+    ///
+    /// Son la inmensa mayoría —quien importa su lista de Steam trae cientos de
+    /// juegos que no tiene—, así que si el precio sólo se puede guardar para lo
+    /// que ya se posee, no se guarda para casi nada.
+    fn catalog_wish(connection: &Connection, app_id: u32, title: &str) {
+        connection
+            .execute(
+                "INSERT INTO catalog_games(app_id, title) VALUES (?1, ?2)",
+                params![app_id, title],
+            )
+            .expect("insertar juego de catálogo");
+        connection
+            .execute(
+                "INSERT INTO catalog_wishlist_entries(app_id, bucket) VALUES (?1, 'considering')",
+                [app_id],
+            )
+            .expect("insertar deseado de catálogo");
+    }
+
     fn at(day: u32, hour: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 3, day, hour, 0, 0)
             .single()
@@ -865,6 +912,44 @@ mod tests {
             .expect("consultar")
             .collect::<Result<Vec<_>, _>>()
             .expect("recoger")
+    }
+
+    // --- Deseados que no están en la biblioteca -----------------------------
+
+    #[test]
+    fn un_deseado_del_catalogo_guarda_su_precio_igual_que_uno_de_la_biblioteca() {
+        // El fallo: `record_observation` exigía que el juego estuviera en
+        // `games`. Como los deseados importados de Steam viven en
+        // `catalog_games`, el primero de ellos devolvía «no está en la
+        // biblioteca» y se llevaba por delante el refresco entero. Medido en la
+        // instalación real: 5 precios de 1.410 deseados.
+        let mut connection = database();
+        catalog_wish(&connection, 4242, "Deseado no poseído");
+
+        let recorded = record_observation(&mut connection, &observation(4242, "EUR", 1999), at(1, 9))
+            .expect("guardar el precio de un deseado del catálogo");
+        assert_eq!(recorded.price.final_cents, 1999);
+
+        let statuses = wishlist_price_statuses(&connection, at(1, 10)).expect("estados");
+        let suyo = statuses
+            .iter()
+            .find(|status| status.app_id == 4242)
+            .expect("el deseado del catálogo aparece en el listado");
+        assert_eq!(
+            suyo.price.as_ref().map(|price| price.final_cents),
+            Some(1999)
+        );
+    }
+
+    #[test]
+    fn un_appid_que_no_es_ni_biblioteca_ni_deseado_se_sigue_rechazando() {
+        // La comprobación se amplía, no se quita: guardar el precio de algo que
+        // no está en ninguna de las dos listas dejaría filas huérfanas que nada
+        // enseña ni limpia.
+        let mut connection = database();
+        let error = record_observation(&mut connection, &observation(9999, "EUR", 1999), at(1, 9))
+            .expect_err("rechazar un AppID desconocido");
+        assert_eq!(error.code, "not_found");
     }
 
     // --- Sin precio conocido ------------------------------------------------
@@ -1210,10 +1295,17 @@ mod tests {
     }
 
     #[test]
-    fn un_juego_que_no_esta_en_la_biblioteca_no_admite_precio() {
+    fn un_juego_que_vindexa_no_conoce_no_admite_precio() {
+        // Ni en la biblioteca ni en deseados: guardar su precio dejaría una
+        // fila que ninguna pantalla enseña y ninguna limpieza recoge.
         let mut connection = database();
         let error = record_observation(&mut connection, &observation(999, "EUR", 999), at(1, 12))
             .expect_err("debe rechazar");
-        assert!(error.to_string().contains("no está en la biblioteca"));
+        assert!(
+            error
+                .to_string()
+                .contains("ni en la biblioteca ni en deseados"),
+            "{error}"
+        );
     }
 }

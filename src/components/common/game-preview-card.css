@@ -1,0 +1,151 @@
+/* La vista rápida al pasar el ratón por encima de un juego.
+   Vive en su propio archivo porque el componente se monta en cinco pantallas y
+   ninguna de ellas es su dueña. Se importa desde el componente, que a su vez se
+   carga con la primera pantalla: no hay pintada sin estilo. */
+
+.game-preview {
+  z-index: 60;
+  overflow: hidden;
+  width: 300px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--v-surface-raised);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+/* Entra desde el lado por el que se abre, poco y rápido: es una ayuda para
+   mirar, y una animación larga la convierte en un obstáculo. */
+.game-preview[data-state="open"] {
+  animation: game-preview-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes game-preview-in {
+  from {
+    transform: translateX(-4px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-preview[data-state="open"] {
+    animation: none;
+  }
+}
+
+/* Escenario de las capturas: relación 16/9 fija para que el emergente no salte
+   de alto al cambiar de imagen. */
+.game-preview__stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--v-surface-sunken);
+}
+
+.game-preview__shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.game-preview__shot[data-active="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-preview__shot {
+    transition: none;
+  }
+}
+
+/* Mientras no hay captura se enseña la carátula que ya estaba en pantalla: el
+   emergente nunca aparece vacío. */
+.game-preview__fallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 10px;
+}
+
+.game-preview__fallback img,
+.game-preview__fallback [role="img"] {
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.game-preview__dots {
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  left: 0;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.game-preview__dots span {
+  width: 12px;
+  height: 2px;
+  background: color-mix(in srgb, var(--foreground) 30%, transparent);
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.game-preview__dots span[data-active="true"] {
+  background: var(--foreground);
+}
+
+.game-preview__body {
+  display: grid;
+  gap: 6px;
+  padding: 9px 11px 11px;
+}
+
+.game-preview__title {
+  margin: 0;
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.game-preview__headline {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+/* Los datos van en dos columnas y en versalitas: son etiquetas, no frases. */
+.game-preview__facts {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.game-preview__facts > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.game-preview__facts dt {
+  color: var(--v-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.game-preview__facts dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--v-subtle);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

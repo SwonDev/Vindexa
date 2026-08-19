@@ -93,14 +93,20 @@
   font-size: 10px;
 }
 
+/* El área de trabajo no crece: lo que se desplaza es cada carril por dentro.
+   Con un carril de mil cuatrocientas tarjetas, dejar crecer esto arrastraba la
+   página entera y la cabecera se iba de la pantalla. */
 .wishlist-workspace {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   padding: 12px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .wishlist-board {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
@@ -117,6 +123,7 @@
 
 .wishlist-empty {
   display: grid;
+  flex: 0 0 auto;
   gap: 6px;
   justify-items: start;
   padding: 16px;
@@ -136,9 +143,13 @@
 
 .wishlist-lanes {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  align-items: start;
+  /* `stretch`, no `start`: los cuatro carriles miden lo mismo y lo que sobra se
+     desplaza dentro de cada uno. */
+  align-items: stretch;
+  min-height: 0;
 }
 
 @media (max-width: 1180px) {
@@ -157,6 +168,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   border: 1px solid var(--border);
   background: var(--card);
 }
@@ -208,10 +220,13 @@
 
 .wishlist-lane__body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 4px;
   min-height: 92px;
   padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .wishlist-lane__empty {
@@ -449,6 +464,10 @@
 
 /* --- Editor de la entrada ------------------------------------------------ */
 
+/* El editor de la entrada elegida ocupa su hueco, no el de los carriles.
+   Al fijar la altura de los carriles se salía por encima y se superponía al
+   tablero: `flex: 0 0 auto` con tope propio le da sitio acotado y desplazable
+   sin robárselo a la lista. */
 .wishlist-editor {
   display: flex;
   flex-direction: column;
@@ -1600,4 +1619,262 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* --- Deseados en lista ----------------------------------------------------
+   El tablero por intención funciona con veinte juegos; con mil cuatrocientos
+   deja tres carriles vacíos y uno sin fondo. Aquí cada juego es una fila, sólo
+   se pintan las que caben en pantalla, y las columnas están alineadas para que
+   el descuento y el precio se lean en vertical sin buscarlos. */
+.wishlist-list {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.wishlist-list__toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.wishlist-list__search {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wishlist-list__search > svg {
+  position: absolute;
+  left: 8px;
+  color: var(--v-muted);
+  pointer-events: none;
+}
+
+.wishlist-list__search input {
+  padding-left: 26px;
+}
+
+.wishlist-list__sort {
+  width: 190px;
+}
+
+.wishlist-list__count {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--v-subtle);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.wishlist-list__deals {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--v-lime);
+}
+
+.wishlist-list__scroller {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.wishlist-list__canvas {
+  position: relative;
+  width: 100%;
+}
+
+/* Una fila: descuento, carátula, título, precio y precio anterior. Las cuatro
+   columnas de ancho fijo hacen que las cifras queden alineadas entre filas, que
+   es lo que permite recorrer la lista con la vista en vez de leerla. */
+.wishlist-list__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Flujo, no rejilla: una fila puede llevar o no la marca de «ya lo tienes» y
+     el precio anterior, y con una rejilla de columnas fijas el elemento
+     sobrante caía a una segunda línea que se salía del alto y se solapaba con
+     la fila de al lado. Las cifras se alinean con el ancho mínimo de su celda,
+     no con el número de elementos. */
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.wishlist-list__row:hover,
+.wishlist-list__row:focus-visible {
+  background: color-mix(in srgb, var(--v-surface-raised) 70%, transparent);
+  outline: none;
+}
+
+.wishlist-list__row[data-selected="true"] {
+  background: color-mix(in srgb, var(--v-cyan) 14%, transparent);
+}
+
+/* El descuento es lo primero que se mira en una lista de ofertas, así que ocupa
+   la primera columna aunque la mayoría de filas la dejen vacía: alinear vale
+   más que ahorrar cincuenta píxeles. */
+.wishlist-list__discount {
+  display: inline-flex;
+  flex: 0 0 52px;
+  justify-content: center;
+  padding: 1px 0;
+  border: 1px solid var(--v-lime);
+  color: var(--v-lime);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.wishlist-list__discount[data-empty="true"] {
+  border-color: transparent;
+}
+
+.wishlist-list__cover {
+  display: block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  height: 24px;
+  border-radius: 1px;
+}
+
+.wishlist-list__cover img,
+.wishlist-list__cover [role="img"] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wishlist-list__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Los importes ocupan siempre lo mismo para que se lean en columna al recorrer
+   la lista con la vista. */
+.wishlist-list__prices {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: flex-end;
+  min-width: 128px;
+}
+
+.wishlist-list__owned {
+  flex: 0 0 auto;
+  color: var(--v-muted);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.wishlist-list__amount {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* Lo que no se sabe se dice una vez y en gris, no en cuatro líneas. */
+.wishlist-list__amount[data-unknown="true"] {
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.wishlist-list__before {
+  color: var(--v-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.wishlist-list__row[data-meets-target="true"] .wishlist-list__amount {
+  color: var(--v-lime);
+}
+
+.wishlist-list__empty {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--v-subtle);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Lo que el carril no pinta, dicho donde acaba la lista. */
+.wishlist-lane__truncated {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 8px 9px;
+  border: 1px dashed var(--border);
+  color: var(--v-subtle);
+  font-size: 11px;
+  text-align: center;
+}
+
+.wishlist-lane__truncated span {
+  color: var(--v-muted);
+  font-size: 10px;
+}
+
+/* Lista y editor, uno al lado del otro.
+   Apilados, el formulario de la entrada elegida empujaba mil cuatrocientas
+   filas fuera de la pantalla y dejaba la lista sin sitio. */
+.wishlist-split {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+/* `DndContext` no pinta ningún nodo: dentro del split, el hijo real es la
+   rejilla de carriles, que ya trae su propia altura y su propio desplazamiento
+   por carril. */
+
+.wishlist-split[data-editing="true"] {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+
+@media (max-width: 1100px) {
+  .wishlist-split[data-editing="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+}
+
+.wishlist-split__editor {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* La lista llena la columna: sin altura propia, el virtualizador no tiene dónde
+   medir y no pinta ni una fila. */
+.wishlist-list {
+  min-height: 0;
 }

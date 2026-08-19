@@ -1,4 +1,10 @@
-import { IconBrandSteam, IconBrowser, IconHeartPlus, IconListDetails } from "@tabler/icons-react";
+import {
+  IconBrandSteam,
+  IconBrowser,
+  IconHeartPlus,
+  IconListDetails,
+  IconListNumbers,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -16,7 +22,7 @@ import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppBootstrap, SteamWishlistImportResult, WishlistImportReport } from "@/lib/types";
 import "@/features/wishlist/wishlist.css";
 
-type WishlistView = "buckets" | "curated";
+type WishlistView = "list" | "buckets" | "curated";
 
 /**
  * Aviso de la pantalla.
@@ -32,6 +38,9 @@ interface WishlistNotice {
 }
 
 const VIEW_OPTIONS = [
+  /* La lista va primero: con una importación de Steam encima, el tablero por
+     intención deja tres carriles vacíos y uno con mil cuatrocientos. */
+  { value: "list" as const, label: "Lista", icon: <IconListNumbers aria-hidden="true" /> },
   { value: "buckets" as const, label: "Por intención", icon: <IconHeartPlus aria-hidden="true" /> },
   {
     value: "curated" as const,
@@ -106,7 +115,15 @@ function browserImportSummary(result: BrowserWishlistImportResult): string {
  * mismo y la persona salta de una a otra mientras decide.
  */
 export function WishlistScreen({ loading }: { bootstrap?: AppBootstrap; loading?: boolean }) {
-  const [view, setView] = useState<WishlistView>("buckets");
+  /**
+   * La vista elegida a mano, si se ha elegido.
+   *
+   * Sin elección, la decide el tamaño: el tablero por intención se lee de un
+   * vistazo con veinte juegos y se vuelve inservible con mil cuatrocientos —tres
+   * carriles vacíos y uno sin fondo—. Elegir por quien mira, y dejarle cambiar,
+   * es mejor que obligar a cambiar cada vez.
+   */
+  const [viewOverride, setViewOverride] = useState<WishlistView>();
   const [notice, setNotice] = useState<WishlistNotice>();
   const queryClient = useQueryClient();
 
@@ -147,6 +164,15 @@ export function WishlistScreen({ loading }: { bootstrap?: AppBootstrap; loading?
   const importing = importFromSteam.isPending || importFromBrowser.isPending;
 
   const summary = useMemo(() => summarizeTargets(overview.data), [overview.data]);
+  /**
+   * A partir de aquí el tablero deja de servir.
+   *
+   * Sesenta juegos son unas quince tarjetas por carril: todavía se recorre. Con
+   * ciento cincuenta ya no, y una importación de Steam trae mil cuatrocientos.
+   */
+  const LISTA_DESDE = 60;
+  const view: WishlistView =
+    viewOverride ?? ((overview.data?.total ?? 0) > LISTA_DESDE ? "list" : "buckets");
   /*
    * La aritmética completa —por qué la cifra es un suelo y qué aporta cada
    * moneda— deja de ocupar dos párrafos del encabezado y pasa al `title` de la
@@ -216,7 +242,7 @@ export function WishlistScreen({ loading }: { bootstrap?: AppBootstrap; loading?
               label="Vista de deseados"
               options={VIEW_OPTIONS}
               value={view}
-              onValueChange={setView}
+              onValueChange={setViewOverride}
             />
           </>
         }
@@ -244,15 +270,16 @@ export function WishlistScreen({ loading }: { bootstrap?: AppBootstrap; loading?
       )}
 
       <div className="wishlist-workspace">
-        {view === "buckets" ? (
+        {view === "curated" ? (
+          <CuratedListsPanel />
+        ) : (
           <WishlistBoard
             overview={overview.data}
             pending={overview.isPending || Boolean(loading)}
             error={overview.error}
             onRetry={() => void overview.refetch()}
+            layout={view}
           />
-        ) : (
-          <CuratedListsPanel />
         )}
       </div>
     </section>

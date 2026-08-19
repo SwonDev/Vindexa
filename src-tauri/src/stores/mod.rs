@@ -66,6 +66,7 @@
 pub mod db;
 pub mod epic;
 pub mod epic_api;
+pub mod epic_free;
 pub mod gog;
 pub mod gog_api;
 pub(crate) mod heroic;

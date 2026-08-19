@@ -52,6 +52,7 @@ const HOJAS: Record<string, Hoja> = {
       "decision-",
       "discovery-",
       "dismissed-list",
+      "epic-free",
       "panel-heading",
       "radar-",
       "rail-block",

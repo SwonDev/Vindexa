@@ -1439,6 +1439,42 @@ export interface WishlistPriceStatus {
   meetsTarget: boolean;
 }
 
+/**
+ * Lo que la vista rápida enseña de un juego.
+ *
+ * `screenshots` vacío con `checked: true` significa «ese juego no publica
+ * capturas»; con `checked: false`, «todavía no se ha preguntado».
+ */
+export interface GamePreview {
+  appId: number;
+  screenshots: string[];
+  checked: boolean;
+}
+
+/**
+ * Un juego que Epic regala esta semana.
+ *
+ * `hoursLeft` a `null` es «no se sabe cuándo acaba», no «acaba ya»: Epic no
+ * siempre publica la fecha de fin y aquí no se rellena.
+ */
+export interface EpicFreeOffer {
+  offerId: string;
+  title: string;
+  description: string;
+  storeUrl: string;
+  imageUrl?: string | null;
+  state: "current" | "upcoming";
+  startsAt?: string | null;
+  endsAt?: string | null;
+  /** En la unidad mínima de la moneda; `null` si Epic no lo publica. */
+  originalPriceCents?: number | null;
+  currency?: string | null;
+  /** Ya está en la biblioteca: no hay nada que reclamar. */
+  owned: boolean;
+  hoursLeft?: number | null;
+  dismissed: boolean;
+}
+
 export interface PriceRefreshReport {
   observed: number;
   changed: number;

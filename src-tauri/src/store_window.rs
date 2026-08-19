@@ -60,6 +60,27 @@ pub async fn open_store_home<R: Runtime>(app: &AppHandle<R>, store_id: &str) -> 
     open_in_store(app, store, store.home_url()).await
 }
 
+/// Abre una dirección concreta de una tienda en su propio navegador.
+///
+/// Sirve para llevar a la ficha exacta de algo —un regalo de Epic, una oferta—
+/// sin que quien lo usa tenga que buscarlo. La dirección pasa por la misma
+/// política que cualquier otra navegación: si no pertenece a los anfitriones de
+/// esa tienda, se rechaza en vez de abrirse «por si acaso».
+pub async fn open_store_url<R: Runtime>(
+    app: &AppHandle<R>,
+    store_id: &str,
+    url: &str,
+) -> AppResult<()> {
+    let store = stores::store_by_id(store_id).ok_or_else(|| {
+        AppError::validation("Esa tienda no está disponible en el navegador integrado.")
+    })?;
+    // Se analiza la dirección entera: comparar el principio de una cadena deja
+    // pasar credenciales delante de la arroba y acaba en otro servidor.
+    let destino = Url::parse(url)
+        .map_err(|_| AppError::validation("Esa dirección no se puede interpretar."))?;
+    open_in_store(app, store, destino).await
+}
+
 /// Abre o reutiliza la ventana de `store` y la lleva a `url`.
 async fn open_in_store<R: Runtime>(
     app: &AppHandle<R>,

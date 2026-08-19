@@ -166,6 +166,111 @@ pub fn run() {
                 });
             }
 
+            // Los precios de los deseados se traen solos.
+            //
+            // Estaban atados a un botón, y aun pulsándolo se guardaban cinco de
+            // mil cuatrocientos: los deseados que no se poseen viven en el
+            // catálogo y `record_observation` los rechazaba, abortando la tanda
+            // entera. Arreglado eso, lo que faltaba era que corriera sin que
+            // nadie se acordase.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Después de los lanzamientos: las dos tandas hablan con la
+                    // misma tienda y solaparlas sólo consigue que corte a las dos.
+                    tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+                    loop {
+                        match steam::prices::refresh_if_due(&database).await {
+                            Ok(Some(report)) => {
+                                eprintln!(
+                                    "Vindexa: precios al día ({} resueltos: {} con precio y {} sin precio en la tienda; {} sin poder consultar).",
+                                    report.resolved(),
+                                    report.observed,
+                                    report.without_price,
+                                    report.failed
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(error) => {
+                                eprintln!(
+                                    "Vindexa: no se pudieron repasar los precios: {}",
+                                    error.message
+                                );
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+                    }
+                });
+            }
+
+            // El DRM que falta por mirar.
+            //
+            // La clasificación llegó después de que media biblioteca estuviera
+            // ya enriquecida, y esos juegos se quedaron sin veredicto con la
+            // evidencia vacía: 1.788 de 3.877 en la instalación real. Volver a
+            // enriquecerlos sería bajar otra vez descripciones y capturas que ya
+            // están; esta pasada pide sólo los tres avisos y las categorías.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(180)).await;
+                    loop {
+                        match steam::drm_pass::run_if_due(&database).await {
+                            Ok(Some(report)) => {
+                                eprintln!(
+                                    "Vindexa: DRM repasado ({} mirados, {} clasificados, {} sin señal, {} pendientes).",
+                                    report.checked,
+                                    report.classified,
+                                    report.still_unknown,
+                                    report.pending
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudo repasar el DRM: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(30 * 60)).await;
+                    }
+                });
+            }
+
+            // Los regalos de Epic. Rotan los jueves y caducan: preguntarlo
+            // una vez al día basta, y así el aviso llega el mismo día en que
+            // empieza la promoción en vez de cuando a alguien se le ocurra
+            // abrir la tienda.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+                    loop {
+                        match stores::epic_free::fetch("ES", "es-ES").await {
+                            Ok(juegos) => {
+                                match database.sync_epic_free_offers(&juegos, chrono::Utc::now()) {
+                                    Ok(report) if report.notified > 0 => {
+                                        eprintln!(
+                                            "Vindexa: {} juego(s) gratis en Epic esta semana.",
+                                            report.notified
+                                        );
+                                    }
+                                    Ok(_) => {}
+                                    Err(error) => eprintln!(
+                                        "Vindexa: no se pudieron guardar los regalos de Epic: {}",
+                                        error.message
+                                    ),
+                                }
+                            }
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudo preguntar a Epic por los juegos gratis: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(6 * 60 * 60)).await;
+                    }
+                });
+            }
+
             // Los encargos del agente. No hace nada mientras no haya ninguno
             // guardado, que es el caso de una instalación recién hecha: sin
             // encargos, este bucle sólo comprueba una lista vacía.
@@ -326,6 +431,10 @@ pub fn run() {
             commands::get_game_price_history,
             commands::forget_game_prices,
             commands::refresh_wishlist_prices,
+            commands::game_preview,
+            commands::epic_free_games,
+            commands::dismiss_epic_free_game,
+            commands::open_epic_free_game,
             commands::archive_games,
             commands::unarchive_games,
             commands::list_archived_games,

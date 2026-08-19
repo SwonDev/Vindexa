@@ -40,6 +40,7 @@ import type {
   DlcRefreshReport,
   DlcSummary,
   DrmStateCounts,
+  EpicFreeOffer,
   ExternalGame,
   ExternalGameRequest,
   ExternalStoreAccount,
@@ -52,6 +53,7 @@ import type {
   GameDetail,
   GameDlc,
   GameListRequest,
+  GamePreview,
   GamePrice,
   GameReminder,
   GameVideo,
@@ -174,6 +176,20 @@ export const api = {
     invoke<PriceHistory>("get_game_price_history", { appId, currency, limit }),
   forgetGamePrices: (appId: number) => invoke<void>("forget_game_prices", { appId }),
   /** Única llamada que habla con la tienda: pregunta el precio de lo caducado. */
+  /**
+   * Los regalos de Epic. Sin `refresh` devuelve lo guardado, que es lo que
+   * quiere la pantalla al abrirse: enseñar algo ya y no esperar a la red.
+   */
+  /**
+   * Capturas para la vista rápida. Sólo sale a la red la primera vez por juego;
+   * después responde de lo guardado.
+   */
+  gamePreview: (appId: number) => invoke<GamePreview>("game_preview", { appId }),
+  epicFreeGames: (refresh?: boolean) =>
+    invoke<EpicFreeOffer[]>("epic_free_games", { refresh: refresh ?? false }),
+  dismissEpicFreeGame: (offerId: string) => invoke<void>("dismiss_epic_free_game", { offerId }),
+  /** Lleva a la ficha en el navegador integrado de Epic, con tu sesión. */
+  openEpicFreeGame: (url: string) => invoke<void>("open_epic_free_game", { url }),
   refreshWishlistPrices: (limit?: number) =>
     invoke<PriceRefreshReport>("refresh_wishlist_prices", { limit }),
   archiveGames: (appIds: number[], reason?: string) =>

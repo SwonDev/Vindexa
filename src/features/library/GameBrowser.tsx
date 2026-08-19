@@ -17,6 +17,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Artwork, prefetchArtwork } from "@/components/common/Artwork";
 import type { GameContextAction } from "@/components/common/GameContextMenu";
 import { GameContextMenu } from "@/components/common/GameContextMenu";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { ProgressMeter } from "@/components/common/ProgressMeter";
 import { PressableSurface } from "@/components/motion";
 import { Button } from "@/components/ui/button";
@@ -673,93 +674,127 @@ const GameCard = memo(function GameCard({
       organization={organization}
       shortcuts={shortcuts}
     >
-      <article
-        ref={(node) => {
-          setDragNodeRef(node);
-          setDropNodeRef(node);
-        }}
-        className="game-card"
-        tabIndex={-1}
-        onPointerDown={pointerDragListener(listeners)}
-        data-selected={selected}
-        data-focused={focused}
-        data-library-dragging={isDragging}
-        data-position-drop={Boolean(positionCollectionId || manualPositioning)}
-        data-position-over={isOver}
-      >
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="game-drag-activator"
-          aria-label={`Arrastrar ${game.title}`}
-          {...attributes}
-          {...listeners}
-        />
-        {/* La tarjeta acusa el tacto: sube un píxel al pasar y se hunde al
+      {/* La vista rápida se apaga mientras se arrastra: un emergente siguiendo
+          al puntero durante un arrastre es un estorbo, no una ayuda. */}
+      <GamePreviewCard {...previewProps(game)} disabled={isDragging}>
+        <article
+          ref={(node) => {
+            setDragNodeRef(node);
+            setDropNodeRef(node);
+          }}
+          className="game-card"
+          tabIndex={-1}
+          onPointerDown={pointerDragListener(listeners)}
+          data-selected={selected}
+          data-focused={focused}
+          data-library-dragging={isDragging}
+          data-position-drop={Boolean(positionCollectionId || manualPositioning)}
+          data-position-over={isOver}
+        >
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="game-drag-activator"
+            aria-label={`Arrastrar ${game.title}`}
+            {...attributes}
+            {...listeners}
+          />
+          {/* La tarjeta acusa el tacto: sube un píxel al pasar y se hunde al
             pulsar. El asa de arrastre queda fuera del envoltorio, así que el
             gesto de mover un juego no se mezcla con el de pulsarlo. */}
-        <PressableSurface asChild>
-          <button
-            type="button"
-            className="game-card__target"
-            aria-pressed={selected}
-            aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
-            onClick={(event) => {
-              const gesture = selectionGestureFrom(event);
-              onSelect(game, gesture);
-              // Ampliar la selección no debe abrir la ficha por encima de ella.
-              if (gesture === "replace") onOpen(game);
-            }}
-          >
-            <div className="game-card__cover">
-              <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
-              {game.installed ? (
-                <span className="installed-marker" title="Instalado">
-                  <IconDownload size={12} /> INSTALADO
-                </span>
-              ) : game.ownershipSource === "family_shared" ? (
-                // Un juego prestado se distingue de uno propio, porque Steam decide
-                // la elegibilidad al abrirlo y puede no dejarte jugarlo. Se marca
-                // igual que «instalado»: sobre la portada y sólo la excepción.
-                <span className="installed-marker" data-family="true" title="Del préstamo familiar">
-                  <IconUsersGroup size={12} /> FAMILY
-                </span>
-              ) : null}
-            </div>
-            <div className="game-card__body">
-              <div className="game-card__title-row">
-                <h3 title={game.title}>{game.title}</h3>
-                {game.rating && (
-                  <span className="rating" title={`${game.rating} de 10`}>
-                    <IconStarFilled size={11} />
-                    {game.rating}
+          <PressableSurface asChild>
+            <button
+              type="button"
+              className="game-card__target"
+              aria-pressed={selected}
+              aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
+              onClick={(event) => {
+                const gesture = selectionGestureFrom(event);
+                onSelect(game, gesture);
+                // Ampliar la selección no debe abrir la ficha por encima de ella.
+                if (gesture === "replace") onOpen(game);
+              }}
+            >
+              <div className="game-card__cover">
+                <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
+                {game.installed ? (
+                  <span className="installed-marker" title="Instalado">
+                    <IconDownload size={12} /> INSTALADO
                   </span>
-                )}
+                ) : game.ownershipSource === "family_shared" ? (
+                  // Un juego prestado se distingue de uno propio, porque Steam decide
+                  // la elegibilidad al abrirlo y puede no dejarte jugarlo. Se marca
+                  // igual que «instalado»: sobre la portada y sólo la excepción.
+                  <span
+                    className="installed-marker"
+                    data-family="true"
+                    title="Del préstamo familiar"
+                  >
+                    <IconUsersGroup size={12} /> FAMILY
+                  </span>
+                ) : null}
               </div>
-              <div className="game-card__meta">
-                <span className="status-dot" style={{ backgroundColor: game.statusColor }} />
-                {game.statusName}
-                <span>·</span>
-                <span>{formatPlaytime(game.playtimeMinutes)}</span>
+              <div className="game-card__body">
+                <div className="game-card__title-row">
+                  <h3 title={game.title}>{game.title}</h3>
+                  {game.rating && (
+                    <span className="rating" title={`${game.rating} de 10`}>
+                      <IconStarFilled size={11} />
+                      {game.rating}
+                    </span>
+                  )}
+                </div>
+                <div className="game-card__meta">
+                  <span className="status-dot" style={{ backgroundColor: game.statusColor }} />
+                  {game.statusName}
+                  <span>·</span>
+                  <span>{formatPlaytime(game.playtimeMinutes)}</span>
+                </div>
+                <ProgressMeter
+                  className="game-card__progress"
+                  value={game.progress}
+                  label={`Progreso de ${game.title}: ${game.progress}%`}
+                />
               </div>
-              <ProgressMeter
-                className="game-card__progress"
-                value={game.progress}
-                label={`Progreso de ${game.title}: ${game.progress}%`}
-              />
-            </div>
-          </button>
-        </PressableSurface>
-        <GameMenu
-          game={game}
-          onOpen={() => onOpen(game)}
-          runAction={runAction}
-          actionPending={actionPending}
-        />
-      </article>
+            </button>
+          </PressableSurface>
+          <GameMenu
+            game={game}
+            onOpen={() => onOpen(game)}
+            runAction={runAction}
+            actionPending={actionPending}
+          />
+        </article>
+      </GamePreviewCard>
     </GameActionsMenu>
   );
 });
+
+/**
+ * Lo que la vista rápida enseña de un juego de la biblioteca.
+ *
+ * Son los datos que Vindexa tiene y la tienda no: en qué estado lo pusiste,
+ * cuánto le has echado y por dónde vas. Un dato que no se sabe no aparece —no
+ * se rellena con un cero—.
+ */
+function previewProps(game: GameSummary) {
+  const facts: { label: string; value: string }[] = [
+    { label: "Estado", value: game.statusName },
+    { label: "Jugado", value: formatPlaytime(game.playtimeMinutes) },
+  ];
+  if (game.progress > 0) {
+    facts.push({ label: "Progreso", value: `${game.progress} %` });
+  }
+  if (game.lastPlayedAt) {
+    facts.push({ label: "Última sesión", value: formatDate(game.lastPlayedAt) });
+  }
+  return {
+    appId: game.appId,
+    title: game.title,
+    facts,
+    fallback: <Artwork appId={game.appId} src={game.coverUrl} title={game.title} kind="cover" />,
+  };
+}
 
 const GameRow = memo(function GameRow({
   game,
@@ -817,88 +852,90 @@ const GameRow = memo(function GameRow({
       organization={organization}
       shortcuts={shortcuts}
     >
-      <article
-        ref={(node) => {
-          setDragNodeRef(node);
-          setDropNodeRef(node);
-        }}
-        className="game-row"
-        tabIndex={-1}
-        onPointerDown={pointerDragListener(listeners)}
-        data-selected={selected}
-        data-focused={focused}
-        data-library-dragging={isDragging}
-        data-position-drop={Boolean(positionCollectionId || manualPositioning)}
-        data-position-over={isOver}
-        data-compact={compact}
-        // Sólo la traslación del virtualizador. La del arrastre la lleva el
-        // acompañante del cursor; sumarlas movía la fila dos veces y el
-        // resultado temblaba contra la posición que el virtualizador recalcula.
-        style={style}
-      >
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="game-drag-activator"
-          aria-label={`Arrastrar ${game.title}`}
-          {...attributes}
-          {...listeners}
-        />
-        <button
-          type="button"
-          className="game-row__target"
-          aria-pressed={selected}
-          aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
-          onClick={(event) => {
-            const gesture = selectionGestureFrom(event);
-            onSelect(game, gesture);
-            // Ampliar la selección no debe abrir la ficha por encima de ella.
-            if (gesture === "replace") onOpen(game);
+      <GamePreviewCard {...previewProps(game)} disabled={isDragging}>
+        <article
+          ref={(node) => {
+            setDragNodeRef(node);
+            setDropNodeRef(node);
           }}
+          className="game-row"
+          tabIndex={-1}
+          onPointerDown={pointerDragListener(listeners)}
+          data-selected={selected}
+          data-focused={focused}
+          data-library-dragging={isDragging}
+          data-position-drop={Boolean(positionCollectionId || manualPositioning)}
+          data-position-over={isOver}
+          data-compact={compact}
+          // Sólo la traslación del virtualizador. La del arrastre la lleva el
+          // acompañante del cursor; sumarlas movía la fila dos veces y el
+          // resultado temblaba contra la posición que el virtualizador recalcula.
+          style={style}
         >
-          <div className="game-row__identity">
-            {/* La ultracompacta existe para meter el máximo de títulos en la
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="game-drag-activator"
+            aria-label={`Arrastrar ${game.title}`}
+            {...attributes}
+            {...listeners}
+          />
+          <button
+            type="button"
+            className="game-row__target"
+            aria-pressed={selected}
+            aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
+            onClick={(event) => {
+              const gesture = selectionGestureFrom(event);
+              onSelect(game, gesture);
+              // Ampliar la selección no debe abrir la ficha por encima de ella.
+              if (gesture === "replace") onOpen(game);
+            }}
+          >
+            <div className="game-row__identity">
+              {/* La ultracompacta existe para meter el máximo de títulos en la
                 pantalla, así que ahí ni miniatura ni barra dibujada. En el
                 resto, `kind` gobierna la geometría del recuadro, no el origen
                 de la imagen: se prefiere la cápsula apaisada a la portada
                 vertical porque recortar 600×900 a un cuadrado decapita el arte
                 mientras que un encabezado conserva el motivo central. */}
-            {!compact && (
-              <Artwork
-                appId={game.appId}
-                src={game.iconUrl ?? game.headerUrl ?? game.coverUrl}
-                title={game.title}
-                kind="icon"
-              />
-            )}
-            <div>
-              <strong>{game.title}</strong>
-              {/* Señas del juego, no de su arte: por eso van aquí y nunca sobre
+              {!compact && (
+                <Artwork
+                  appId={game.appId}
+                  src={game.iconUrl ?? game.headerUrl ?? game.coverUrl}
+                  title={game.title}
+                  kind="icon"
+                />
+              )}
+              <div>
+                <strong>{game.title}</strong>
+                {/* Señas del juego, no de su arte: por eso van aquí y nunca sobre
                   la carátula. «Sin DRM» sólo aparece cuando está comprobado;
                   callar no es lo mismo que decir que lleva protección. */}
-              {!compact && rowMarks(game).length > 0 && <span>{rowMarks(game).join(" · ")}</span>}
+                {!compact && rowMarks(game).length > 0 && <span>{rowMarks(game).join(" · ")}</span>}
+              </div>
             </div>
-          </div>
-          <div className="game-row__status">
-            <i style={{ backgroundColor: game.statusColor }} />
-            {game.statusName}
-          </div>
-          <ProgressMeter
-            className="game-row__progress"
-            value={game.progress}
-            label={`Progreso de ${game.title}: ${game.progress}%`}
-            barHidden={compact}
+            <div className="game-row__status">
+              <i style={{ backgroundColor: game.statusColor }} />
+              {game.statusName}
+            </div>
+            <ProgressMeter
+              className="game-row__progress"
+              value={game.progress}
+              label={`Progreso de ${game.title}: ${game.progress}%`}
+              barHidden={compact}
+            />
+            <span>{formatPlaytime(game.playtimeMinutes)}</span>
+            <span>{formatDate(game.lastPlayedAt)}</span>
+          </button>
+          <GameMenu
+            game={game}
+            onOpen={() => onOpen(game)}
+            runAction={runAction}
+            actionPending={actionPending}
           />
-          <span>{formatPlaytime(game.playtimeMinutes)}</span>
-          <span>{formatDate(game.lastPlayedAt)}</span>
-        </button>
-        <GameMenu
-          game={game}
-          onOpen={() => onOpen(game)}
-          runAction={runAction}
-          actionPending={actionPending}
-        />
-      </article>
+        </article>
+      </GamePreviewCard>
     </GameActionsMenu>
   );
 });
