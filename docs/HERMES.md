@@ -91,9 +91,49 @@ Hugging Face en el momento.
    espera; ante un AppID que no es de ese juego, se niega diciendo de quién es.
 4. **Borrar la biblioteca.** No hay ninguna intención que borre juegos.
 
+## Un bot sólo para Vindexa
+
+Hermes admite perfiles: cada uno con su configuración, su personalidad y su
+sesión de mensajería. Eso permite tener un bot dedicado a la biblioteca, con su
+propio Telegram, sin mezclarlo con el asistente de uso general.
+
+En esta casa ya está creado:
+
+```
+hermes profile create vindexabot --clone
+```
+
+Lleva el servidor MCP de Vindexa —las diecinueve herramientas— y un `SOUL.md`
+que le dice lo único que tiene que hacer: consultar antes de escribir, no
+rellenar huecos y decir en una línea qué ha hecho.
+
+**Cuidado con el clonado**: copia también el `TELEGRAM_BOT_TOKEN` del perfil de
+origen, así que los dos perfiles se pelearían por el mismo bot. Hay que vaciarlo
+antes de nada, que es lo que se ha hecho aquí.
+
+Falta un paso, y es el único que no se puede automatizar: **crear el bot en
+Telegram**. Los testigos de bot sólo los emite BotFather, desde la cuenta de
+quien lo pide. Una vez creado:
+
+```
+# ~/.hermes/profiles/vindexabot/.env
+TELEGRAM_BOT_TOKEN=<el que devuelva BotFather>
+TELEGRAM_ALLOWED_USERS=<tu id de Telegram>
+```
+
+y después `vindexabot gateway start`.
+
 ## Lo que queda fuera, a propósito
 
-- **Telegram, WhatsApp y la voz** son del agente, no de Vindexa. Hermes ya los
-  tiene; añadir aquí una segunda implementación sería mantener dos.
-- **Las tareas programadas** también: quien sabe de horarios es el agente, que
-  ya trae su propio programador.
+- **Telegram y WhatsApp** son del agente, no de Vindexa. Hermes ya los tiene, y
+  con el servidor MCP registrado llegan a la biblioteca entera; añadir aquí una
+  segunda implementación sería mantener dos clientes, dos sesiones y dos sitios
+  donde configurar lo mismo.
+
+Lo que sí vive en Vindexa, porque habla de esta biblioteca y no de horarios ni
+de mensajería:
+
+- **Dictar.** El agente de casa graba y transcribe con un modelo local. Sin
+  transcriptor corriendo, el botón no aparece.
+- **Los encargos.** Una frase y una cadencia, ejecutadas por el agente con las
+  mismas barreras y el mismo deshacer que una orden dictada a mano.
