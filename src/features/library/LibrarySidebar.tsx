@@ -12,7 +12,7 @@ import {
   IconUsersGroup,
 } from "@tabler/icons-react";
 import { useCallback, useState } from "react";
-import { AnimatedNumber, PressableSurface } from "@/components/motion";
+import { AnimatedNumber, PressableSurface, StaggerList } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CollectionIcon } from "@/features/collections/CollectionIcon";
@@ -168,7 +168,18 @@ export function LibrarySidebar({
           <span>ESTADOS</span>
           <IconChevronDown size={13} data-expanded={statusesExpanded} />
         </button>
-        <div className="sidebar-list" id="library-statuses" hidden={!statusesExpanded}>
+        {/* Los estados aparecen escalonados al desplegar la sección. No es
+            adorno: el escalonado es lo que hace legible que se ha abierto una
+            lista, en vez de que catorce filas salgan de golpe. No se aplica a
+            las colecciones porque ésas se arrastran, y dos transformaciones
+            sobre el mismo elemento se pelean. */}
+        <StaggerList
+          as="div"
+          className="sidebar-list"
+          id="library-statuses"
+          hidden={!statusesExpanded}
+          itemAsChild
+        >
           {bootstrap?.statuses.map((status) => (
             <StatusContextMenu key={status.id} status={status} onEdit={onEditStatuses}>
               <SidebarItem
@@ -183,7 +194,7 @@ export function LibrarySidebar({
               />
             </StatusContextMenu>
           ))}
-        </div>
+        </StaggerList>
       </div>
       <div className="sidebar-section sidebar-section--grow">
         <div className="sidebar-heading-row">
