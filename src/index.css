@@ -752,6 +752,44 @@ kbd {
   background: var(--card);
   box-shadow: 0 22px 80px rgb(0 0 0 / 36%);
 }
+/* El error, a la vista. Sin esto la pantalla dice lo mismo pase lo que pase y
+   no hay forma de contar qué ha ocurrido ni de arreglarlo. */
+.fatal-state__panel > div {
+  min-width: 0;
+}
+.fatal-state__message {
+  margin-top: 8px;
+  color: var(--v-error);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.fatal-state__detail {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.fatal-state__detail summary {
+  color: var(--v-muted);
+  cursor: pointer;
+}
+.fatal-state__detail pre {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--v-subtle);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fatal-state__actions {
+  display: grid;
+  gap: 6px;
+  justify-items: stretch;
+}
 .fatal-state h1,
 .screen-error h1,
 .screen-error h2 {

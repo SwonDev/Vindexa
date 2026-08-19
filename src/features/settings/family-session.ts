@@ -21,12 +21,16 @@ export function describeFamilyStatus(status?: FamilySessionStatus): string {
   if (status.lastErrorCode) {
     return "Sesión vinculada. El último intento falló; el mensaje está justo debajo.";
   }
-  if (status.lastSyncAt === undefined || status.lastAppCount === undefined) {
+  // Ausente es ausente, venga como `null` desde Rust o como `undefined` por no
+  // viajar. Comprobar sólo `undefined` era lo que reventaba la interfaz entera
+  // en cuanto había sesión vinculada y ninguna sincronización todavía.
+  const momento = status.lastSyncAt ?? undefined;
+  const cuenta = status.lastAppCount ?? undefined;
+  if (momento === undefined || cuenta === undefined) {
     return "Sesión vinculada. Todavía no se ha traído el catálogo.";
   }
-  const cuando = formatRelativeDate(status.lastSyncAt);
-  const cuantos =
-    status.lastAppCount === 1 ? "1 juego" : `${status.lastAppCount.toLocaleString("es-ES")} juegos`;
+  const cuando = formatRelativeDate(momento);
+  const cuantos = cuenta === 1 ? "1 juego" : `${cuenta.toLocaleString("es-ES")} juegos`;
   return `Sesión vinculada. Última lectura ${cuando}: ${cuantos} en el catálogo.`;
 }
 

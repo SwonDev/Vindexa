@@ -27,6 +27,20 @@ describe("estado del vínculo con la sesión de Steam", () => {
     expect(frase).not.toMatch(/\d/);
   });
 
+  it("lo que llega nulo desde Rust es ausente, no cero", () => {
+    // Este es el fallo que tiraba la aplicación entera: con la sesión vinculada
+    // y ninguna sincronización todavía, Rust manda `null` —no omite el campo— y
+    // comprobar sólo `undefined` dejaba pasar el nulo hasta `toLocaleString`.
+    const frase = describeFamilyStatus({
+      linked: true,
+      lastSyncAt: null,
+      lastAppCount: null,
+      lastErrorCode: null,
+    });
+    expect(frase).toContain("Todavía no se ha traído el catálogo");
+    expect(frase).not.toMatch(/\d/);
+  });
+
   it("un fallo reciente manda sobre el recuento anterior", () => {
     // Decir «última lectura: 3.000 juegos» cuando el último intento acaba de
     // fallar da por buena una cifra que puede estar caducada.

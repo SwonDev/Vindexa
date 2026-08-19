@@ -724,7 +724,8 @@ export interface GameDlc {
   shortDescription?: string;
   releaseDate?: string;
   isFree: boolean;
-  priceCents?: number;
+  /** `null` cuando la tienda no publica precio: un `Option` de Rust viaja así. */
+  priceCents?: number | null;
   currency?: string;
   discountPercent?: number;
   owned: boolean;
@@ -745,7 +746,8 @@ export interface DlcSummary {
   free: number;
   pending: number;
   /** Solo cubre `pendingCounted`: nunca es un total cerrado si hay desconocidos. */
-  pendingValueCents?: number;
+  /** `null` cuando no hay ningún pendiente con precio comparable. */
+  pendingValueCents?: number | null;
   pendingValueCurrency?: string;
   pendingCounted: number;
   pendingUnknownPrice: number;
@@ -1475,12 +1477,18 @@ export interface ArchiveReport {
  */
 export interface FamilySessionStatus {
   linked: boolean;
-  /** Cuándo terminó bien la última sincronización. */
-  lastSyncAt?: string;
+  /**
+   * Cuándo terminó bien la última sincronización.
+   *
+   * Puede llegar como `null`: un `Option` de Rust que no se omite viaja así, y
+   * fingir que sólo puede ser `undefined` fue exactamente lo que tiró la
+   * interfaz entera al abrir Ajustes con la sesión vinculada y sin sincronizar.
+   */
+  lastSyncAt?: string | null;
   /** Cuántos juegos trajo esa sincronización. */
-  lastAppCount?: number;
+  lastAppCount?: number | null;
   /** Código del último fallo, si el último intento falló. */
-  lastErrorCode?: string;
+  lastErrorCode?: string | null;
 }
 
 /** Lo que deja una sincronización del catálogo de Familia. */

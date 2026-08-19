@@ -328,7 +328,9 @@ function PendingValue({ summary }: { summary: DlcSummary }) {
     uncounted.push(`${summary.pendingOtherCurrency} en otra moneda`);
   }
   const open = uncounted.length > 0;
-  if (summary.pendingValueCents === undefined || summary.pendingCounted === 0) {
+  // `null` desde Rust y `undefined` por no viajar significan lo mismo: no hay
+  // importe. Distinguirlos aquí sólo servía para sumar sobre la nada.
+  if (summary.pendingValueCents == null || summary.pendingCounted === 0) {
     const caveat = `Quedan ${summary.pending} pendientes y la tienda no publica un precio comparable para ninguno${
       uncounted.length ? `: ${uncounted.join(" y ")}` : ""
     }.`;
@@ -424,7 +426,7 @@ function DlcRow({
       <span className="dlc-row__price">
         {item.isFree ? (
           "Gratuito"
-        ) : item.priceCents === undefined ? (
+        ) : item.priceCents == null ? (
           <span className="dlc-row__price-unknown">Sin precio publicado</span>
         ) : (
           <>
