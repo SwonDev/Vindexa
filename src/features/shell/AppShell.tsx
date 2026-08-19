@@ -8,6 +8,7 @@ import {
   IconHeartPlus,
   IconLayoutKanban,
   IconRefresh,
+  IconRobot,
   IconSettings,
 } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +63,11 @@ const SettingsDialog = lazy(() =>
 // El tipo viaja aparte de la carga diferida: sólo describe la sección, no
 // arrastra el diálogo al paquete inicial.
 type SettingsSection = import("@/features/settings/SettingsDialog").SettingsSection;
+const AgentChatPanel = lazy(() =>
+  import("@/features/agent/AgentChatPanel").then((module) => ({
+    default: module.AgentChatPanel,
+  })),
+);
 const CommandPalette = lazy(() =>
   import("@/features/shell/CommandPalette").then((module) => ({
     default: module.CommandPalette,
@@ -96,6 +102,7 @@ const sections = [
 export function AppShell() {
   const [section, setSection] = useState<AppSection>("library");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   // En qué sección se abre. Quien llega desde un atajo de la biblioteca ya sabe
   // a qué venía; volver a buscarla sería devolverle el trabajo.
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
@@ -733,14 +740,30 @@ export function AppShell() {
             comía una fila de alto en todas las pantallas. Ahora enseña trabajo
             en curso y avisos, que es lo único que no se ve en ningún otro
             sitio, y cuando no hay ni una cosa ni otra desaparece. */}
-          {statusNotices.length > 0 && (
-            <footer className="statusbar" role="status">
+          <footer className="statusbar">
+            <span role="status" className="statusbar__notices">
               {statusNotices.map((notice) => (
                 <span key={notice.id} data-kind={notice.kind}>
                   {notice.text}
                 </span>
               ))}
-            </footer>
+            </span>
+            {/* El agente vive aquí porque desde aquí se le habla mientras se
+                mira la biblioteca, no en lugar de mirarla. */}
+            <button
+              type="button"
+              className="statusbar__agent"
+              data-open={agentOpen}
+              aria-expanded={agentOpen}
+              onClick={() => setAgentOpen((open) => !open)}
+            >
+              <IconRobot aria-hidden="true" /> Agente
+            </button>
+          </footer>
+          {agentOpen && (
+            <Suspense fallback={null}>
+              <AgentChatPanel onClose={() => setAgentOpen(false)} />
+            </Suspense>
           )}
           {paletteOpen && (
             <Suspense fallback={null}>

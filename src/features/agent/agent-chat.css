@@ -1,0 +1,209 @@
+/* -----------------------------------------------------------------------------
+   El agente de Vindexa.
+
+   Panel anclado abajo a la derecha, encima de la barra de estado desde la que
+   se abre. Se queda donde se le llamó en vez de tapar la pantalla: se le habla
+   mientras se mira la biblioteca, no en lugar de mirarla.
+   -------------------------------------------------------------------------- */
+
+.agent-chat {
+  position: fixed;
+  z-index: 40;
+  right: 12px;
+  bottom: 34px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 120px));
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 45%);
+}
+
+.agent-chat > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-chat > header > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--v-cyan);
+}
+
+.agent-chat > header strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-chat > header span {
+  display: block;
+  overflow: hidden;
+  color: var(--v-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chat__log {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 11px;
+  overflow-y: auto;
+}
+
+.agent-chat__empty {
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.agent-chat__empty p {
+  margin: 0 0 7px;
+}
+
+.agent-chat__empty ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.agent-chat__turn {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agent-chat__turn p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Lo dicho por la persona se distingue de lo contestado por el agente sin
+   depender del color: se alinea distinto y lleva su propia superficie. */
+.agent-chat__turn[data-role="user"] {
+  margin-left: 28px;
+  border-color: var(--v-surface-selected);
+  background: var(--v-surface-raised);
+}
+
+.agent-chat__turn[data-role="assistant"] {
+  margin-right: 28px;
+}
+
+.agent-chat__steps {
+  display: grid;
+  gap: 3px;
+  margin: 8px 0 0;
+  padding: 7px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.agent-chat__steps li {
+  display: flex;
+  gap: 7px;
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.agent-chat__steps li[data-failed="true"] {
+  color: var(--v-error);
+}
+
+.agent-chat__steps code {
+  color: var(--v-cyan);
+  font-size: 10px;
+}
+
+.agent-chat__steps span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chat__thinking,
+.agent-chat__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-chat__error {
+  color: var(--v-error);
+}
+
+.agent-chat__thinking svg,
+.agent-chat__error svg {
+  width: 13px;
+  height: 13px;
+}
+
+.agent-chat__composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.agent-chat__composer textarea {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  resize: none;
+}
+
+.agent-chat__composer textarea:focus-visible {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: -1px;
+}
+
+/* El botón del pie que lo abre. */
+.statusbar__agent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--v-subtle);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.statusbar__agent:hover {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.statusbar__agent[data-open="true"] {
+  border-color: var(--v-cyan);
+  color: var(--foreground);
+}
+
+.statusbar__agent svg {
+  width: 13px;
+  height: 13px;
+}

@@ -236,8 +236,36 @@ export interface LocalHardware {
   usableModelBytes: number | null;
 }
 
+/** Servidor de inferencia que ya está corriendo en el bucle local. */
+export interface InferenceEndpoint {
+  baseUrl: string;
+  label: string;
+  models: string[];
+}
+
 export interface LocalModelSurvey {
   runtimes: LocalRuntime[];
   models: LocalModel[];
   hardware: LocalHardware;
+  endpoints: InferenceEndpoint[];
+}
+
+/** Un mensaje de la conversación con el agente de casa. */
+export interface ChatMessage {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  tool?: string;
+}
+
+/** Una llamada a herramienta, con lo que pidió y cómo salió. */
+export interface ChatStep {
+  tool: string;
+  arguments: unknown;
+  result: string;
+  failed: boolean;
+}
+
+export interface ChatTurn {
+  reply: string;
+  steps: ChatStep[];
 }

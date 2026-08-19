@@ -37,7 +37,7 @@
 //! - No aprueba lo que exige confirmación humana: eso ocurre dentro de Vindexa.
 //! - No amplía sus permisos: los ámbitos son los del testigo.
 
-mod tools;
+pub(crate) mod tools;
 
 use crate::agent::bridge::{self, AgentRequest, Requester};
 use crate::agent::ratelimit::RateLimiter;

@@ -20,6 +20,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 use crate::localmodel::{self, LocalModelSurvey};
+use crate::vindagent;
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
     DatabaseRecoverySnapshot, GameDetail, GameListRequest, LibraryFilterOptions,
@@ -2563,14 +2564,40 @@ pub async fn detect_agent_hosts() -> AppResult<Vec<agent::hosts::AgentHost>> {
 /// Es sólo lectura y no toca la red: mira el disco y pregunta al sistema.
 #[tauri::command]
 pub async fn local_model_survey() -> AppResult<LocalModelSurvey> {
-    // El rastreo toca disco, así que sale del hilo de la interfaz.
-    tauri::async_runtime::spawn_blocking(|| LocalModelSurvey {
-        runtimes: localmodel::runtimes(),
-        models: localmodel::scan_models(),
-        hardware: localmodel::hardware(),
+    // El rastreo toca disco, así que sale del hilo de la interfaz. Los
+    // servidores se preguntan por red, así que van por otro lado.
+    let disco = tauri::async_runtime::spawn_blocking(|| {
+        (
+            localmodel::runtimes(),
+            localmodel::scan_models(),
+            localmodel::hardware(),
+        )
+    });
+    let endpoints = localmodel::endpoints::discover().await;
+    let (runtimes, models, hardware) = disco
+        .await
+        .map_err(|error| AppError::new("local_model", format!("El rastreo falló: {error}")))?;
+    Ok(LocalModelSurvey {
+        runtimes,
+        models,
+        hardware,
+        endpoints,
     })
-    .await
-    .map_err(|error| AppError::new("local_model", format!("El rastreo falló: {error}")))
+}
+
+/// Un turno de conversación con el agente que vive dentro de Vindexa.
+///
+/// Devuelve la respuesta y, por separado, lo que haya hecho por el camino: un
+/// agente que ordena tu biblioteca sin contar qué tocó no es de fiar.
+#[tauri::command]
+pub async fn vindagent_chat(
+    state: State<'_, AppState>,
+    base_url: String,
+    model: String,
+    history: Vec<vindagent::ChatMessage>,
+) -> AppResult<vindagent::ChatTurn> {
+    let database = state.database.clone();
+    vindagent::chat(&database, &base_url, &model, &history).await
 }
 
 /// Qué agentes tiene Vindexa conectados ahora mismo, y si el automatismo está

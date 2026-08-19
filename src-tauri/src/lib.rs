@@ -1,6 +1,7 @@
 mod agent;
 mod localmodel;
 mod mcp;
+mod vindagent;
 mod art_cache;
 mod browser;
 mod commands;
@@ -320,6 +321,7 @@ pub fn run() {
             commands::issue_agent_client,
             commands::detect_agent_hosts,
             commands::local_model_survey,
+            commands::vindagent_chat,
             commands::agent_autolink_state,
             commands::set_agent_autolink_disabled,
             commands::connect_agent_host,

@@ -497,12 +497,21 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  min-height: 24px;
   padding: 5px 12px;
   border-top: 1px solid #313b48;
   background: #1d242d;
   color: var(--v-subtle);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+/* Los avisos ocupan lo que necesiten y empujan al agente al extremo derecho,
+   donde siempre está en el mismo sitio aunque no haya nada que contar. */
+.statusbar__notices {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 /* Un trabajo en curso se lee como estado; un problema pide más atención, pero
    sin gritar: sigue siendo la línea más discreta de la pantalla. */

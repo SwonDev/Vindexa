@@ -7,6 +7,8 @@ import type {
   AgentOutcome,
   AgentRequest,
   AgentScope,
+  ChatMessage,
+  ChatTurn,
   IssuedAgentClient,
   LocalModelSurvey,
   NewAgentClient,
@@ -375,6 +377,8 @@ export const api = {
     invoke<AgentClientSummary>("set_agent_client_enabled", { clientId, enabled }),
   revokeAgentClient: (clientId: string) => invoke<void>("revoke_agent_client", { clientId }),
   localModelSurvey: () => invoke<LocalModelSurvey>("local_model_survey"),
+  vindagentChat: (baseUrl: string, model: string, history: ChatMessage[]) =>
+    invoke<ChatTurn>("vindagent_chat", { baseUrl, model, history }),
   agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),
   setAgentAutolinkDisabled: (disabled: boolean) =>
     invoke<void>("set_agent_autolink_disabled", { disabled }),

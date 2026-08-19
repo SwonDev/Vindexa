@@ -15,6 +15,7 @@
 //! | ¿Con qué se puede ejecutar un modelo aquí? | [`runtimes`] |
 //! | ¿Qué modelos hay ya descargados? | [`scan_models`] |
 //! | ¿Qué le cabe a esta máquina? | [`hardware`] |
+//! | ¿Hay ya algo sirviendo un modelo? | [`endpoints::discover`] |
 //!
 //! # Por qué no se rastrea el disco entero
 //!
@@ -23,6 +24,8 @@
 //! de Hugging Face, las carpetas de LM Studio y de Ollama, `~/AI`, `~/Models`—
 //! con la profundidad justa y un tope de archivos. Encontrar rápido lo que hay
 //! vale más que encontrar todo lo que podría haber.
+
+pub mod endpoints;
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -74,6 +77,9 @@ pub struct LocalModelSurvey {
     pub runtimes: Vec<Runtime>,
     pub models: Vec<LocalModel>,
     pub hardware: Hardware,
+    /// Servidores de inferencia que ya están corriendo. Si hay uno, no hace
+    /// falta arrancar nada: se usa ese.
+    pub endpoints: Vec<endpoints::InferenceEndpoint>,
 }
 
 /// Lo que la máquina puede permitirse.
