@@ -23,7 +23,7 @@ pub struct Tool {
 fn game_selector() -> Value {
     json!({
         "type": "object",
-        "description": "El juego. Indica «appId» si lo sabes; si no, «name» y Vindexa lo busca. Si el nombre es ambiguo, la respuesta trae las opciones para que preguntes cuál.",
+        "description": "El juego. Manda «appId» si lo sabes, «name» si no, o los dos: con los dos manda el AppID y el nombre sirve para confirmar que hablan del mismo juego. Si el nombre es ambiguo, la respuesta trae las opciones para que preguntes cuál.",
         "properties": {
             "appId": { "type": "integer", "minimum": 1 },
             "name": { "type": "string", "maxLength": 200 }

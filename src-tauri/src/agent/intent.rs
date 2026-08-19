@@ -58,8 +58,14 @@ impl GameSelector {
             (None, Some(_)) => Err(AppError::validation(
                 "El nombre del juego debe tener entre 1 y 200 caracteres.",
             )),
+            // Mandar los dos no es un error: es lo que hace cualquier modelo que
+            // tiene el identificador y el título delante, y rechazarlo le
+            // obligaba a adivinar cuál quitar. Manda el AppID, que es
+            // inequívoco, y el nombre se usa para comprobar que hablan del
+            // mismo juego —si no coinciden, ahí sí hay algo que preguntar—.
+            (Some(app_id), Some(name)) if app_id > 0 && !name.is_empty() => Ok(()),
             (Some(_), Some(_)) => Err(AppError::validation(
-                "Indica el juego por «appId» o por «name», no por los dos a la vez.",
+                "El juego indicado no es válido: revisa «appId» y «name».",
             )),
             (None, None) => Err(AppError::validation(
                 "Falta el juego: indica «appId» o «name».",

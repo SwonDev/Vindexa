@@ -264,6 +264,43 @@ struct ToolFunction {
     arguments: String,
 }
 
+/// Comprueba que la dirección apunta de verdad a este ordenador.
+///
+/// # Por qué no basta con mirar cómo empieza
+///
+/// `http://127.0.0.1:8080@servidor.ajeno.tld/` empieza por `http://127.0.0.1:`
+/// y sin embargo la petición viaja a `servidor.ajeno.tld`: lo de delante de la
+/// arroba son credenciales, no un anfitrión. Comparar el principio de la cadena
+/// es exactamente el error que convierte una frontera en un adorno. Aquí se
+/// analiza la URL y se mira el anfitrión que se va a usar, no el texto.
+///
+/// Se rechaza además cualquier cosa con credenciales o con ruta: el destino se
+/// compone luego añadiendo `/v1/chat/completions`, y una ruta previa serviría
+/// para llevar la petición a otro sitio dentro del mismo servidor.
+fn ensure_loopback(base_url: &str) -> AppResult<()> {
+    let denegado = || {
+        AppError::validation(
+            "El agente de Vindexa sólo habla con un modelo que esté en este ordenador.",
+        )
+    };
+    let url = url::Url::parse(base_url).map_err(|_| denegado())?;
+    if url.scheme() != "http" {
+        return Err(denegado());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(denegado());
+    }
+    if !matches!(url.path(), "" | "/") || url.query().is_some() || url.fragment().is_some() {
+        return Err(denegado());
+    }
+    match url.host() {
+        Some(url::Host::Ipv4(address)) if address.is_loopback() => Ok(()),
+        Some(url::Host::Ipv6(address)) if address.is_loopback() => Ok(()),
+        Some(url::Host::Domain("localhost")) => Ok(()),
+        _ => Err(denegado()),
+    }
+}
+
 /// Un turno completo: se le pasa la conversación y se devuelve la respuesta,
 /// habiendo ejecutado por el camino lo que el modelo haya pedido.
 pub async fn chat(
@@ -275,11 +312,7 @@ pub async fn chat(
     // Sólo el bucle local. No es una preferencia: es la frontera de esta
     // función, y comprobarla aquí evita que un ajuste mal escrito mande la
     // biblioteca de alguien a un servidor de internet.
-    if !base_url.starts_with("http://127.0.0.1:") && !base_url.starts_with("http://localhost:") {
-        return Err(AppError::validation(
-            "El agente de Vindexa sólo habla con un modelo que esté en este ordenador.",
-        ));
-    }
+    ensure_loopback(base_url)?;
     let token = ensure_token(database)?;
     let limiter = RateLimiter::default();
     let client = reqwest::Client::builder()
@@ -394,17 +427,39 @@ mod tests {
     fn no_habla_con_nada_que_no_este_en_este_ordenador() {
         // Es la frontera de esta función: un modelo «local» en otra máquina ya
         // no es local, y la biblioteca de alguien no viaja a donde no ha dicho.
-        let directory = tempfile::tempdir().expect("directorio temporal");
-        let database = Database::new(directory.path().join("vindexa.sqlite3"));
-        database.initialize().expect("inicializar");
         for base in [
             "https://api.openai.com",
             "http://192.168.1.50:8080",
             "http://modelos.ejemplo.com",
+            "http://10.0.0.5:8080",
+            // Lo de delante de la arroba son credenciales, no un anfitrión:
+            // esto empieza por «http://127.0.0.1:» y viaja a otro servidor.
+            // Comparar el principio de la cadena convertía la frontera en un
+            // adorno, y así entraba y salía la biblioteca de alguien.
+            "http://127.0.0.1:8080@servidor.ajeno.tld/",
+            "http://localhost:8080@servidor.ajeno.tld/",
+            "http://127.0.0.1.servidor.ajeno.tld:8080",
+            // Con ruta propia, el destino real lo decide quien la escribió.
+            "http://127.0.0.1:8080/proxy",
+            "http://127.0.0.1:8080/?destino=https://ajeno.tld",
+            // Otro esquema es otra cosa: `file://` no es hablar con un modelo.
+            "https://127.0.0.1:8080",
+            "file:///etc/passwd",
         ] {
-            let error = tauri::async_runtime::block_on(chat(&database, base, "m", &[]))
-                .expect_err("rechazar");
+            let error = ensure_loopback(base).expect_err("rechazar");
             assert_eq!(error.code, "validation", "{base}");
+        }
+    }
+
+    #[test]
+    fn si_acepta_lo_que_de_verdad_es_local() {
+        for base in [
+            "http://127.0.0.1:8770",
+            "http://127.0.0.1:8080/",
+            "http://localhost:1234",
+            "http://[::1]:8080",
+        ] {
+            ensure_loopback(base).unwrap_or_else(|error| panic!("{base}: {}", error.message));
         }
     }
 

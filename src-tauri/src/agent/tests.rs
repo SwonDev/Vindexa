@@ -449,16 +449,20 @@ fn los_candidatos_estan_acotados_y_ordenados() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn el_selector_de_juego_exige_exactamente_un_campo() {
+fn el_selector_de_juego_admite_el_identificador_el_nombre_o_los_dos() {
     assert!(by_id(10).validate().is_ok());
     assert!(by_name("Hollow Knight").validate().is_ok());
+    // Los dos a la vez valen: es lo que manda cualquier modelo que tiene el
+    // identificador y el título delante, y obligarle a quitar uno le hacía
+    // adivinar. Que hablen del mismo juego se comprueba al resolver, contra la
+    // biblioteca, que es donde se puede comprobar de verdad.
     assert!(
         GameSelector {
             app_id: Some(10),
             name: Some("Hollow Knight".to_string())
         }
         .validate()
-        .is_err()
+        .is_ok()
     );
     assert!(
         GameSelector {
@@ -2048,4 +2052,79 @@ mod wiring_check {
             list_agent_audit as fn(_, _) -> _,
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Identificador y nombre a la vez
+// ---------------------------------------------------------------------------
+
+#[test]
+fn el_identificador_manda_y_el_nombre_corrobora() {
+    // Un modelo que tiene las dos cosas manda las dos. Antes eso era un error
+    // de validación y la orden se perdía; ahora se aplica, porque el AppID es
+    // inequívoco y el nombre sólo sirve para confirmar que hablan de lo mismo.
+    let mut fixture = fixture();
+    add_game(&fixture.connection, 367520, "Hollow Knight");
+    let token = issue_client(
+        &mut fixture.connection,
+        "Agente",
+        &["biblioteca:leer", "biblioteca:escribir"],
+    );
+
+    let outcome = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token: token.clone(),
+            utterance: String::new(),
+            intent: AgentIntent::Pin {
+                game: GameSelector {
+                    app_id: Some(367520),
+                    name: Some("Hollow Knight".to_string()),
+                },
+                pinned: true,
+            },
+        },
+    )
+    .expect("aplicar");
+    assert!(matches!(outcome, AgentOutcome::Applied { .. }), "{outcome:?}");
+}
+
+#[test]
+fn un_identificador_que_no_es_de_ese_juego_se_rechaza() {
+    // Es el caso que justifica comprobar: si el modelo se equivoca de AppID,
+    // aplicar el cambio al juego equivocado sería el peor final posible.
+    let mut fixture = fixture();
+    add_game(&fixture.connection, 367520, "Hollow Knight");
+    add_game(&fixture.connection, 570, "Dota 2");
+    let token = issue_client(
+        &mut fixture.connection,
+        "Agente",
+        &["biblioteca:leer", "biblioteca:escribir"],
+    );
+
+    let error = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token,
+            utterance: String::new(),
+            intent: AgentIntent::Pin {
+                game: GameSelector {
+                    app_id: Some(570),
+                    name: Some("Hollow Knight".to_string()),
+                },
+                pinned: true,
+            },
+        },
+    )
+    .expect_err("rechazar");
+    assert_eq!(error.code, "validation");
+    assert!(error.message.contains("Dota 2"), "{}", error.message);
+
+    let fijado: i64 = fixture
+        .connection
+        .query_row("SELECT pinned FROM game_personal WHERE app_id = 570", [], |row| row.get(0))
+        .expect("leer");
+    assert_eq!(fijado, 0, "no se toca el juego equivocado");
 }

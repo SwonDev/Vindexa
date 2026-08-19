@@ -177,33 +177,3 @@
   outline: 2px solid var(--v-cyan);
   outline-offset: -1px;
 }
-
-/* El botón del pie que lo abre. */
-.statusbar__agent {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  padding: 2px 7px;
-  border: 1px solid transparent;
-  background: none;
-  color: var(--v-subtle);
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.statusbar__agent:hover {
-  border-color: var(--border);
-  color: var(--foreground);
-}
-
-.statusbar__agent[data-open="true"] {
-  border-color: var(--v-cyan);
-  color: var(--foreground);
-}
-
-.statusbar__agent svg {
-  width: 13px;
-  height: 13px;
-}

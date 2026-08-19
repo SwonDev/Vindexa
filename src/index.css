@@ -513,6 +513,41 @@
   gap: 16px;
   min-width: 0;
 }
+/* El botón del pie que abre el agente.
+
+   Vive aquí y no en la hoja del panel a propósito: esa hoja la carga el propio
+   panel, que va en diferido, así que hasta que alguien lo abría por primera vez
+   el botón se pintaba sin estilo —icono y texto apilados, con el tamaño de
+   fuente heredado— y se salía de la barra. El estilo de algo que siempre está
+   en pantalla no puede depender de que se abra otra cosa. */
+.statusbar__agent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--v-subtle);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.statusbar__agent:hover {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.statusbar__agent[data-open="true"] {
+  border-color: var(--v-cyan);
+  color: var(--foreground);
+}
+.statusbar__agent svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
 /* Un trabajo en curso se lee como estado; un problema pide más atención, pero
    sin gritar: sigue siendo la línea más discreta de la pantalla. */
 .statusbar [data-kind="warning"] {

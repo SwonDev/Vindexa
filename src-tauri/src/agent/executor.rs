@@ -194,6 +194,18 @@ fn resolve_game(connection: &Connection, selector: &GameSelector) -> AppResult<G
     selector.validate()?;
     if let Some(app_id) = selector.app_id {
         let title = game_title(connection, app_id)?;
+        // Si además venía el nombre, se comprueba que hablen del mismo juego.
+        // Un agente que manda los dos casi siempre acierta; cuando no, es que
+        // se ha equivocado de identificador, y aplicar el cambio al juego
+        // equivocado sería el peor final posible.
+        if let Some(name) = selector.name.as_deref().map(str::trim)
+            && !name.is_empty()
+            && !matching::same_game(name, &title)
+        {
+            return Err(AppError::validation(format!(
+                "El AppID {app_id} es de «{title}», no de «{name}». Indica sólo uno de los dos."
+            )));
+        }
         return Ok(GameResolution::Ready(AffectedGame { app_id, title }));
     }
     let name = selector

@@ -113,6 +113,17 @@ pub fn resolve(query: &str, catalog: &[GameIndexEntry]) -> GameMatch {
     GameMatch::Ambiguous(scored)
 }
 
+/// ¿Se refieren estos dos textos al mismo juego?
+///
+/// Sirve para corroborar, no para buscar: cuando llegan a la vez un AppID y un
+/// nombre, esto comprueba que hablen de lo mismo antes de tocar nada. El umbral
+/// es generoso a propósito —«Nexomon» contra «Nexomon: Extinction» cuenta— y lo
+/// que descarta es lo que de verdad no se parece.
+pub fn same_game(name: &str, title: &str) -> bool {
+    const CORROBORATION_THRESHOLD: f64 = 0.55;
+    score(&normalize(name), &normalize(title)) >= CORROBORATION_THRESHOLD
+}
+
 /// Puntuación de similitud entre dos cadenas ya normalizadas.
 pub fn score(query: &str, title: &str) -> f64 {
     if query.is_empty() || title.is_empty() {
