@@ -8,6 +8,15 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **Los próximos lanzamientos ya tienen de dónde salir.** El motor que aprende tus gustos y
+  puntúa candidatos existía, y la pantalla que los enseña también, pero nadie rellenaba la tabla
+  de candidatos: la sección quedaba vacía por muy bien que funcionara todo lo demás. Ahora salen
+  de **tu lista de deseados**, que es la única fuente honesta a mano —son juegos que marcaste tú,
+  no novedades que a Vindexa se le ocurran—: se revisa por tandas cuáles siguen sin publicarse,
+  según lo que declara su ficha oficial, y se guardan con la fecha tal cual la publica la tienda.
+  Cuando sólo dice «Q4 2026», eso es lo que se guarda, marcado como no exacta: inventar una fecha
+  sería peor que no tenerla. Medido sobre una lista real: de los primeros 60 deseados revisados,
+  19 seguían sin salir.
 - **Apartado de Agentes en Ajustes.** El puente que permite a un agente externo ordenar tu
   biblioteca —registrar sesiones, cambiar estados, crear colecciones, planificar— llevaba tiempo
   escrito en Rust, pero no había forma de emitirle un testigo, así que no se podía usar. Ahora se

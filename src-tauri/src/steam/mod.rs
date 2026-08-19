@@ -12,6 +12,7 @@ pub mod openid;
 pub mod secrets;
 pub mod store_api;
 pub mod store_assets;
+pub mod upcoming;
 pub mod web_api;
 pub mod wishlist;
 pub mod wishlist_session;

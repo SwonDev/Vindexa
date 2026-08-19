@@ -147,6 +147,7 @@ pub fn run() {
             commands::set_priority_lock,
             commands::list_priority_ranking,
             commands::learn_taste,
+            commands::refresh_upcoming_releases,
             commands::record_taste_feedback,
             commands::score_upcoming_releases,
             commands::list_upcoming_releases,

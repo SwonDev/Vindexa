@@ -1148,6 +1148,20 @@ pub async fn learn_taste(state: State<'_, AppState>) -> AppResult<TasteReport> {
     database_write(&state, move |database| database.learn_taste()).await
 }
 
+/// Revisa una tanda de tu lista de deseados y guarda los que aún no han salido.
+///
+/// Es lo que da de comer al motor de gustos: sin candidatos no hay nada que
+/// puntuar. Va por tandas porque cada ficha cuesta una petición a la tienda, y
+/// devuelve cuántos quedan para que la interfaz pueda decirlo en vez de dejar a
+/// la persona adivinando si ya está.
+#[tauri::command]
+pub async fn refresh_upcoming_releases(
+    state: State<'_, AppState>,
+) -> AppResult<steam::upcoming::UpcomingRefreshReport> {
+    let database = state.database.clone();
+    steam::upcoming::refresh_from_wishlist(&database).await
+}
+
 #[tauri::command]
 pub async fn record_taste_feedback(
     state: State<'_, AppState>,

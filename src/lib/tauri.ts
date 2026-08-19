@@ -88,6 +88,7 @@ import type {
   TasteSurface,
   TasteVerdict,
   UpcomingRelease,
+  UpcomingRefreshReport,
   UpdateCheckResult,
   UpdateCuratedItemInput,
   UpdateGameInput,
@@ -236,6 +237,8 @@ export const api = {
   recordTasteFeedback: (appId: number, verdict: TasteVerdict, surface: TasteSurface) =>
     invoke<void>("record_taste_feedback", { appId, verdict, surface }),
   scoreUpcomingReleases: () => invoke<number>("score_upcoming_releases"),
+  /** Revisa una tanda de deseados y guarda los que aún no han salido. */
+  refreshUpcomingReleases: () => invoke<UpcomingRefreshReport>("refresh_upcoming_releases"),
   upcomingReleases: (limit?: number) =>
     invoke<UpcomingRelease[]>("list_upcoming_releases", { limit }),
   dismissUpcomingRelease: (appId: number) => invoke<void>("dismiss_upcoming_release", { appId }),

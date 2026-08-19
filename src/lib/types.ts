@@ -1485,3 +1485,20 @@ export interface FamilySyncReport {
   /** La cuenta no pertenece a ninguna Familia. No es un fallo. */
   noFamily: boolean;
 }
+
+/**
+ * Resultado de revisar una tanda de la lista de deseados buscando juegos que
+ * todavía no han salido.
+ */
+export interface UpcomingRefreshReport {
+  /** Deseados revisados en esta pasada. */
+  checked: number;
+  /** De ellos, cuántos siguen sin publicarse. */
+  upcoming: number;
+  inserted: number;
+  updated: number;
+  /** Fichas que la tienda no devolvió. No es un error: hay juegos retirados. */
+  unavailable: number;
+  /** Cuántos deseados quedan por revisar en pasadas siguientes. */
+  pending: number;
+}

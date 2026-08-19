@@ -125,6 +125,25 @@ pub struct StoreMetadataBundle {
     /// trae `price_overview` —gratuito, sin publicar o retirado—, que no es lo
     /// mismo que un precio de cero.
     pub price: Option<PriceObservation>,
+    /// Si el juego todavía no ha salido, y con qué fecha lo anuncia la tienda.
+    pub release: ReleaseWindow,
+}
+
+/// Lo que la tienda dice sobre la salida de un juego.
+///
+/// `metadata.release_date` sólo se rellena cuando la fecha es una fecha de
+/// verdad, así que un `None` allí no distingue «todavía no ha salido» de «la
+/// fecha venía ilegible». Aquí van las dos cosas por separado, que es lo que
+/// hace falta para saber si un juego es un próximo lanzamiento.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseWindow {
+    /// Lo declara la propia ficha; no se deduce de la fecha.
+    pub coming_soon: bool,
+    /// La etiqueta tal cual la publica la tienda: «Q4 2026», «Próximamente»,
+    /// «18 ABR 2011». Se conserva literal porque para lo que no tiene fecha
+    /// exacta es lo único que hay, e inventar una sería peor que no tenerla.
+    pub label: Option<String>,
 }
 
 #[derive(Debug)]
@@ -733,11 +752,26 @@ fn parse_store_bundle(app_id: u32, bytes: &[u8]) -> AppResult<StoreBundleOutcome
         .transpose()?
         .flatten();
 
+    let release = data
+        .release_date
+        .as_ref()
+        .map(|value| ReleaseWindow {
+            coming_soon: value.coming_soon,
+            label: value
+                .date
+                .as_deref()
+                .map(str::trim)
+                .filter(|label| !label.is_empty())
+                .map(str::to_owned),
+        })
+        .unwrap_or_default();
+
     Ok(StoreBundleOutcome::Found(Box::new(StoreMetadataBundle {
         metadata,
         rich,
         content_descriptors,
         price,
+        release,
     })))
 }
 

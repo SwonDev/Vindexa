@@ -15,6 +15,7 @@ vi.mock("@/lib/tauri", () => ({
     upcomingReleases: vi.fn(),
     dismissUpcomingRelease: vi.fn(),
     scoreUpcomingReleases: vi.fn(),
+    refreshUpcomingReleases: vi.fn(),
     recordTasteFeedback: vi.fn(),
     learnTaste: vi.fn(),
     listGames: vi.fn(),
@@ -107,6 +108,14 @@ describe("próximos lanzamientos puntuados", () => {
     mockedApi.dismissUpcomingRelease.mockResolvedValue(undefined);
     mockedApi.learnTaste.mockResolvedValue(report);
     mockedApi.scoreUpcomingReleases.mockResolvedValue(2);
+    mockedApi.refreshUpcomingReleases.mockResolvedValue({
+      checked: 60,
+      upcoming: 3,
+      inserted: 3,
+      updated: 0,
+      unavailable: 1,
+      pending: 881,
+    });
   });
 
   it("nunca muestra una puntuación sin la razón que la sostiene", async () => {
@@ -179,9 +188,12 @@ describe("próximos lanzamientos puntuados", () => {
     await user.click(screen.getByRole("button", { name: /Recalcular/ }));
 
     await waitFor(() => expect(mockedApi.scoreUpcomingReleases).toHaveBeenCalledTimes(1));
+    // Traer candidatos va antes de aprender: sin ellos no hay nada que puntuar.
+    const broughtAt = mockedApi.refreshUpcomingReleases.mock.invocationCallOrder[0] as number;
     // Puntuar lee los pesos que acaba de escribir el aprendizaje: al revés se
     // puntuaría contra el modelo anterior.
     const learnedAt = mockedApi.learnTaste.mock.invocationCallOrder[0] as number;
+    expect(broughtAt).toBeLessThan(learnedAt);
     const scoredAt = mockedApi.scoreUpcomingReleases.mock.invocationCallOrder[0] as number;
     expect(learnedAt).toBeLessThan(scoredAt);
 

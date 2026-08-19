@@ -125,15 +125,24 @@ export function UpcomingReleasesBlock() {
    */
   const recompute = useMutation({
     mutationFn: async () => {
+      // Primero se traen candidatos, luego se aprende y por último se puntúa.
+      // Sin el primer paso no hay nada que puntuar: los candidatos salen de tu
+      // lista de deseados, y hasta que no se revisan no se sabe cuáles siguen
+      // sin publicarse. Va por tandas porque cada ficha cuesta una petición.
+      const brought = await api.refreshUpcomingReleases();
       const learned = await api.learnTaste();
       const count = await api.scoreUpcomingReleases();
-      return { learned, count };
+      return { brought, learned, count };
     },
-    onSuccess: async ({ learned, count }) => {
+    onSuccess: async ({ brought, learned, count }) => {
       setReport(learned);
       setScored(count);
+      const pendientes =
+        brought.pending > 0
+          ? ` Quedan ${brought.pending.toLocaleString("es-ES")} deseados por revisar: vuelve a recalcular para seguir.`
+          : "";
       setAnnouncement(
-        `Modelo recalculado con ${learned.gamesAnalyzed} juegos y ${learned.facetsLearned} facetas. ${count} candidatos vueltos a puntuar.`,
+        `Revisados ${brought.checked} deseados, ${brought.upcoming} siguen sin salir. Modelo recalculado con ${learned.gamesAnalyzed} juegos y ${learned.facetsLearned} facetas. ${count} candidatos vueltos a puntuar.${pendientes}`,
       );
       await refreshList();
     },
