@@ -6,6 +6,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
+import { AnimatedNumber } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -118,7 +119,13 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
       <div className="library-toolbar__primary">
         <div className="library-title">
           <h1 title={props.title}>{props.title}</h1>
-          {typeof props.total === "number" && <span>{props.total.toLocaleString("es-ES")}</span>}
+          {typeof props.total === "number" && (
+            /* Cuenta hacia el nuevo valor al filtrar o buscar: el número deja
+               de saltar y se ve de dónde a dónde ha ido. */
+            <span>
+              <AnimatedNumber value={props.total} />
+            </span>
+          )}
         </div>
         <label className="search-field" htmlFor="library-search">
           <IconSearch aria-hidden="true" size={16} />

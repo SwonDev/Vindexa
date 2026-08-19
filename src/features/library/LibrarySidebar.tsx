@@ -14,6 +14,7 @@ import {
   IconUsersGroup,
 } from "@tabler/icons-react";
 import { useState } from "react";
+import { AnimatedNumber, PressableSurface } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -221,23 +222,31 @@ function SidebarItem({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          ref={setNodeRef}
-          type="button"
-          className="sidebar-item"
-          data-active={active}
-          data-drop-target={Boolean(dropId && !dropDisabled && draggingGames)}
-          data-drop-over={isOver && !dropDisabled}
-          data-drop-rejected={isOver && dropDisabled}
-          data-drop-disabled={Boolean(dropId && dropDisabled && draggingGames)}
-          aria-label={label}
-          aria-describedby={draggingGames ? restrictionId : undefined}
-          onClick={onClick}
-        >
-          <ItemIcon aria-hidden="true" size={15} style={{ color: iconColor }} />
-          <span>{label}</span>
-          {typeof count === "number" && <data value={count}>{count.toLocaleString("es-ES")}</data>}
-        </button>
+        <PressableSurface asChild>
+          <button
+            ref={setNodeRef}
+            type="button"
+            className="sidebar-item"
+            data-active={active}
+            data-drop-target={Boolean(dropId && !dropDisabled && draggingGames)}
+            data-drop-over={isOver && !dropDisabled}
+            data-drop-rejected={isOver && dropDisabled}
+            data-drop-disabled={Boolean(dropId && dropDisabled && draggingGames)}
+            aria-label={label}
+            aria-describedby={draggingGames ? restrictionId : undefined}
+            onClick={onClick}
+          >
+            <ItemIcon aria-hidden="true" size={15} style={{ color: iconColor }} />
+            <span>{label}</span>
+            {typeof count === "number" && (
+              /* El recuento se mueve cuando cambia: sincronizar una tienda o
+               clasificar un juego se nota aquí sin tener que buscarlo. */
+              <data value={count}>
+                <AnimatedNumber value={count} />
+              </data>
+            )}
+          </button>
+        </PressableSurface>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
       {restrictionId && (

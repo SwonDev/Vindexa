@@ -46,7 +46,11 @@ describe("barra lateral de biblioteca", () => {
     // El recuento del catálogo de Family se ve **sin** haber entrado: sale del
     // arranque. Cuando dependía del listado del propio ámbito, había que entrar
     // para ver el número que te dice que hay algo dentro.
-    expect(screen.getByText("17")).toBeVisible();
+    // Ídem que en la barra de herramientas: el contador lleva un doble oculto
+    // que reserva el ancho, así que se mira el que se lee.
+    expect(
+      screen.getByText("17", { selector: "[data-slot='animated-number-value']" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /Steam Family/ }));
     expect(onScopeChange).toHaveBeenCalledWith({ kind: "family", label: "Steam Family" });

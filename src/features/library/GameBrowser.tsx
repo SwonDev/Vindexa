@@ -18,6 +18,7 @@ import { Artwork, prefetchArtwork } from "@/components/common/Artwork";
 import type { GameContextAction } from "@/components/common/GameContextMenu";
 import { GameContextMenu } from "@/components/common/GameContextMenu";
 import { ProgressMeter } from "@/components/common/ProgressMeter";
+import { PressableSurface } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -674,56 +675,61 @@ const GameCard = memo(function GameCard({
           {...attributes}
           {...listeners}
         />
-        <button
-          type="button"
-          className="game-card__target"
-          aria-pressed={selected}
-          aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
-          onClick={(event) => {
-            const gesture = selectionGestureFrom(event);
-            onSelect(game, gesture);
-            // Ampliar la selección no debe abrir la ficha por encima de ella.
-            if (gesture === "replace") onOpen(game);
-          }}
-        >
-          <div className="game-card__cover">
-            <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
-            {game.installed ? (
-              <span className="installed-marker" title="Instalado">
-                <IconDownload size={12} /> INSTALADO
-              </span>
-            ) : game.ownershipSource === "family_shared" ? (
-              // Un juego prestado se distingue de uno propio, porque Steam decide
-              // la elegibilidad al abrirlo y puede no dejarte jugarlo. Se marca
-              // igual que «instalado»: sobre la portada y sólo la excepción.
-              <span className="installed-marker" data-family="true" title="Del préstamo familiar">
-                <IconUsersGroup size={12} /> FAMILY
-              </span>
-            ) : null}
-          </div>
-          <div className="game-card__body">
-            <div className="game-card__title-row">
-              <h3 title={game.title}>{game.title}</h3>
-              {game.rating && (
-                <span className="rating" title={`${game.rating} de 10`}>
-                  <IconStarFilled size={11} />
-                  {game.rating}
+        {/* La tarjeta acusa el tacto: sube un píxel al pasar y se hunde al
+            pulsar. El asa de arrastre queda fuera del envoltorio, así que el
+            gesto de mover un juego no se mezcla con el de pulsarlo. */}
+        <PressableSurface asChild>
+          <button
+            type="button"
+            className="game-card__target"
+            aria-pressed={selected}
+            aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
+            onClick={(event) => {
+              const gesture = selectionGestureFrom(event);
+              onSelect(game, gesture);
+              // Ampliar la selección no debe abrir la ficha por encima de ella.
+              if (gesture === "replace") onOpen(game);
+            }}
+          >
+            <div className="game-card__cover">
+              <Artwork appId={game.appId} src={game.coverUrl} title={game.title} />
+              {game.installed ? (
+                <span className="installed-marker" title="Instalado">
+                  <IconDownload size={12} /> INSTALADO
                 </span>
-              )}
+              ) : game.ownershipSource === "family_shared" ? (
+                // Un juego prestado se distingue de uno propio, porque Steam decide
+                // la elegibilidad al abrirlo y puede no dejarte jugarlo. Se marca
+                // igual que «instalado»: sobre la portada y sólo la excepción.
+                <span className="installed-marker" data-family="true" title="Del préstamo familiar">
+                  <IconUsersGroup size={12} /> FAMILY
+                </span>
+              ) : null}
             </div>
-            <div className="game-card__meta">
-              <span className="status-dot" style={{ backgroundColor: game.statusColor }} />
-              {game.statusName}
-              <span>·</span>
-              <span>{formatPlaytime(game.playtimeMinutes)}</span>
+            <div className="game-card__body">
+              <div className="game-card__title-row">
+                <h3 title={game.title}>{game.title}</h3>
+                {game.rating && (
+                  <span className="rating" title={`${game.rating} de 10`}>
+                    <IconStarFilled size={11} />
+                    {game.rating}
+                  </span>
+                )}
+              </div>
+              <div className="game-card__meta">
+                <span className="status-dot" style={{ backgroundColor: game.statusColor }} />
+                {game.statusName}
+                <span>·</span>
+                <span>{formatPlaytime(game.playtimeMinutes)}</span>
+              </div>
+              <ProgressMeter
+                className="game-card__progress"
+                value={game.progress}
+                label={`Progreso de ${game.title}: ${game.progress}%`}
+              />
             </div>
-            <ProgressMeter
-              className="game-card__progress"
-              value={game.progress}
-              label={`Progreso de ${game.title}: ${game.progress}%`}
-            />
-          </div>
-        </button>
+          </button>
+        </PressableSurface>
         <GameMenu
           game={game}
           onOpen={() => onOpen(game)}

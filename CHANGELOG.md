@@ -8,6 +8,13 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **La biblioteca acusa el tacto.** La librería de microinteracciones del proyecto —inspirada en
+  el catálogo de SmoothUI y reescrita para la estética densa y sin rebote de `DESIGN.md`— ya se
+  usaba en Colecciones y en Listas curadas, pero no en la biblioteca. Ahora las tarjetas y las
+  filas de la barra lateral suben un píxel al pasar el puntero y se hunden al pulsar, y los
+  recuentos cuentan hacia su nuevo valor en vez de saltar. Nada altera la caja de su contenedor,
+  así que la rejilla virtualizada sigue midiendo igual, y `prefers-reduced-motion` lo desactiva
+  entero.
 - **Vídeos del juego en su propia ficha.** El panel que ya existía en Deseados —con su
   reproductor sin seguimiento— pasa a estar también en la ficha de cualquier juego de la
   biblioteca, en una pestaña propia. La dirección del marco la construye Rust y apunta a

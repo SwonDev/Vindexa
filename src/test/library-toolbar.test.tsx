@@ -52,7 +52,11 @@ describe("barra de herramientas de biblioteca", () => {
     const user = userEvent.setup();
     render(<ToolbarHarness />);
 
-    expect(screen.getByText("2450")).toBeVisible();
+    // El contador cuenta hacia su valor, y para reservar el ancho lleva un
+    // doble oculto con la cifra final: se comprueba el que se lee, no los dos.
+    expect(
+      screen.getByText("2450", { selector: "[data-slot='animated-number-value']" }),
+    ).toBeVisible();
     const search = screen.getByRole("searchbox", { name: "Buscar en la biblioteca" });
     await user.type(search, "acción cooperativa");
     expect(search).toHaveValue("acción cooperativa");
