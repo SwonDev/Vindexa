@@ -1147,17 +1147,14 @@ input[type="search"]::-webkit-search-results-decoration {
 .library-sort-menu {
   min-width: 254px;
 }
+/* El conmutador de vista es ahora el control segmentado común, que trae su
+   propio indicador deslizante y su propio fondo. Aquí sólo queda lo que la
+   barra necesita: que no crezca y que sus iconos ocupen lo mismo que antes. */
 .view-switcher {
-  display: flex;
-  border: 1px solid #1b222b;
-  background: #202832;
+  flex: 0 0 auto;
 }
-.view-switcher button {
-  border-radius: 0;
-}
-.view-switcher button[data-active="true"] {
-  background: var(--v-surface-selected);
-  color: #f1f5f6;
+.view-switcher [data-slot="segmented-control-option"] {
+  padding-inline: 7px;
 }
 .filters-popover {
   width: min(520px, calc(var(--radix-popover-content-available-width) - 12px));

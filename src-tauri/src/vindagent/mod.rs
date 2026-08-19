@@ -384,10 +384,21 @@ pub async fn chat(
             .send()
             .await
             .map_err(|error| {
-                AppError::new(
-                    "vindagent",
-                    format!("El modelo local no contestó: {error}. ¿Sigue corriendo?"),
-                )
+                // Un plazo agotado y una conexión rechazada son problemas
+                // distintos y se arreglan de forma distinta: decir «no contestó»
+                // a los dos deja a quien lo lee sin saber qué hacer.
+                //
+                // Medido en esta casa: un `llama-server` puede contestar al
+                // listado de modelos y no a una petición porque todavía está
+                // cargando los pesos. Desde fuera parece que está bien.
+                let mensaje = if error.is_timeout() {
+                    "El modelo tardó demasiado en contestar. Si acabas de arrancarlo, puede estar cargándose todavía: espera un minuto y vuelve a intentarlo."
+                } else if error.is_connect() {
+                    "No se pudo conectar con el modelo. Comprueba que su servidor sigue corriendo."
+                } else {
+                    "El modelo local no contestó."
+                };
+                AppError::new("vindagent", format!("{mensaje} ({error})"))
             })?;
         let status = response.status();
         let body = response.text().await.unwrap_or_default();

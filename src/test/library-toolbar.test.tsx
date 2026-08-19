@@ -143,21 +143,28 @@ describe("barra de herramientas de biblioteca", () => {
     expect(screen.getByRole("button", { name: "Restablecer todos los filtros" })).toBeVisible();
   });
 
-  it("expone la vista activa mediante aria-pressed", async () => {
+  it("la vista activa se anuncia y se puede cambiar con el teclado", async () => {
+    // El conmutador es un grupo de radios nativo, no tres botones sueltos: así
+    // el lector de pantalla dice «1 de 3» y las flechas funcionan solas. Lo que
+    // se comprueba es eso, no cómo esté hecho por dentro.
     const user = userEvent.setup();
     render(<ToolbarHarness />);
 
-    const grid = screen.getByRole("button", { name: "Vista de cuadrícula" });
-    const list = screen.getByRole("button", { name: "Vista de lista" });
-    const compact = screen.getByRole("button", { name: "Vista ultracompacta" });
-    expect(grid).toHaveAttribute("aria-pressed", "true");
-    expect(list).toHaveAttribute("aria-pressed", "false");
-    expect(compact).toHaveAttribute("aria-pressed", "false");
+    const grid = screen.getByRole("radio", { name: "Vista de cuadrícula" });
+    const list = screen.getByRole("radio", { name: "Vista de lista" });
+    const compact = screen.getByRole("radio", { name: "Vista ultracompacta" });
+    expect(grid).toBeChecked();
+    expect(list).not.toBeChecked();
+    expect(compact).not.toBeChecked();
 
     await user.click(compact);
-    expect(grid).toHaveAttribute("aria-pressed", "false");
-    expect(list).toHaveAttribute("aria-pressed", "false");
-    expect(compact).toHaveAttribute("aria-pressed", "true");
+    expect(compact).toBeChecked();
+    expect(grid).not.toBeChecked();
+
+    // Las flechas mueven la selección sin tocar el ratón.
+    compact.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(list).toBeChecked();
   });
 
   it("ofrece la matriz Steam-like y conserva la selección controlada", async () => {

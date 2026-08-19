@@ -170,7 +170,6 @@ const TEXTOS = [
   "#ef7777",
   "#f0f4f5",
   "#f18a8a",
-  "#f1f5f6",
   "#f2a2a2",
   "#f2b0b0",
   "#f2b2b2",

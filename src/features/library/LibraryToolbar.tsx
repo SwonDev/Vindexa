@@ -6,7 +6,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { AnimatedNumber } from "@/components/motion";
+import { AnimatedNumber, SegmentedControl } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -219,56 +219,50 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             <TooltipContent>{props.saveViewLabel ?? "Guardar esta vista"}</TooltipContent>
           </Tooltip>
         )}
-        <fieldset className="view-switcher">
-          <legend className="sr-only">
-            {familyMode ? "Vista del catálogo de Steam Family" : "Vista de biblioteca"}
-          </legend>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                data-active={props.view === "grid"}
-                aria-label="Vista de cuadrícula"
-                aria-pressed={props.view === "grid"}
-                onClick={() => props.onViewChange("grid")}
-              >
-                <IconLayoutGrid />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Cuadrícula</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                data-active={props.view === "list"}
-                aria-label="Vista de lista"
-                aria-pressed={props.view === "list"}
-                onClick={() => props.onViewChange("list")}
-              >
-                <IconList />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Lista</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                data-active={props.view === "compact"}
-                aria-label="Vista ultracompacta"
-                aria-pressed={props.view === "compact"}
-                onClick={() => props.onViewChange("compact")}
-              >
-                <IconListDetails />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Ultracompacta</TooltipContent>
-          </Tooltip>
-        </fieldset>
+        {/* El conmutador de vista usa el mismo control segmentado que el
+            resto de la aplicación: el indicador se desliza de una opción a
+            otra en vez de aparecer y desaparecer, que es lo que hace legible
+            el cambio sin mover nada de sitio. Cada opción es un radio nativo,
+            así que las flechas del teclado siguen funcionando. */}
+        <SegmentedControl
+          className="view-switcher"
+          size="sm"
+          label={familyMode ? "Vista del catálogo de Steam Family" : "Vista de biblioteca"}
+          value={props.view}
+          onValueChange={props.onViewChange}
+          options={[
+            {
+              value: "grid",
+              hint: "Cuadrícula",
+              label: (
+                <>
+                  <IconLayoutGrid aria-hidden="true" />
+                  <span className="sr-only">Vista de cuadrícula</span>
+                </>
+              ),
+            },
+            {
+              value: "list",
+              hint: "Lista",
+              label: (
+                <>
+                  <IconList aria-hidden="true" />
+                  <span className="sr-only">Vista de lista</span>
+                </>
+              ),
+            },
+            {
+              value: "compact",
+              hint: "Ultracompacta",
+              label: (
+                <>
+                  <IconListDetails aria-hidden="true" />
+                  <span className="sr-only">Vista ultracompacta</span>
+                </>
+              ),
+            },
+          ]}
+        />
       </div>
     </div>
   );
