@@ -6,6 +6,8 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+## [0.1.4] · 2026-08-19
+
 ### Añadido
 
 - **El arte se completa solo mientras no haces nada.** La rejilla ya adelantaba las carátulas de
