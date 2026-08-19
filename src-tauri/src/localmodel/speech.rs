@@ -101,7 +101,14 @@ struct Transcription {
 
 /// Manda el audio y devuelve lo que se entendió.
 pub async fn transcribe(base_url: &str, audio: Vec<u8>, mime: &str) -> AppResult<String> {
-    if !base_url.starts_with("http://127.0.0.1:") {
+    // Mirar cómo empieza la cadena no vale: `http://127.0.0.1:8767@ajeno.tld/`
+    // empieza por `http://127.0.0.1:` y la petición viaja a otro servidor,
+    // porque lo de delante de la arroba son credenciales. Se analiza la URL y
+    // se mira el anfitrión que de verdad se va a usar.
+    let base = url::Url::parse(base_url).map_err(|_| {
+        AppError::validation("La dirección del transcriptor no es válida.")
+    })?;
+    if base.scheme() != "http" || !crate::vindagent::usable_base(&base) || !crate::vindagent::is_loopback(&base) {
         return Err(AppError::validation(
             "El dictado sólo habla con un transcriptor de este ordenador.",
         ));
@@ -132,8 +139,14 @@ pub async fn transcribe(base_url: &str, audio: Vec<u8>, mime: &str) -> AppResult
         let formulario = reqwest::multipart::Form::new()
             .part("file", parte)
             .text("language", "es");
+        // La ruta se compone sobre la URL ya analizada: así el anfitrión que
+        // manda es el que se comprobó, no el texto original.
+        let Ok(destino) = base.join(ruta) else {
+            ultimo = format!("ruta inválida: {ruta}");
+            continue;
+        };
         let response = match client
-            .post(format!("{base_url}{ruta}"))
+            .post(destino)
             .multipart(formulario)
             .send()
             .await
@@ -178,11 +191,33 @@ mod tests {
 
     #[test]
     fn no_se_manda_la_voz_fuera_del_ordenador() {
-        // Un audio con tu voz es más personal que una lista de juegos.
-        for base in ["https://api.ejemplo.com", "http://192.168.1.9:8767"] {
+        // Un audio con tu voz es más personal que una lista de juegos. Mirar
+        // cómo empieza la cadena dejaba pasar la arroba: lo de delante son
+        // credenciales, no un anfitrión, y la petición viajaba a otro sitio.
+        for base in [
+            "https://api.ejemplo.com",
+            "http://192.168.1.9:8767",
+            "http://127.0.0.1:8767@servidor.ajeno.tld/",
+            "http://localhost:8767@servidor.ajeno.tld/",
+            "http://127.0.0.1.ajeno.tld:8767",
+            "http://127.0.0.1:8767/proxy",
+            "https://127.0.0.1:8767",
+        ] {
             let error = tauri::async_runtime::block_on(transcribe(base, vec![1, 2, 3], "audio/wav"))
                 .expect_err("rechazar");
             assert_eq!(error.code, "validation", "{base}");
+        }
+    }
+
+    #[test]
+    fn si_acepta_un_transcriptor_de_verdad_local() {
+        // Rechazar de más también sería un fallo: lo local tiene que entrar.
+        for base in ["http://127.0.0.1:8767", "http://localhost:8767/", "http://[::1]:8767"] {
+            let error = tauri::async_runtime::block_on(transcribe(base, Vec::new(), "audio/wav"))
+                .expect_err("sin audio siempre falla");
+            // Llega hasta la comprobación del audio, que es la siguiente: eso
+            // significa que la dirección se aceptó.
+            assert!(error.message.contains("No se grabó nada"), "{base}: {}", error.message);
         }
     }
 

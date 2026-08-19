@@ -614,15 +614,32 @@ export function AppShell() {
             ventana y que el doble clic la maximice. El script de Tauri excluye
             solo botones, enlaces y campos, que es justo lo que aquí interesa
             que siga siendo pulsable. */}
-          {/* El doble clic en la parte vacía lo resuelve Vindexa y no el
-              sistema: lo que hace macOS por su cuenta es su *zoom*, que lleva la
-              ventana al tamaño preferido de la aplicación y no al que cabe en la
-              pantalla. Aquí significa lo mismo en las tres plataformas. */}
+          {/* El doble clic en la parte vacía lo resuelve Vindexa, no el sistema.
+              Tauri trae el suyo: en macOS maximiza al soltar y en Windows y
+              Linux al pulsar, y lo que hace es el *zoom* del sistema, que lleva
+              la ventana al tamaño preferido de la aplicación y no al que cabe en
+              la pantalla.
+
+              Los dos gestos a la vez se pisaban —el sistema encogía y Vindexa
+              volvía a estirar—, así que aquí se corta el suyo y se hace el
+              nuestro: el manejador de Tauri escucha en `document`, y detener la
+              propagación en la barra impide que llegue. Sólo se corta el doble
+              clic (`detail === 2`); el arrastre, que es un clic simple, sigue
+              siendo suyo y sigue funcionando igual. */}
           <header
             className="topbar"
             data-tauri-drag-region="deep"
-            onDoubleClick={(event) => {
-              if (!isEmptyChromeTarget(event.target)) return;
+            onMouseDown={(event) => {
+              // Windows y Linux maximizan aquí. Se les quita el turno.
+              if (event.detail === 2 && isEmptyChromeTarget(event.target)) {
+                event.stopPropagation();
+              }
+            }}
+            onMouseUp={(event) => {
+              // macOS maximiza aquí, para poder cancelar el gesto moviendo el
+              // ratón. Se le quita el turno y se hace lo que se pidió.
+              if (event.detail !== 2 || !isEmptyChromeTarget(event.target)) return;
+              event.stopPropagation();
               void toggleFitWindow();
             }}
           >
