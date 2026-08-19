@@ -239,3 +239,95 @@
 .agent-audit li[data-result="undone"] {
   box-shadow: inset 2px 0 0 var(--v-subtle);
 }
+
+/* -----------------------------------------------------------------------------
+   Conexión automática con los agentes del ordenador.
+
+   Es lo primero que se ve en la sección porque es lo que ocurre solo: qué se ha
+   encontrado y qué quedó conectado. Misma caja con borde lateral que el resto
+   del panel, sin colores nuevos.
+   -------------------------------------------------------------------------- */
+
+.agent-autolink {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-cyan);
+  background: var(--v-surface-raised);
+}
+
+.agent-autolink__switch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.agent-autolink__switch strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-autolink__switch p {
+  max-width: 62ch;
+  margin: 3px 0 0;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-autolink__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-autolink__list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.agent-autolink__list strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+/* La ruta puede ser larguísima y no puede empujar el estado fuera de la caja. */
+.agent-autolink__list span {
+  display: block;
+  overflow: hidden;
+  color: var(--v-subtle);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-autolink__state {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-autolink__state[data-kind="linked"] {
+  color: var(--v-success);
+}
+
+.agent-autolink__state[data-kind="pending"] {
+  color: var(--v-muted);
+}
+
+.agent-autolink__state svg {
+  width: 13px;
+  height: 13px;
+}

@@ -174,9 +174,20 @@ export function AgentsPanel() {
         <h3>Agentes</h3>
         <p>
           Un agente puede ordenar tu biblioteca en tu nombre: registrar lo que has jugado, cambiar
-          estados, crear colecciones o planificar. Le das un testigo y decides exactamente qué puede
-          tocar. Vindexa no abre ningún puerto para esto: el agente entra por un proceso que lanza
-          la propia aplicación.
+          estados, crear colecciones o planificar. Vindexa busca sola los agentes que tengas
+          instalados y se conecta a ellos; desde ahí puedes pedirle cosas hablando, también desde
+          los canales que ese agente ya tenga. No se abre ningún puerto: el agente arranca un
+          proceso de Vindexa y le habla por su propia tubería.
+        </p>
+      </div>
+
+      <AutolinkSection />
+
+      <div className="settings-heading">
+        <h4>Conectar otro agente a mano</h4>
+        <p>
+          Para un agente que Vindexa todavía no reconozca. Emite un testigo, marca qué le dejas
+          hacer y pégalo en su configuración de servidores MCP.
         </p>
       </div>
 
@@ -359,4 +370,88 @@ export function AgentsPanel() {
       </article>
     );
   }
+}
+
+/**
+ * Lo que Vindexa ha conectado sola.
+ *
+ * # Por qué no hay un botón de «conectar»
+ *
+ * Dar de alta un servidor MCP es copiar un comando largo con un secreto dentro,
+ * y repetirlo cada vez que la aplicación se mueve o se actualiza. Eso no es una
+ * decisión: es un trámite. Vindexa lo hace al arrancar y lo rehace si algo deja
+ * de cuadrar. Aquí sólo se cuenta qué encontró, qué dejó conectado y desde
+ * cuándo, con un interruptor por si alguien prefiere que no toque nada.
+ */
+function AutolinkSection() {
+  const queryClient = useQueryClient();
+  const estado = useQuery({
+    queryKey: ["agent", "autolink"],
+    queryFn: api.agentAutolinkState,
+    staleTime: 10_000,
+  });
+  const cambiar = useMutation({
+    mutationFn: (disabled: boolean) => api.setAgentAutolinkDisabled(disabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent", "autolink"] }),
+  });
+
+  if (estado.isPending) {
+    return <p className="settings-hint">Buscando agentes en este ordenador…</p>;
+  }
+  if (estado.isError || !estado.data) {
+    return <p className="settings-hint">No se pudo comprobar qué agentes hay instalados.</p>;
+  }
+
+  const { hosts, links, disabled } = estado.data;
+  const instalados = hosts.filter((host) => host.path);
+
+  return (
+    <div className="agent-autolink">
+      <div className="agent-autolink__switch">
+        <div>
+          <strong>Conectar agentes automáticamente</strong>
+          <p>
+            Al abrir Vindexa se buscan los agentes instalados y se conectan solos. Si la aplicación
+            cambia de sitio o el testigo caduca, el enlace se rehace sin que tengas que hacer nada.
+          </p>
+        </div>
+        <Switch
+          aria-label="Conectar agentes automáticamente"
+          checked={!disabled}
+          disabled={cambiar.isPending}
+          onCheckedChange={(value) => cambiar.mutate(!value)}
+        />
+      </div>
+
+      {instalados.length === 0 ? (
+        <p className="settings-hint">
+          No se ha encontrado ningún agente compatible. Vindexa reconoce Hermes y Claude Code; con
+          cualquier otro que hable MCP, usa el comando de más abajo.
+        </p>
+      ) : (
+        <ul className="agent-autolink__list">
+          {instalados.map((host) => {
+            const link = links.find((record) => record.hostId === host.id);
+            return (
+              <li key={host.id} data-linked={Boolean(link)}>
+                <div>
+                  <strong>{host.label}</strong>
+                  <span>{host.path}</span>
+                </div>
+                {link ? (
+                  <span className="agent-autolink__state" data-kind="linked">
+                    <IconCheck aria-hidden="true" /> Conectado {formatRelativeDate(link.linkedAt)}
+                  </span>
+                ) : (
+                  <span className="agent-autolink__state" data-kind="pending">
+                    {disabled ? "Automatismo apagado" : "Se conectará al reiniciar Vindexa"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }

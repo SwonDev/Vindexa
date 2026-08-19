@@ -319,12 +319,14 @@ pub const TOOLS: &[Tool] = &[
 /// Herramienta aparte: no es una intención, sino el reverso de todas.
 pub const UNDO_TOOL: Tool = Tool {
     name: "deshacer",
-    description: "Deshace un cambio que tú mismo hiciste, usando el «undoToken» que devolvió esa llamada. Sólo puedes deshacer lo tuyo.",
+    description: "Deshace un cambio que tú mismo hiciste. Pasa el «auditId» que devolvió esa llamada —o el que aparece en «consultar» con kind=auditoria—; el «undoToken» también vale, pero el identificador es más corto y más difícil de copiar mal. Sólo puedes deshacer lo tuyo.",
     schema: || {
         json!({
             "type": "object",
-            "properties": { "undoToken": { "type": "string" } },
-            "required": ["undoToken"]
+            "properties": {
+                "auditId": { "type": "string", "description": "Identificador de la acción a deshacer. Es lo más cómodo." },
+                "undoToken": { "type": "string", "description": "Alternativa: el token que devolvió la llamada." }
+            }
         })
     },
 };

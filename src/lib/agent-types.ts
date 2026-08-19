@@ -178,3 +178,33 @@ export interface AgentRequest {
   utterance?: string;
   intent: AgentIntent;
 }
+
+/**
+ * Un agente compatible que puede estar instalado en este ordenador.
+ *
+ * `path` a `null` significa que no está: entonces no se emite ningún testigo
+ * para él, porque una credencial que nadie tiene sólo sirve para caducar mal.
+ */
+export interface AgentHost {
+  id: string;
+  label: string;
+  path: string | null;
+  /** Comando que se ejecutaría, sin el testigo dentro. */
+  commandPreview: string;
+}
+
+/** Alta que Vindexa dejó hecha en un agente. */
+export interface AgentLinkRecord {
+  hostId: string;
+  clientId: string;
+  /** Ruta registrada. Si deja de coincidir, el alta se rehace sola. */
+  command: string;
+  linkedAt: string;
+}
+
+/** Qué hay instalado, qué está conectado y si el automatismo sigue encendido. */
+export interface AgentAutolinkStatus {
+  disabled: boolean;
+  links: AgentLinkRecord[];
+  hosts: AgentHost[];
+}

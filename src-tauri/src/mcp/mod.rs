@@ -125,6 +125,10 @@ pub fn run() -> i32 {
     }
     let database = Database::new(path);
     let limiter = RateLimiter::default();
+    // El testigo se lee una vez, aquí. Más adentro se pasa como argumento: leer
+    // el entorno en mitad de la lógica la vuelve imposible de probar sin que las
+    // pruebas se pisen entre ellas.
+    let token = std::env::var(TOKEN_ENV).ok();
 
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
@@ -134,7 +138,7 @@ pub fn run() -> i32 {
         if line.is_empty() {
             continue;
         }
-        let Some(response) = handle_line(&database, &limiter, line) else {
+        let Some(response) = handle_line(&database, &limiter, token.as_deref(), line) else {
             // Una notificación no lleva respuesta. Contestar a una sería
             // romper el protocolo.
             continue;
@@ -150,7 +154,12 @@ pub fn run() -> i32 {
 }
 
 /// Procesa una línea. `None` significa «era una notificación, no contestes».
-fn handle_line(database: &Database, limiter: &RateLimiter, line: &str) -> Option<Value> {
+fn handle_line(
+    database: &Database,
+    limiter: &RateLimiter,
+    token: Option<&str>,
+    line: &str,
+) -> Option<Value> {
     let message: Value = match serde_json::from_str(line) {
         Ok(value) => value,
         Err(error) => {
@@ -172,7 +181,7 @@ fn handle_line(database: &Database, limiter: &RateLimiter, line: &str) -> Option
         "initialize" => success(id, initialize_result()),
         "ping" => success(id, json!({})),
         "tools/list" => success(id, tools_list()),
-        "tools/call" => match call_tool(database, limiter, &params) {
+        "tools/call" => match call_tool(database, limiter, token, &params) {
             Ok(value) => success(id, value),
             Err(message) => success(id, tool_error(&message)),
         },
@@ -219,7 +228,12 @@ fn tools_list() -> Value {
 
 /// Ejecuta una herramienta. El `Err` es un mensaje para el agente, no un fallo
 /// del protocolo: por eso viaja como resultado con `isError`.
-fn call_tool(database: &Database, limiter: &RateLimiter, params: &Value) -> Result<Value, String> {
+fn call_tool(
+    database: &Database,
+    limiter: &RateLimiter,
+    token: Option<&str>,
+    params: &Value,
+) -> Result<Value, String> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -228,7 +242,7 @@ fn call_tool(database: &Database, limiter: &RateLimiter, params: &Value) -> Resu
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let token = std::env::var(TOKEN_ENV).map_err(|_| {
+    let token = token.filter(|value| !value.trim().is_empty()).ok_or_else(|| {
         format!(
             "Falta el testigo. Emite uno en Vindexa → Ajustes → Agentes y pásalo en {TOKEN_ENV}."
         )
@@ -238,15 +252,25 @@ fn call_tool(database: &Database, limiter: &RateLimiter, params: &Value) -> Resu
         .map_err(|error| format!("No se pudo abrir la biblioteca: {}", error.message))?;
 
     if name == tools::UNDO_TOOL.name {
-        let undo_token = arguments
-            .get("undoToken")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "Falta «undoToken».".to_owned())?;
         // Quien deshace es el propio cliente: el puente comprueba que el cambio
         // fuera suyo, así que un agente no puede deshacer lo de otro.
-        let client = crate::agent::clients::authenticate(&connection, &token)
+        let client = crate::agent::clients::authenticate(&connection, token)
             .map_err(|error| error.message.clone())?;
-        let outcome = bridge::undo(&mut connection, undo_token, &Requester::Client(client.id))
+        // Se admite el identificador de la acción además del testigo: repetir
+        // sesenta y cuatro caracteres al azar es justo lo que un modelo hace
+        // mal, y el identificador ya viaja en la auditoría.
+        let undo_token = match arguments.get("undoToken").and_then(Value::as_str) {
+            Some(value) if !value.trim().is_empty() => value.to_owned(),
+            _ => {
+                let audit_id = arguments
+                    .get("auditId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "Falta «undoToken» o «auditId».".to_owned())?;
+                crate::agent::audit::undo_token_for_client(&connection, audit_id, &client.id)
+                    .map_err(|error| error.message.clone())?
+            }
+        };
+        let outcome = bridge::undo(&mut connection, &undo_token, &Requester::Client(client.id))
             .map_err(|error| error.message.clone())?;
         return Ok(tool_result(&outcome_to_json(&outcome)));
     }
@@ -265,7 +289,7 @@ fn call_tool(database: &Database, limiter: &RateLimiter, params: &Value) -> Resu
     let intent = serde_json::from_value(payload)
         .map_err(|error| format!("Los argumentos no encajan con la herramienta: {error}"))?;
     let request = AgentRequest {
-        token,
+        token: token.to_owned(),
         utterance: String::new(),
         intent,
     };
@@ -431,6 +455,7 @@ mod tests {
         let respuesta = handle_line(
             &database,
             &limiter,
+            None,
             r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
         );
         assert!(respuesta.is_none());
@@ -481,14 +506,12 @@ mod tests {
         // Es el caso que motiva todo esto: «he estado dos horas con X y voy por
         // el 40 %» tiene que acabar en una fila de la base, no en un resumen.
         let (_directory, database, token) = base_con_agente();
-        // SAFETY: la prueba corre en un proceso propio y nadie más lee esta
-        // variable mientras tanto.
-        unsafe { std::env::set_var(TOKEN_ENV, &token) };
         let limiter = RateLimiter::default();
 
         let respuesta = handle_line(
             &database,
             &limiter,
+            Some(token.as_str()),
             r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"registrar_sesion","arguments":{"game":{"name":"DragonsWord Awakening"},"minutes":120,"progress":40}}}"#,
         )
         .expect("tools/call contesta");
@@ -518,17 +541,59 @@ mod tests {
             )
             .expect("leer ficha");
         assert_eq!(personal, 40, "el progreso dictado llega a la ficha");
-        unsafe { std::env::remove_var(TOKEN_ENV) };
+    }
+
+    #[test]
+    fn se_puede_deshacer_por_identificador_sin_repetir_el_testigo() {
+        // Medido contra un modelo local: al repetir el testigo de sesenta y
+        // cuatro caracteres se dejó ocho por el camino y el deshacer falló por
+        // un motivo que no tenía nada que ver con lo que se le pedía. El
+        // identificador de la acción es un UUID y ya viaja en la auditoría.
+        let (_directory, database, token) = base_con_agente();
+        let limiter = RateLimiter::default();
+
+        let aplicado = handle_line(
+            &database,
+            &limiter,
+            Some(token.as_str()),
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"registrar_sesion","arguments":{"game":{"appId":4242},"minutes":30}}}"#,
+        )
+        .expect("registra");
+        let texto = aplicado["result"]["content"][0]["text"].as_str().expect("texto");
+        let cuerpo: Value = serde_json::from_str(texto).expect("json");
+        let audit_id = cuerpo["auditId"].as_str().expect("identificador").to_owned();
+
+        let deshecho = handle_line(
+            &database,
+            &limiter,
+            Some(token.as_str()),
+            &format!(
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"deshacer","arguments":{{"auditId":"{audit_id}"}}}}}}"#
+            ),
+        )
+        .expect("deshace");
+        let detalle = deshecho["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        assert_eq!(deshecho["result"]["isError"], json!(false), "{detalle}");
+
+        let connection = database.open().expect("abrir");
+        let sesiones: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM game_sessions WHERE app_id = 4242",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar");
+        assert_eq!(sesiones, 0, "la sesión deshecha no puede seguir ahí");
     }
 
     #[test]
     fn sin_testigo_no_se_toca_nada() {
         let (_directory, database, _token) = base_con_agente();
-        unsafe { std::env::remove_var(TOKEN_ENV) };
         let limiter = RateLimiter::default();
         let respuesta = handle_line(
             &database,
             &limiter,
+            None,
             r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"cambiar_estado","arguments":{"game":{"appId":4242},"statusId":"playing"}}}"#,
         )
         .expect("contesta");
@@ -542,6 +607,7 @@ mod tests {
         let respuesta = handle_line(
             &database,
             &limiter,
+            None,
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
         )
         .expect("initialize contesta");
@@ -553,6 +619,7 @@ mod tests {
         let listado = handle_line(
             &database,
             &limiter,
+            None,
             r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
         )
         .expect("tools/list contesta");

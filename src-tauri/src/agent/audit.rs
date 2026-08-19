@@ -280,6 +280,38 @@ pub struct UndoableAction {
 }
 
 /// Localiza una acción por su token de deshacer.
+/// Testigo de deshacer de una acción propia, buscado por su identificador.
+///
+/// # Por qué existe
+///
+/// El testigo son sesenta y cuatro caracteres al azar. Un modelo que tiene que
+/// repetirlos de memoria se come alguno —medido: perdió ocho— y el deshacer
+/// falla por un motivo que no tiene nada que ver con lo que se pedía. El
+/// identificador de la acción sí lo puede manejar: es un UUID que además ya
+/// aparece en la auditoría.
+///
+/// No debilita nada: se exige que la acción sea **de ese cliente** y que siga
+/// aplicada, que es exactamente lo que comprueba el deshacer normal.
+pub fn undo_token_for_client(
+    connection: &Connection,
+    audit_id: &str,
+    client_id: &str,
+) -> AppResult<String> {
+    connection
+        .query_row(
+            "SELECT undo_token
+               FROM agent_audit_log
+              WHERE id = ?1 AND client_id = ?2 AND result = 'applied'
+                AND undo_token IS NOT NULL",
+            [audit_id, client_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .ok_or_else(|| {
+            AppError::not_found("No hay ninguna acción tuya aplicada con ese identificador.")
+        })
+}
+
 pub fn find_undoable(connection: &Connection, undo_token: &str) -> AppResult<UndoableAction> {
     if undo_token.trim().is_empty() || undo_token.len() > 256 {
         return Err(AppError::validation("El token de deshacer no es válido."));

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SavedLibraryView, SaveViewInput } from "@/features/library/library-views";
 import type {
   AgentAuditEntry,
+  AgentAutolinkStatus,
   AgentClientSummary,
   AgentOutcome,
   AgentRequest,
@@ -372,6 +373,9 @@ export const api = {
   setAgentClientEnabled: (clientId: string, enabled: boolean) =>
     invoke<AgentClientSummary>("set_agent_client_enabled", { clientId, enabled }),
   revokeAgentClient: (clientId: string) => invoke<void>("revoke_agent_client", { clientId }),
+  agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),
+  setAgentAutolinkDisabled: (disabled: boolean) =>
+    invoke<void>("set_agent_autolink_disabled", { disabled }),
   listAgentClients: () => invoke<AgentClientSummary[]>("list_agent_clients"),
   listAgentAudit: (limit: number) => invoke<AgentAuditEntry[]>("list_agent_audit", { limit }),
 };
