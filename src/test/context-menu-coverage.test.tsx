@@ -62,3 +62,31 @@ describe("el clic derecho llega a toda la aplicación", () => {
     ]);
   });
 });
+
+/**
+ * Dónde tiene que haber vista rápida.
+ *
+ * Una carátula dice cómo se llama un juego; no dice cómo se ve. Eso hace falta
+ * en todas las listas donde se decide algo —la biblioteca, los deseados, las
+ * ofertas, los lanzamientos, las colecciones, el plan y el radar—, no sólo en
+ * la que se estaba mirando el día que se añadió.
+ *
+ * Igual que con el clic derecho: la decisión es de la aplicación entera, así
+ * que la cobertura se enumera y se comprueba.
+ */
+const CON_VISTA_RAPIDA: Record<string, string> = {
+  "features/library/GameBrowser.tsx": "cada juego de la biblioteca, en rejilla y en lista",
+  "features/collections/CollectionsScreen.tsx": "cada juego dentro de una colección",
+  "features/planner/PlannerScreen.tsx": "cada tarjeta del plan",
+  "features/wishlist/WishlistList.tsx": "cada fila de deseados",
+  "features/wishlist/WishlistBoard.tsx": "cada oferta de tu lista",
+  "features/discovery/DiscoveryScreen.tsx": "cada juego del radar",
+  "features/discovery/UpcomingReleasesBlock.tsx": "cada lanzamiento previsto",
+  "features/discovery/StoreDealsBlock.tsx": "cada oferta de la tienda",
+};
+
+describe("la vista rápida llega a todas las listas donde se decide algo", () => {
+  it.each(Object.entries(CON_VISTA_RAPIDA))("%s → %s", (archivo) => {
+    expect(readFileSync(`src/${archivo}`, "utf8")).toContain("<GamePreviewCard");
+  });
+});

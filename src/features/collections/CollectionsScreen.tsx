@@ -36,6 +36,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { GameContextMenu } from "@/components/common/GameContextMenu";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
   AnimatedNumber,
@@ -998,24 +999,43 @@ function CollectionDetail({
                     onCopyTitle={acciones.onCopyTitle}
                     onCopyAppId={acciones.onCopyAppId}
                   >
-                    <PressableSurface asChild liftPx={1}>
-                      <button
-                        type="button"
-                        className="collection-games__open"
-                        aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
-                        onClick={() => onOpenGame(game.appId)}
-                      >
-                        <span className="collection-games__cover" aria-hidden="true">
-                          <Artwork
-                            appId={game.appId}
-                            src={game.coverUrl}
-                            title={game.title}
-                            kind="cover"
-                          />
-                        </span>
-                        <span className="collection-games__title">{game.title}</span>
-                      </button>
-                    </PressableSurface>
+                    {/* Sus capturas al detenerse: dentro de una colección, la
+                        fila es una carátula de veinticuatro píxeles y un título. */}
+                    <GamePreviewCard
+                      appId={game.appId}
+                      title={game.title}
+                      fallback={
+                        <Artwork
+                          appId={game.appId}
+                          src={game.coverUrl}
+                          title={game.title}
+                          kind="cover"
+                        />
+                      }
+                      facts={[
+                        { label: "Estado", value: game.statusName },
+                        { label: "Progreso", value: `${game.progress} %` },
+                      ]}
+                    >
+                      <PressableSurface asChild liftPx={1}>
+                        <button
+                          type="button"
+                          className="collection-games__open"
+                          aria-label={`${game.title}, ${game.statusName}, ${game.progress}%`}
+                          onClick={() => onOpenGame(game.appId)}
+                        >
+                          <span className="collection-games__cover" aria-hidden="true">
+                            <Artwork
+                              appId={game.appId}
+                              src={game.coverUrl}
+                              title={game.title}
+                              kind="cover"
+                            />
+                          </span>
+                          <span className="collection-games__title">{game.title}</span>
+                        </button>
+                      </PressableSurface>
+                    </GamePreviewCard>
                   </GameContextMenu>
                   <span className="collection-games__meta">
                     <span

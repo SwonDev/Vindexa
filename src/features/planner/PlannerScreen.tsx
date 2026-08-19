@@ -34,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { EmptyState } from "@/components/common/EmptyState";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { LoadingState } from "@/components/common/LoadingState";
 import { MetricStrip } from "@/components/common/MetricStrip";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -768,15 +769,34 @@ function SortablePlannerCard({
       onOpenDetail={onOpenDetail}
       onSaveItem={onEdit}
     >
-      <div
-        ref={setNodeRef}
-        style={{ transform: CSS.Transform.toString(transform), transition }}
-        data-dragging={isDragging}
-        // El gesto de puntero vive en el contenedor: toda la tarjeta arrastra.
-        onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLDivElement>}
+      {/* Sus capturas al detenerse. Se apaga durante el arrastre: un emergente
+          siguiendo al puntero mientras se mueve una tarjeta estorba. */}
+      <GamePreviewCard
+        appId={item.appId}
+        title={item.title}
+        disabled={isDragging}
+        fallback={
+          <Artwork appId={item.appId} src={item.coverUrl} title={item.title} kind="cover" />
+        }
+        facts={[
+          { label: "Progreso", value: `${item.progress} %` },
+          ...(item.objective ? [{ label: "Objetivo", value: item.objective }] : []),
+          ...(item.estimatedMinutes
+            ? [{ label: "Estimado", value: formatPlaytime(item.estimatedMinutes) }]
+            : []),
+          ...(item.targetDate ? [{ label: "Fecha", value: formatDate(item.targetDate) }] : []),
+        ]}
       >
-        <PlannerCard item={item} dragProps={{ ...attributes, ...listeners }} onEdit={onEdit} />
-      </div>
+        <div
+          ref={setNodeRef}
+          style={{ transform: CSS.Transform.toString(transform), transition }}
+          data-dragging={isDragging}
+          // El gesto de puntero vive en el contenedor: toda la tarjeta arrastra.
+          onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLDivElement>}
+        >
+          <PlannerCard item={item} dragProps={{ ...attributes, ...listeners }} onEdit={onEdit} />
+        </div>
+      </GamePreviewCard>
     </PlannerCardContextMenu>
   );
 }
