@@ -1,4 +1,5 @@
 mod agent;
+mod mcp;
 mod art_cache;
 mod browser;
 mod commands;
@@ -17,6 +18,65 @@ use std::fs;
 use std::sync::{Arc, Mutex as StdMutex};
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
+
+/// Conecta Vindexa a un agente local desde la terminal.
+///
+/// Hace lo mismo que el botón de Ajustes → Agentes: emite un testigo con los
+/// ámbitos indicados y da de alta el servidor MCP en ese agente. Existe además
+/// como orden porque hay quien prepara su máquina sin abrir ventanas, y porque
+/// una instalación desatendida no puede depender de un clic.
+///
+/// El testigo no se imprime: viaja directo al proceso del agente.
+pub fn run_connect_agent(host_id: &str, scopes: &[String]) -> i32 {
+    let Some(path) = mcp::database_path() else {
+        eprintln!("Vindexa: no se pudo determinar dónde vive la base de datos.");
+        return 1;
+    };
+    let database = db::Database::new(path);
+    let scopes: Vec<String> = if scopes.is_empty() {
+        agent::scope::ALL_SCOPES
+            .iter()
+            .map(|scope| scope.as_str().to_owned())
+            .collect()
+    } else {
+        scopes.to_vec()
+    };
+    let input = agent::NewAgentClient {
+        name: host_id.to_owned(),
+        kind: if host_id == "hermes" { "hermes" } else { "generic" }.to_owned(),
+        scopes,
+    };
+    let issued = match database
+        .open()
+        .and_then(|mut connection| {
+            agent::clients::issue(&mut connection, &input, agent::TokenPolicy::default())
+        }) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Vindexa: no se pudo emitir el testigo: {}", error.message);
+            return 1;
+        }
+    };
+    match agent::hosts::connect(host_id, &issued.token) {
+        Ok(message) => {
+            println!("{message}");
+            0
+        }
+        Err(error) => {
+            eprintln!("Vindexa: {}", error.message);
+            1
+        }
+    }
+}
+
+/// Arranca Vindexa como servidor MCP en vez de como ventana.
+///
+/// Es la puerta por la que un agente local conduce la biblioteca hablando. Vive
+/// en el mismo binario a propósito: así el empaquetado lo lleva solo y nunca se
+/// queda desfasado respecto a la aplicación con la que comparte base de datos.
+pub fn run_mcp() -> i32 {
+    mcp::run()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -38,6 +98,41 @@ pub fn run() {
             {
                 art_cache::set_max_cache_bytes(u64::from(preferences.art_cache_mib) * 1024 * 1024);
             }
+            // Vindexa se conecta sola a los agentes que encuentre: detecta, da
+            // de alta y repara el enlace si la aplicación ha cambiado de sitio.
+            // En un hilo aparte porque hablar con un agente puede tardar y la
+            // ventana no puede esperar a eso para aparecer.
+            {
+                let database = database.clone();
+                std::thread::spawn(move || {
+                    // Al arrancar, la base está ocupada con las migraciones y la
+                    // recuperación. Esto no tiene ninguna prisa: espera a que
+                    // pase el temporal y reintenta un par de veces antes de
+                    // rendirse, porque «la base estaba ocupada» no es un motivo
+                    // para quedarse sin agente hasta el siguiente arranque.
+                    for espera in [4_u64, 15, 45] {
+                        std::thread::sleep(std::time::Duration::from_secs(espera));
+                        match agent::autolink::reconcile(&database) {
+                            Ok(report) => {
+                                for label in &report.linked {
+                                    eprintln!("Vindexa: conectada a {label}.");
+                                }
+                                for failure in &report.failed {
+                                    eprintln!("Vindexa: no se pudo conectar a {failure}");
+                                }
+                                return;
+                            }
+                            Err(error) => {
+                                eprintln!(
+                                    "Vindexa: el enlace con agentes no pudo completarse ({}); se reintentará.",
+                                    error.message
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+
             let startup_recovery = db::recovery::StartupRecovery::prepare(database.clone());
             let metadata_enrichment =
                 Arc::new(steam::metadata_enrichment::MetadataEnrichmentCoordinator::default());
@@ -222,6 +317,10 @@ pub fn run() {
             commands::agent_undo,
             commands::agent_undo_as_client,
             commands::issue_agent_client,
+            commands::detect_agent_hosts,
+            commands::agent_autolink_state,
+            commands::set_agent_autolink_disabled,
+            commands::connect_agent_host,
             commands::rotate_agent_token,
             commands::set_agent_client_scopes,
             commands::set_agent_client_enabled,

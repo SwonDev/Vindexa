@@ -169,7 +169,7 @@ export function AgentsPanel() {
   const busy = issue.isPending || rotate.isPending || revoke.isPending;
 
   return (
-    <section className="agents-panel">
+    <section className="settings-section agents-panel">
       <div className="settings-heading">
         <h3>Agentes</h3>
         <p>

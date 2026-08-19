@@ -59,6 +59,7 @@ import {
 } from "@/features/shell/interface-density";
 import { onLibraryCommand } from "@/features/shell/shortcuts";
 import { formatDate, formatPlaytime } from "@/lib/format";
+import { storeShortLabel } from "@/lib/stores";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { CollectionSummary, GameSummary, LibraryView, StatusDefinition } from "@/lib/types";
 
@@ -87,6 +88,9 @@ function rowMarks(game: GameSummary): string[] {
   const marks: string[] = [];
   if (game.installed) marks.push("Instalado");
   if (game.isEarlyAccess) marks.push("Early Access");
+  // De qué tienda viene, cuando no es Steam. En «Todos los juegos» conviven las
+  // cuatro y no había forma de distinguirlas sin entrar en cada una.
+  if (game.externalStore) marks.push(storeShortLabel(game.externalStore));
   if (game.drmState === "drm_free") marks.push("Sin DRM");
   return marks;
 }

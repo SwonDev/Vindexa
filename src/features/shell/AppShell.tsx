@@ -35,6 +35,7 @@ import {
   SHORTCUTS_CHANGED_EVENT,
   shortcutLabel,
 } from "@/features/shell/shortcuts";
+import { ToastProvider } from "@/features/shell/toasts";
 import { fitWindowToAvailableSpace } from "@/features/shell/window-chrome";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
@@ -590,184 +591,191 @@ export function AppShell() {
 
   return (
     <InterfaceDensityContext.Provider value={density}>
-      <div className="app-shell" data-platform={platform} data-density={density}>
-        <span className="sr-only" role="status" aria-live="polite">
-          {syncAnnouncement}
-        </span>
-        {/* `deep` hace que cualquier zona inerte de la barra arrastre la
+      {/* Los avisos envuelven a toda la carcasa: lo que se lanza desde un menú
+          contextual, desde la barra lateral o desde una pantalla se cuenta en
+          el mismo sitio y de la misma manera. */}
+      <ToastProvider>
+        <div className="app-shell" data-platform={platform} data-density={density}>
+          <span className="sr-only" role="status" aria-live="polite">
+            {syncAnnouncement}
+          </span>
+          {/* `deep` hace que cualquier zona inerte de la barra arrastre la
             ventana y que el doble clic la maximice. El script de Tauri excluye
             solo botones, enlaces y campos, que es justo lo que aquí interesa
             que siga siendo pulsable. */}
-        <header className="topbar" data-tauri-drag-region="deep">
-          <div className="brand">
-            <span className="brand__name">VINDEXA</span>
-            <span className="brand__edition">DESKTOP</span>
-          </div>
-          <nav className="primary-nav" aria-label="Secciones principales">
-            {sections.map(({ id, label, icon: SectionIcon }) => (
-              <button
-                key={id}
-                type="button"
-                className="primary-nav__item"
-                data-active={section === id}
-                aria-current={section === id ? "page" : undefined}
-                aria-label={label}
-                onClick={() => setSection(id)}
-              >
-                <SectionIcon aria-hidden="true" size={16} stroke={1.8} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="topbar__actions">
-            {steamAccount && steamHealth ? (
+          <header className="topbar" data-tauri-drag-region="deep">
+            <div className="brand">
+              <span className="brand__name">VINDEXA</span>
+              <span className="brand__edition">DESKTOP</span>
+            </div>
+            <nav className="primary-nav" aria-label="Secciones principales">
+              {sections.map(({ id, label, icon: SectionIcon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="primary-nav__item"
+                  data-active={section === id}
+                  aria-current={section === id ? "page" : undefined}
+                  aria-label={label}
+                  onClick={() => setSection(id)}
+                >
+                  <SectionIcon aria-hidden="true" size={16} stroke={1.8} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="topbar__actions">
+              {steamAccount && steamHealth ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="account-chip"
+                      type="button"
+                      data-sync-state={steamHealth.state}
+                      aria-label={`${steamHealth.label}. Abrir ajustes de Steam`}
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      {steamAccount.avatarUrl ? (
+                        <img src={steamAccount.avatarUrl} alt="" />
+                      ) : (
+                        <IconBrandSteam aria-hidden="true" size={15} />
+                      )}
+                      <span className="account-chip__label">{steamHealth.compactLabel}</span>
+                      <span
+                        className="presence-dot"
+                        data-state={steamHealth.state}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {steamHealth.state === "failed" && steamAccount.lastSyncErrorMessage
+                      ? steamAccount.lastSyncErrorMessage
+                      : `${steamHealth.label}.`}{" "}
+                    Abrir ajustes
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="sync-status">
+                  <i /> Solo local
+                </span>
+              )}
+              <NotificationsPopover />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    className="account-chip"
-                    type="button"
-                    data-sync-state={steamHealth.state}
-                    aria-label={`${steamHealth.label}. Abrir ajustes de Steam`}
-                    onClick={() => setSettingsOpen(true)}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Entrar en el modo sofá"
+                    onClick={() => setSection("couch")}
                   >
-                    {steamAccount.avatarUrl ? (
-                      <img src={steamAccount.avatarUrl} alt="" />
-                    ) : (
-                      <IconBrandSteam aria-hidden="true" size={15} />
-                    )}
-                    <span className="account-chip__label">{steamHealth.compactLabel}</span>
-                    <span
-                      className="presence-dot"
-                      data-state={steamHealth.state}
-                      aria-hidden="true"
-                    />
-                  </button>
+                    <IconDeviceGamepad2 />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {steamHealth.state === "failed" && steamAccount.lastSyncErrorMessage
-                    ? steamAccount.lastSyncErrorMessage
-                    : `${steamHealth.label}.`}{" "}
-                  Abrir ajustes
+                  Modo sofá <kbd>{shortcutLabel(shortcuts.couchMode)}</kbd>
                 </TooltipContent>
               </Tooltip>
-            ) : (
-              <span className="sync-status">
-                <i /> Solo local
-              </span>
-            )}
-            <NotificationsPopover />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Entrar en el modo sofá"
-                  onClick={() => setSection("couch")}
-                >
-                  <IconDeviceGamepad2 />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Modo sofá <kbd>{shortcutLabel(shortcuts.couchMode)}</kbd>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Abrir la paleta de comandos"
-                  onClick={() => openPalette()}
-                >
-                  <IconCommand />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Paleta de comandos <kbd>{shortcutLabel(shortcuts.commandPalette)}</kbd>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Actualizar datos"
-                  onClick={() => queryClient.invalidateQueries()}
-                  disabled={bootstrapQuery.isFetching}
-                >
-                  <IconRefresh className={bootstrapQuery.isFetching ? "is-spinning" : undefined} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Actualizar datos</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Abrir ajustes"
-                  onClick={() => setSettingsOpen(true)}
-                >
-                  <IconSettings />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Ajustes <kbd>⌘,</kbd>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </header>
-        <main className="app-content">
-          <Suspense fallback={<LoadingState label="Abriendo sección" />}>{content}</Suspense>
-        </main>
-        {/* La barra de estado sólo existe cuando tiene algo que decir.
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Abrir la paleta de comandos"
+                    onClick={() => openPalette()}
+                  >
+                    <IconCommand />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Paleta de comandos <kbd>{shortcutLabel(shortcuts.commandPalette)}</kbd>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Actualizar datos"
+                    onClick={() => queryClient.invalidateQueries()}
+                    disabled={bootstrapQuery.isFetching}
+                  >
+                    <IconRefresh
+                      className={bootstrapQuery.isFetching ? "is-spinning" : undefined}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Actualizar datos</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Abrir ajustes"
+                    onClick={() => setSettingsOpen(true)}
+                  >
+                    <IconSettings />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Ajustes <kbd>⌘,</kbd>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </header>
+          <main className="app-content">
+            <Suspense fallback={<LoadingState label="Abriendo sección" />}>{content}</Suspense>
+          </main>
+          {/* La barra de estado sólo existe cuando tiene algo que decir.
             Repetía tres cosas que ya están en pantalla —el recuento de la
             biblioteca, el estado de Steam y el detalle de SQLite— y a cambio se
             comía una fila de alto en todas las pantallas. Ahora enseña trabajo
             en curso y avisos, que es lo único que no se ve en ningún otro
             sitio, y cuando no hay ni una cosa ni otra desaparece. */}
-        {statusNotices.length > 0 && (
-          <footer className="statusbar" role="status">
-            {statusNotices.map((notice) => (
-              <span key={notice.id} data-kind={notice.kind}>
-                {notice.text}
-              </span>
-            ))}
-          </footer>
-        )}
-        {paletteOpen && (
-          <Suspense fallback={null}>
-            <CommandPalette
-              open={paletteOpen}
-              onOpenChange={setPaletteOpen}
-              bindings={shortcuts}
-              section={section}
-              density={density}
-              context={paletteContext}
-              initialQuery={paletteQuery}
-              onNavigate={setSection}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onSync={runSteamSync}
-              onSetDensity={changeDensity}
-              onClearArtCache={clearArtCache}
-              onMaintainArtCache={maintainArtCache}
-            />
-          </Suspense>
-        )}
-        {settingsOpen && (
-          <Suspense fallback={null}>
-            <SettingsDialog
-              open={settingsOpen}
-              onOpenChange={(open) => {
-                setSettingsOpen(open);
-                if (!open) setSettingsSection(undefined);
-              }}
-              bootstrap={bootstrap}
-              initialSection={settingsSection}
-            />
-          </Suspense>
-        )}
-      </div>
+          {statusNotices.length > 0 && (
+            <footer className="statusbar" role="status">
+              {statusNotices.map((notice) => (
+                <span key={notice.id} data-kind={notice.kind}>
+                  {notice.text}
+                </span>
+              ))}
+            </footer>
+          )}
+          {paletteOpen && (
+            <Suspense fallback={null}>
+              <CommandPalette
+                open={paletteOpen}
+                onOpenChange={setPaletteOpen}
+                bindings={shortcuts}
+                section={section}
+                density={density}
+                context={paletteContext}
+                initialQuery={paletteQuery}
+                onNavigate={setSection}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onSync={runSteamSync}
+                onSetDensity={changeDensity}
+                onClearArtCache={clearArtCache}
+                onMaintainArtCache={maintainArtCache}
+              />
+            </Suspense>
+          )}
+          {settingsOpen && (
+            <Suspense fallback={null}>
+              <SettingsDialog
+                open={settingsOpen}
+                onOpenChange={(open) => {
+                  setSettingsOpen(open);
+                  if (!open) setSettingsSection(undefined);
+                }}
+                bootstrap={bootstrap}
+                initialSection={settingsSection}
+              />
+            </Suspense>
+          )}
+        </div>
+      </ToastProvider>
     </InterfaceDensityContext.Provider>
   );
 }

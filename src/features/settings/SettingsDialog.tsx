@@ -28,6 +28,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CopyableValue } from "@/components/motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -352,7 +353,15 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
             )}
             <div>
               <strong>{account.personaName ?? "Cuenta de Steam"}</strong>
-              <span>SteamID64 · {account.steamId}</span>
+              {/* Un SteamID64 son diecisiete cifras: copiarlo a mano de una
+                  pantalla es justo el tipo de trabajo que no debería existir. */}
+              <span>
+                SteamID64 ·{" "}
+                <CopyableValue
+                  value={account.steamId}
+                  label={`Copiar el SteamID64 ${account.steamId}`}
+                />
+              </span>
               <span>Última sincronización · {formatDate(account.lastSyncAt)}</span>
             </div>
           </div>

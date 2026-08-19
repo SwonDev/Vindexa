@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { formatBytes, formatDate, formatRelativeDate } from "@/lib/format";
+import { storeLabel } from "@/lib/stores";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
   ExternalGame,
@@ -62,10 +63,6 @@ function scanSummary(report: ExternalStoreScanReport): string {
 
 function scansSummary(reports: ExternalStoreScanReport[]): string {
   return reports.map((report) => `${storeLabel(report.store)}: ${scanSummary(report)}`).join(" ");
-}
-
-function storeLabel(store: ExternalStoreId): string {
-  return store === "epic" ? "Epic Games Store" : "GOG";
 }
 
 /**

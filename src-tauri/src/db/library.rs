@@ -85,7 +85,7 @@ const GAME_SELECT: &str = "
              WHERE cg.app_id = g.app_id) AS collection_ids,
            g.genres_json, g.developer,
            g.platform_windows, g.platform_mac, g.platform_linux,
-           g.drm_state
+           g.external_store, g.drm_state
       FROM games g
       JOIN game_personal p ON p.app_id = g.app_id
       JOIN statuses s ON s.id = p.status_id
@@ -879,7 +879,8 @@ fn map_game_summary(row: &Row<'_>) -> rusqlite::Result<GameSummary> {
         platform_windows: row.get::<_, Option<i64>>(36)?.map(|value| value != 0),
         platform_mac: row.get::<_, Option<i64>>(37)?.map(|value| value != 0),
         platform_linux: row.get::<_, Option<i64>>(38)?.map(|value| value != 0),
-        drm_state: row.get(39)?,
+        external_store: row.get(39)?,
+        drm_state: row.get(40)?,
     })
 }
 

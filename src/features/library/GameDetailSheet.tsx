@@ -67,6 +67,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import "@/features/library/game-detail.css";
+import { CopyableValue } from "@/components/motion";
 import { DLC_SUMMARY_STALE_MS, GameDlcPanel } from "@/features/library/GameDlcPanel";
 import { PersonalJournal } from "@/features/library/PersonalJournal";
 import { PriorityExplanation } from "@/features/library/PriorityExplanation";
@@ -78,6 +79,7 @@ import {
   formatRelativeDate,
   formatSteamDeckStatus,
 } from "@/lib/format";
+import { storeLabel } from "@/lib/stores";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { CollectionSummary, GameDetail, StatusDefinition, UpdateGameInput } from "@/lib/types";
 
@@ -516,7 +518,24 @@ export function GameDetailSheet({
                 </Badge>
               </div>
               <SheetHeader>
-                <Eyebrow>STEAM · APP {detail.appId}</Eyebrow>
+                {/* Un juego de Epic, GOG o itch.io no tiene AppID: el número
+                    que lleva se lo inventa Vindexa para poder organizarlo, y
+                    enseñarlo como «APP de Steam» era afirmar algo falso. Ahí se
+                    nombra la tienda; el AppID sólo aparece cuando es de verdad,
+                    y entonces se puede copiar de un clic. */}
+                {detail.externalStore ? (
+                  <Eyebrow>{storeLabel(detail.externalStore).toUpperCase()}</Eyebrow>
+                ) : (
+                  <Eyebrow>
+                    <span className="detail-appid">
+                      STEAM · APP{" "}
+                      <CopyableValue
+                        value={String(detail.appId)}
+                        label={`Copiar el AppID ${detail.appId}`}
+                      />
+                    </span>
+                  </Eyebrow>
+                )}
                 <SheetTitle>{detail.title}</SheetTitle>
                 <SheetDescription>
                   {[detail.developer, detail.releaseDate && formatDate(detail.releaseDate)]

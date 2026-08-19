@@ -960,45 +960,6 @@ kbd {
   width: 16px;
   height: 16px;
 }
-/* El resultado de lo que se lanza desde un menú contextual. El menú se cierra
-   al elegir, así que sin esto una sincronización que falla no se ve en ningún
-   sitio. Vive al pie de la barra lateral, pegado a lo que la disparó. */
-.sidebar-feedback {
-  position: sticky;
-  bottom: 0;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding: 8px 10px;
-  border-top: 1px solid var(--border);
-  background: var(--v-surface-raised);
-  color: var(--foreground);
-  font-size: 12px;
-  line-height: 1.35;
-}
-.sidebar-feedback[data-kind="success"] > svg:first-child {
-  color: var(--v-success);
-}
-.sidebar-feedback[data-kind="error"] > svg:first-child {
-  color: var(--v-error);
-}
-.sidebar-feedback[data-kind="pending"] > svg:first-child {
-  color: var(--v-cyan);
-}
-.sidebar-feedback__close {
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--v-muted);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-}
-.sidebar-feedback__close:hover {
-  color: var(--foreground);
-}
 /* La opción activa se reconoce sin depender del color, que aquí es contenido. */
 [data-selected="true"] {
   font-weight: 600;

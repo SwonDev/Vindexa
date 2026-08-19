@@ -323,6 +323,12 @@ pub struct GameSummary {
     /// ficha completa de cada juego.
     pub genres: Vec<String>,
     pub developer: Option<String>,
+    /// Tienda que vendió el juego cuando no es Steam: `epic`, `gog` o `itch`.
+    ///
+    /// Sin esto, la ficha de un juego de Epic decía «STEAM · APP 2000000002»:
+    /// un identificador que Vindexa se inventa para poder organizarlo y que en
+    /// Steam no significa nada. Enseñarlo era afirmar algo falso.
+    pub external_store: Option<String>,
     /// Cómo se protege el juego: `drm_free`, `third_party_drm`, `steam_drm` o
     /// `unknown`.
     ///

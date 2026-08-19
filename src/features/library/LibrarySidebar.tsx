@@ -2,19 +2,16 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  IconAlertTriangle,
   IconBook2,
   IconBuildingStore,
-  IconCheck,
   IconChevronDown,
   IconDeviceGamepad2,
   IconGripVertical,
-  IconLoader2,
   IconPlus,
   IconSquareFilled,
   IconUsersGroup,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { AnimatedNumber, PressableSurface } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,14 +26,29 @@ import {
   StatusContextMenu,
   StoreContextMenu,
 } from "@/features/library/SidebarContextMenus";
+import { useToast } from "@/features/shell/toasts";
+import { storeShortLabel } from "@/lib/stores";
 import type { AppBootstrap } from "@/lib/types";
 import { collectionDropId, collectionOrderDragId, statusDropId } from "./library-dnd";
 
+/**
+ * Identidad del aviso de sincronización.
+ *
+ * Es fija a propósito: así «Sincronizando Epic Games Store…» se convierte en su
+ * resultado en el mismo sitio, en vez de apilar dos avisos que dicen lo mismo.
+ */
+const SYNC_TOAST = "sidebar-store-sync";
+
+/** Un aviso de trabajo en marcha no se cierra solo: todavía no hay resultado. */
+function pendingToast(message: string) {
+  return { message, kind: "info" as const, autoDismissMs: 0 };
+}
+
 /** Tiendas que pueden aparecer como ámbito, con el nombre que se les enseña. */
 const EXTERNAL_STORES = [
-  { id: "epic", label: "Epic Games", icon: IconBuildingStore },
-  { id: "gog", label: "GOG", icon: IconBuildingStore },
-  { id: "itch", label: "itch.io", icon: IconBuildingStore },
+  { id: "epic", label: storeShortLabel("epic"), icon: IconBuildingStore },
+  { id: "gog", label: storeShortLabel("gog"), icon: IconBuildingStore },
+  { id: "itch", label: storeShortLabel("itch"), icon: IconBuildingStore },
 ] as const;
 
 export interface LibraryScope {
@@ -75,13 +87,18 @@ export function LibrarySidebar({
     readLibrarySectionExpanded("statuses"),
   );
   // Un menú contextual se cierra al elegir, así que lo que tarda —sincronizar
-  // una tienda— tiene que contarse aquí fuera o no se cuenta en ningún sitio.
-  const [notice, setNotice] = useState<SidebarNotice | undefined>(undefined);
-  useEffect(() => {
-    if (notice?.kind !== "success") return;
-    const timeout = window.setTimeout(() => setNotice(undefined), 6_000);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
+  // una tienda— se cuenta en la pila de avisos de la aplicación, que sabe
+  // sustituir «sincronizando…» por su resultado y no cierra un error solo.
+  const toast = useToast();
+  const notify = useCallback(
+    (notice: SidebarNotice | undefined) => {
+      if (!notice) return;
+      if (notice.kind === "pending")
+        toast.show({ id: SYNC_TOAST, ...pendingToast(notice.message) });
+      else toast.show({ id: SYNC_TOAST, message: notice.message, kind: notice.kind });
+    },
+    [toast],
+  );
   const selected = (kind: LibraryScope["kind"], id?: string) =>
     scope.kind === kind && scope.id === id;
   return (
@@ -122,7 +139,7 @@ export function LibrarySidebar({
               key={store.id}
               storeId={store.id}
               storeLabel={store.label}
-              onNotice={setNotice}
+              onNotice={notify}
             >
               <SidebarItem
                 active={scope.kind === "store" && scope.id === store.id}
@@ -213,35 +230,6 @@ export function LibrarySidebar({
           </div>
         </SortableContext>
       </div>
-      {notice && (
-        <div
-          className="sidebar-feedback"
-          data-kind={notice.kind}
-          role={notice.kind === "error" ? "alert" : "status"}
-          aria-live={notice.kind === "error" ? "assertive" : "polite"}
-        >
-          {notice.kind === "pending" ? (
-            <IconLoader2 className="is-spinning" aria-hidden="true" />
-          ) : notice.kind === "success" ? (
-            <IconCheck aria-hidden="true" />
-          ) : (
-            <IconAlertTriangle aria-hidden="true" />
-          )}
-          <span>{notice.message}</span>
-          {/* Un error se queda hasta que se cierra: lo que ha fallado no puede
-              desaparecer solo mientras nadie mira. */}
-          {notice.kind !== "pending" && (
-            <button
-              type="button"
-              className="sidebar-feedback__close"
-              aria-label="Descartar aviso"
-              onClick={() => setNotice(undefined)}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
     </aside>
   );
 }

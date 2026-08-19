@@ -222,6 +222,13 @@ export interface GameSummary {
    * interfaz no puede desaconsejar una instalación.
    */
   /**
+   * Tienda que vendió el juego cuando no es Steam: `epic`, `gog` o `itch`.
+   *
+   * Con esto la ficha deja de llamar «APP de Steam» a un identificador que
+   * Vindexa se inventa para poder organizar un juego que Steam no conoce.
+   */
+  externalStore?: string | null;
+  /**
    * Cómo se protege el juego: `drm_free`, `third_party_drm`, `steam_drm` o
    * `unknown` —que significa «aún no se ha comprobado», no «lleva DRM»—.
    */

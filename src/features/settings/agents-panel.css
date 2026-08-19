@@ -6,9 +6,12 @@
    3 px, misma densidad y ningún color literal: todo sale de los tokens.
    -------------------------------------------------------------------------- */
 
+/* Compone con `settings-section`, que es quien pone el margen con los bordes
+   del diálogo. Sin esa clase el panel se pegaba a los lados y desentonaba con
+   el resto de Ajustes; aquí sólo se separa un poco más porque sus bloques son
+   cajas con borde, no párrafos sueltos. */
 .agents-panel {
-  display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 /* El testigo se enseña una vez. El bloque avisa de eso con el mismo lenguaje

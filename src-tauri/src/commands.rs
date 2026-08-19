@@ -2547,6 +2547,62 @@ pub async fn issue_agent_client(
     .await
 }
 
+/// Qué agentes compatibles hay en este ordenador.
+///
+/// Es sólo lectura: mira si el ejecutable existe y monta el comando que se
+/// usaría. No conecta nada ni ejecuta nada.
+#[tauri::command]
+pub async fn detect_agent_hosts() -> AppResult<Vec<agent::hosts::AgentHost>> {
+    agent::hosts::detect()
+}
+
+/// Qué agentes tiene Vindexa conectados ahora mismo, y si el automatismo está
+/// encendido. Es lo que enseña Ajustes → Agentes.
+#[tauri::command]
+pub async fn agent_autolink_state(
+    state: State<'_, AppState>,
+) -> AppResult<agent::autolink::AutolinkStatus> {
+    database_read(&state, move |database| {
+        let connection = database.open()?;
+        Ok(agent::autolink::AutolinkStatus {
+            disabled: agent::autolink::disabled(&connection),
+            links: agent::autolink::state(&connection),
+            hosts: agent::hosts::detect()?,
+        })
+    })
+    .await
+}
+
+/// Enciende o apaga el enlace automático con agentes.
+#[tauri::command]
+pub async fn set_agent_autolink_disabled(
+    state: State<'_, AppState>,
+    disabled: bool,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        agent::autolink::set_disabled(&database.open()?, disabled)
+    })
+    .await
+}
+
+/// Emite un testigo y da de alta Vindexa en el agente indicado.
+///
+/// Las dos cosas van juntas a propósito: un testigo emitido y no entregado no
+/// sirve para nada, y entregarlo a mano obliga a copiar un secreto por pantalla.
+/// El testigo no vuelve a la interfaz: va directo al proceso del agente.
+#[tauri::command]
+pub async fn connect_agent_host(
+    state: State<'_, AppState>,
+    host_id: String,
+    input: NewAgentClient,
+) -> AppResult<String> {
+    let issued = database_read(&state, move |database| {
+        agent::clients::issue(&mut database.open()?, &input, agent::TokenPolicy::default())
+    })
+    .await?;
+    agent::hosts::connect(&host_id, &issued.token)
+}
+
 #[tauri::command]
 pub async fn rotate_agent_token(
     state: State<'_, AppState>,

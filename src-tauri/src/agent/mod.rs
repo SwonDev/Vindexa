@@ -20,6 +20,8 @@
 //! | [`audit`] | Registro auditable en `agent_audit_log` |
 //! | [`executor`] | Resolución y ejecución transaccional |
 //! | [`bridge`] | API pública que consumen los comandos Tauri |
+//! | [`hosts`] | Agentes instalados en el ordenador y su alta por MCP |
+//! | [`autolink`] | Alta automática: detecta, conecta y repara sin intervención |
 //!
 //! ## Invariantes
 //!
@@ -33,10 +35,12 @@
 //! 7. La confirmación humana ocurre en Vindexa, no en el agente.
 
 pub mod audit;
+pub mod autolink;
 pub mod bridge;
 pub mod clients;
 pub mod crypto;
 pub mod executor;
+pub mod hosts;
 pub mod intent;
 pub mod matching;
 pub mod ratelimit;
