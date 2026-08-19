@@ -2241,3 +2241,69 @@ fn las_sesiones_tambien_dicen_cuantas_hay() {
     assert_eq!(data["matched"], serde_json::json!(12), "{data}");
     assert_eq!(data["truncated"], serde_json::json!(true), "{data}");
 }
+
+/// Rehacer un enlace cuyo registro local se perdió.
+///
+/// # El fallo
+///
+/// El alta automática usa el nombre del agente («Hermes»). Si el archivo de
+/// estado del enlace desaparece —una copia restaurada, un borrado— el nombre
+/// sigue ocupado en la base y `issue` devuelve «ya existe un cliente con ese
+/// nombre». Ese error abortaba la reconciliación entera, así que la aplicación
+/// se quedaba **sin agente para siempre**, repitiendo el mismo fallo en cada
+/// arranque. Medido en la instalación real: dos intentos por arranque, los dos
+/// con el mismo mensaje.
+#[test]
+fn un_nombre_ya_ocupado_se_retira_para_poder_rehacer_el_enlace() {
+    let mut fixture = fixture();
+    let primero = clients::issue(
+        &mut fixture.connection,
+        &NewAgentClient {
+            name: "Hermes".to_string(),
+            kind: "hermes".to_string(),
+            scopes: vec!["biblioteca:leer".to_string()],
+        },
+        TokenPolicy::for_tests(),
+    )
+    .expect("primer alta");
+
+    // Sin retirar el anterior, el alta con el mismo nombre falla.
+    let choque = clients::issue(
+        &mut fixture.connection,
+        &NewAgentClient {
+            name: "Hermes".to_string(),
+            kind: "hermes".to_string(),
+            scopes: vec!["biblioteca:leer".to_string()],
+        },
+        TokenPolicy::for_tests(),
+    );
+    assert!(choque.is_err(), "el nombre está ocupado");
+
+    let retirado = clients::revoke_by_name(&mut fixture.connection, "hermes")
+        .expect("retirar por nombre")
+        .expect("había uno");
+    assert_eq!(retirado, primero.client.id, "se retira el que ocupaba el nombre");
+
+    let segundo = clients::issue(
+        &mut fixture.connection,
+        &NewAgentClient {
+            name: "Hermes".to_string(),
+            kind: "hermes".to_string(),
+            scopes: vec!["biblioteca:leer".to_string()],
+        },
+        TokenPolicy::for_tests(),
+    )
+    .expect("el alta entra tras retirar el anterior");
+    assert_ne!(segundo.client.id, primero.client.id);
+}
+
+#[test]
+fn retirar_un_nombre_que_no_existe_no_es_un_fallo() {
+    // Es el caso normal del primer arranque: no hay nada que retirar y eso no
+    // puede impedir el alta.
+    let mut fixture = fixture();
+    assert_eq!(
+        clients::revoke_by_name(&mut fixture.connection, "Nadie").expect("no falla"),
+        None
+    );
+}

@@ -34,8 +34,28 @@ pub struct HostSpec {
     pub binary: &'static str,
     /// Rutas donde suele instalarse, relativas al hogar.
     pub home_paths: &'static [&'static str],
-    /// Qué se le manda para dar de alta un servidor MCP por tubería.
-    pub add_args: &'static [&'static str],
+    /// Cómo se le pide dar de alta un servidor MCP por tubería.
+    ///
+    /// **No hay una sintaxis común.** Suponer que la había dejó a Claude Code
+    /// sin conectar con «unknown option '--command'» en cada arranque, porque
+    /// se le mandaban los argumentos de Hermes.
+    pub dialect: AddDialect,
+}
+
+/// Cómo espera cada agente que se le describa un servidor por tubería.
+///
+/// Comprobado con `--help` de cada uno el 19 de agosto de 2026:
+///
+/// ```text
+/// hermes mcp add <nombre> --command <cmd> --env K=V --args <args…>
+/// claude mcp add <nombre> -e K=V -- <cmd> <args…>
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddDialect {
+    /// Opciones nombradas; `--args` tiene que ir al final.
+    Hermes,
+    /// Entorno con `-e` y el comando detrás de `--`.
+    ClaudeCode,
 }
 
 /// Agentes soportados, en el orden en que se ofrecen.
@@ -45,14 +65,14 @@ pub const HOSTS: &[HostSpec] = &[
         label: "Hermes",
         binary: "hermes",
         home_paths: &[".local/bin/hermes", ".hermes/bin/hermes"],
-        add_args: &["mcp", "add"],
+        dialect: AddDialect::Hermes,
     },
     HostSpec {
         id: "claude",
         label: "Claude Code",
         binary: "claude",
         home_paths: &[".local/bin/claude", ".claude/local/claude"],
-        add_args: &["mcp", "add"],
+        dialect: AddDialect::ClaudeCode,
     },
 ];
 
@@ -131,12 +151,47 @@ pub fn detect() -> AppResult<Vec<AgentHost>> {
                 label: spec.label.to_owned(),
                 path: path.map(|value| value.to_string_lossy().into_owned()),
                 command_preview: format!(
-                    "{binario} {} vindexa --command {vindexa} --args mcp --env VINDEXA_AGENT_TOKEN=<testigo>",
-                    spec.add_args.join(" ")
+                    "{binario} {}",
+                    add_arguments(spec.dialect, &vindexa, "<testigo>").join(" ")
                 ),
             }
         })
         .collect())
+}
+
+/// Argumentos del alta, en el dialecto de cada agente.
+///
+/// Vive en una sola función para que la vista previa que se enseña antes de
+/// pulsar y lo que se ejecuta después sean literalmente lo mismo: una vista
+/// previa que no coincide con el comando real es peor que no enseñarla.
+pub(crate) fn add_arguments(dialect: AddDialect, vindexa: &str, token: &str) -> Vec<String> {
+    let entorno = format!("VINDEXA_AGENT_TOKEN={token}");
+    match dialect {
+        // `--args` tiene que ir al final: todo lo que venga después lo toma como
+        // argumento del proceso hijo.
+        AddDialect::Hermes => vec![
+            "mcp".into(),
+            "add".into(),
+            "vindexa".into(),
+            "--command".into(),
+            vindexa.into(),
+            "--env".into(),
+            entorno,
+            "--args".into(),
+            "mcp".into(),
+        ],
+        // El comando va detrás de `--`, y el entorno con `-e` antes.
+        AddDialect::ClaudeCode => vec![
+            "mcp".into(),
+            "add".into(),
+            "vindexa".into(),
+            "-e".into(),
+            entorno,
+            "--".into(),
+            vindexa.into(),
+            "mcp".into(),
+        ],
+    }
 }
 
 /// Da de alta Vindexa como servidor MCP del agente indicado.
@@ -157,17 +212,8 @@ pub fn connect(host_id: &str, token: &str) -> AppResult<String> {
     })?;
     let vindexa = vindexa_command()?;
 
-    // `--args` va al final por exigencia del propio agente: todo lo que venga
-    // después lo toma como argumento del proceso hijo.
     let mut child = Command::new(&binary)
-        .args(spec.add_args)
-        .arg("vindexa")
-        .arg("--command")
-        .arg(&vindexa)
-        .arg("--env")
-        .arg(format!("VINDEXA_AGENT_TOKEN={token}"))
-        .arg("--args")
-        .arg("mcp")
+        .args(add_arguments(spec.dialect, &vindexa, token))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -233,9 +279,10 @@ pub fn connect(host_id: &str, token: &str) -> AppResult<String> {
 }
 
 /// ¿Aparece Vindexa entre los servidores del agente?
-fn is_registered(binary: &PathBuf, spec: &HostSpec) -> bool {
+fn is_registered(binary: &PathBuf, _spec: &HostSpec) -> bool {
+    // `mcp list` es común a los dos agentes; lo que cambia es el alta.
     let Ok(output) = Command::new(binary)
-        .arg(spec.add_args[0])
+        .arg("mcp")
         .arg("list")
         .stdin(Stdio::null())
         .output()
@@ -258,7 +305,74 @@ mod tests {
         assert!(!hosts.is_empty());
         for host in &hosts {
             assert!(host.command_preview.contains("<testigo>"), "{host:?}");
-            assert!(host.command_preview.contains("--args mcp"), "{host:?}");
+            assert!(host.command_preview.contains("mcp add vindexa"), "{host:?}");
+        }
+    }
+
+    /// Cada agente tiene su sintaxis, y suponer que era la misma dejó a Claude
+    /// Code sin conectar en cada arranque con «unknown option '--command'».
+    ///
+    /// Las dos formas están tomadas del `--help` de cada uno:
+    ///
+    /// ```text
+    /// hermes mcp add <nombre> --command <cmd> --env K=V --args <args…>
+    /// claude mcp add <nombre> -e K=V -- <cmd> <args…>
+    /// ```
+    #[test]
+    fn cada_agente_recibe_su_propia_sintaxis() {
+        let hermes = add_arguments(AddDialect::Hermes, "/ruta/vindexa", "secreto");
+        assert_eq!(
+            hermes,
+            [
+                "mcp",
+                "add",
+                "vindexa",
+                "--command",
+                "/ruta/vindexa",
+                "--env",
+                "VINDEXA_AGENT_TOKEN=secreto",
+                "--args",
+                "mcp",
+            ]
+        );
+        // `--args` va al final por exigencia del propio Hermes.
+        assert_eq!(hermes[hermes.len() - 2], "--args");
+
+        let claude = add_arguments(AddDialect::ClaudeCode, "/ruta/vindexa", "secreto");
+        assert_eq!(
+            claude,
+            [
+                "mcp",
+                "add",
+                "vindexa",
+                "-e",
+                "VINDEXA_AGENT_TOKEN=secreto",
+                "--",
+                "/ruta/vindexa",
+                "mcp",
+            ]
+        );
+        assert!(
+            !claude.iter().any(|arg| arg == "--command"),
+            "Claude Code no conoce esa opción: {claude:?}"
+        );
+    }
+
+    #[test]
+    fn la_vista_previa_es_el_comando_de_verdad_con_el_testigo_tapado() {
+        // Una vista previa que no coincide con lo que se ejecuta es peor que no
+        // enseñarla: se pide permiso para una cosa y se hace otra.
+        for spec in HOSTS {
+            let previa = add_arguments(spec.dialect, "/ruta/vindexa", "<testigo>");
+            let real = add_arguments(spec.dialect, "/ruta/vindexa", "secreto");
+            assert_eq!(previa.len(), real.len(), "{:?}", spec.id);
+            for (izquierda, derecha) in previa.iter().zip(real.iter()) {
+                if izquierda.contains("<testigo>") {
+                    assert!(derecha.contains("secreto"));
+                } else {
+                    assert_eq!(izquierda, derecha, "{:?}", spec.id);
+                }
+            }
         }
     }
 

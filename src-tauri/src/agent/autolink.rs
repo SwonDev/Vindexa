@@ -177,9 +177,19 @@ pub fn reconcile(database: &Database) -> AppResult<AutolinkReport> {
             continue;
         }
 
-        // Se rehace: primero el testigo nuevo, y sólo si el alta entra se
-        // revoca el anterior. Al revés dejaría al agente sin acceso si el alta
-        // fallara.
+        // Se rehace. Si el nombre ya está ocupado por un alta anterior de este
+        // mismo enlace —el archivo de estado se perdió, o se restauró una copia—
+        // se retira primero: sin esto, el alta falla con «ya existe un cliente
+        // con ese nombre», el error aborta la reconciliación entera y la
+        // aplicación se queda sin agente para siempre, repitiendo el mismo fallo
+        // en cada arranque. El testigo viejo ya no lo tiene nadie: si lo tuviera,
+        // el enlace estaría vigente y no se estaría rehaciendo.
+        if let Ok(Some(retirado)) = clients::revoke_by_name(&mut connection, &host.label) {
+            eprintln!(
+                "Vindexa: se retira el alta anterior de {} ({retirado}) para rehacer el enlace.",
+                host.label
+            );
+        }
         let issued = clients::issue(
             &mut connection,
             &NewAgentClient {

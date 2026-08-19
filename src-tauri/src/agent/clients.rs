@@ -124,6 +124,35 @@ pub fn issue(
 }
 
 /// Rota el token de un cliente existente e invalida el anterior.
+/// Retira el cliente que ocupa un nombre, si lo hay.
+///
+/// # Por qué existe
+///
+/// El enlace automático da de alta un cliente por agente detectado, con el
+/// nombre del agente. Si el registro local del enlace se pierde —una copia
+/// restaurada, un borrado del archivo de estado— el nombre sigue ocupado y el
+/// alta falla con «ya existe un cliente con ese nombre». Ese error abortaba la
+/// reconciliación entera y la aplicación se quedaba **sin agente para siempre**,
+/// repitiendo el mismo fallo en cada arranque.
+///
+/// Retirar el anterior es correcto porque el testigo viejo ya no lo tiene
+/// nadie: si se hubiera conservado, el enlace estaría vigente y no se estaría
+/// rehaciendo. Devuelve el identificador retirado, para poder decirlo.
+pub fn revoke_by_name(connection: &mut Connection, name: &str) -> AppResult<Option<String>> {
+    let existing: Option<String> = connection
+        .query_row(
+            "SELECT id FROM agent_clients WHERE name = ?1 COLLATE NOCASE",
+            [name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(client_id) = existing else {
+        return Ok(None);
+    };
+    revoke(connection, &client_id)?;
+    Ok(Some(client_id))
+}
+
 pub fn rotate(
     connection: &mut Connection,
     client_id: &str,
