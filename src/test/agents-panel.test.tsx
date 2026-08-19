@@ -18,6 +18,18 @@ vi.mock("@/lib/tauri", async (original) => {
       setAgentClientEnabled: vi.fn(async () => undefined),
       revokeAgentClient: vi.fn(async () => undefined),
       agentUndo: vi.fn(),
+      agentAutolinkState: vi.fn(async () => ({ disabled: false, links: [], hosts: [] })),
+      setAgentAutolinkDisabled: vi.fn(async () => undefined),
+      localModelSurvey: vi.fn(async () => ({
+        runtimes: [],
+        models: [],
+        hardware: {
+          totalMemoryBytes: null,
+          cpuCores: null,
+          architecture: "aarch64",
+          usableModelBytes: null,
+        },
+      })),
     },
   };
 });
@@ -133,5 +145,78 @@ describe("agentes con acceso a Vindexa", () => {
 
     await user.click(screen.getByRole("button", { name: /Deshacer/ }));
     await waitFor(() => expect(api.agentUndo).toHaveBeenCalledWith("audit-1"));
+  });
+});
+
+describe("lo que hay en este ordenador", () => {
+  it("enseña los agentes encontrados y desde cuándo están conectados", async () => {
+    vi.mocked(api.agentAutolinkState).mockResolvedValue({
+      disabled: false,
+      hosts: [
+        {
+          id: "hermes",
+          label: "Hermes",
+          path: "/Users/alguien/.local/bin/hermes",
+          commandPreview: "hermes mcp add vindexa --args mcp",
+        },
+        { id: "claude", label: "Claude Code", path: null, commandPreview: "" },
+      ],
+      links: [
+        {
+          hostId: "hermes",
+          clientId: "cli-1",
+          command: "/Applications/Vindexa.app/Contents/MacOS/vindexa",
+          linkedAt: new Date().toISOString(),
+        },
+      ],
+    });
+    renderPanel();
+
+    expect(await screen.findByText("Hermes")).toBeInTheDocument();
+    expect(screen.getByText(/Conectado/)).toBeInTheDocument();
+    // Lo que no está instalado no se lista: ofrecer un agente que no existe
+    // sólo sirve para que alguien lo busque.
+    expect(screen.queryByText("Claude Code")).toBeNull();
+  });
+
+  it("sin memoria conocida no recomienda ningún tamaño", async () => {
+    // Decir «te caben 8 GB» sin saber cuánta memoria hay es exactamente el
+    // error que esta aplicación no comete.
+    renderPanel();
+    expect(
+      await screen.findByText(/No se ha podido leer la memoria del sistema/),
+    ).toBeInTheDocument();
+  });
+
+  it("marca un modelo que no le cabe a la máquina", async () => {
+    vi.mocked(api.localModelSurvey).mockResolvedValue({
+      runtimes: [
+        {
+          id: "llamacpp",
+          label: "llama.cpp",
+          path: "/opt/homebrew/bin/llama-server",
+          formats: ["gguf"],
+        },
+      ],
+      models: [
+        {
+          name: "Modelo-enorme",
+          path: "/x/Modelo-enorme.gguf",
+          format: "gguf",
+          sizeBytes: 40 * 1024 ** 3,
+          source: "Carpeta AI",
+        },
+      ],
+      hardware: {
+        totalMemoryBytes: 16 * 1024 ** 3,
+        cpuCores: 8,
+        architecture: "aarch64",
+        usableModelBytes: 8 * 1024 ** 3,
+      },
+    });
+    renderPanel();
+
+    expect(await screen.findByText("llama.cpp")).toBeInTheDocument();
+    expect(screen.getByText(/no le cabe a esta máquina/)).toBeInTheDocument();
   });
 });

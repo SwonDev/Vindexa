@@ -8,6 +8,7 @@ import type {
   AgentRequest,
   AgentScope,
   IssuedAgentClient,
+  LocalModelSurvey,
   NewAgentClient,
 } from "@/lib/agent-types";
 import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
@@ -373,6 +374,7 @@ export const api = {
   setAgentClientEnabled: (clientId: string, enabled: boolean) =>
     invoke<AgentClientSummary>("set_agent_client_enabled", { clientId, enabled }),
   revokeAgentClient: (clientId: string) => invoke<void>("revoke_agent_client", { clientId }),
+  localModelSurvey: () => invoke<LocalModelSurvey>("local_model_survey"),
   agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),
   setAgentAutolinkDisabled: (disabled: boolean) =>
     invoke<void>("set_agent_autolink_disabled", { disabled }),

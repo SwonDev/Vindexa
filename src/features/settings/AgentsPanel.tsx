@@ -41,7 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { AgentClientSummary, AgentScope, IssuedAgentClient } from "@/lib/agent-types";
-import { formatRelativeDate } from "@/lib/format";
+import { formatBytes, formatRelativeDate } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
 import "./agents-panel.css";
 
@@ -182,6 +182,15 @@ export function AgentsPanel() {
       </div>
 
       <AutolinkSection />
+
+      <div className="settings-heading">
+        <h4>Modelos en este ordenador</h4>
+        <p>
+          Con qué cuentas para que el agente corra aquí, sin depender de ninguna nube. Es sólo un
+          inventario: no se descarga nada ni se arranca nada.
+        </p>
+      </div>
+      <LocalModelsSection />
 
       <div className="settings-heading">
         <h4>Conectar otro agente a mano</h4>
@@ -452,6 +461,100 @@ function AutolinkSection() {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Qué hay en este ordenador para conducir Vindexa hablando.
+ *
+ * # Por qué se enseña esto
+ *
+ * Conectar un agente no es una sola cosa. Quien ya tiene uno instalado no tiene
+ * que hacer nada —Vindexa se conecta sola—; quien no lo tiene necesita saber
+ * con qué cuenta: si hay un motor capaz de ejecutar un modelo, qué modelos ya
+ * están descargados y cuánto le cabe a la máquina. Sin ese inventario, la única
+ * respuesta posible sería «instálate algo y vuelve».
+ *
+ * Las cifras salen del sistema, no de una estimación: si la memoria total no se
+ * puede leer, no se dice ninguna.
+ */
+function LocalModelsSection() {
+  const survey = useQuery({
+    queryKey: ["agent", "local-models"],
+    queryFn: api.localModelSurvey,
+    staleTime: 60_000,
+  });
+
+  if (survey.isPending) return <p className="settings-hint">Mirando qué hay instalado…</p>;
+  if (survey.isError || !survey.data) {
+    return <p className="settings-hint">No se pudo comprobar qué modelos hay en el disco.</p>;
+  }
+
+  const { runtimes, models, hardware } = survey.data;
+  const instalados = runtimes.filter((runtime) => runtime.path);
+  const cabe = hardware.usableModelBytes;
+
+  return (
+    <div className="agent-local">
+      <div className="agent-local__hardware">
+        <strong>Esta máquina</strong>
+        <span>
+          {hardware.architecture}
+          {hardware.cpuCores === null ? "" : ` · ${hardware.cpuCores} núcleos`}
+          {hardware.totalMemoryBytes === null
+            ? " · memoria desconocida"
+            : ` · ${formatBytes(hardware.totalMemoryBytes)} de memoria`}
+        </span>
+        <p>
+          {cabe === null
+            ? "No se ha podido leer la memoria del sistema, así que no se recomienda ningún tamaño: una cifra inventada aquí sólo sirve para elegir mal."
+            : `Un modelo de hasta ${formatBytes(cabe)} debería ir cómodo. El resto de la memoria lo necesitan el sistema y la propia Vindexa.`}
+        </p>
+      </div>
+
+      <div className="agent-local__block">
+        <strong>Motores</strong>
+        {instalados.length === 0 ? (
+          <p className="settings-hint">
+            No hay ninguno instalado. Con llama.cpp basta para ejecutar un modelo en formato GGUF.
+          </p>
+        ) : (
+          <ul>
+            {instalados.map((runtime) => (
+              <li key={runtime.id}>
+                <IconCheck aria-hidden="true" /> {runtime.label}{" "}
+                <span>{runtime.formats.join(" · ")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="agent-local__block">
+        <strong>Modelos descargados</strong>
+        {models.length === 0 ? (
+          <p className="settings-hint">
+            No se ha encontrado ninguno en las carpetas habituales de Hugging Face, LM Studio,
+            Ollama ni en tus carpetas de modelos.
+          </p>
+        ) : (
+          <ul>
+            {models.slice(0, 8).map((model) => (
+              <li key={model.path}>
+                <span className="agent-local__name">{model.name}</span>
+                <span>
+                  {model.format.toUpperCase()} · {formatBytes(model.sizeBytes)}
+                  {cabe !== null && model.sizeBytes > cabe ? " · no le cabe a esta máquina" : ""}
+                </span>
+              </li>
+            ))}
+            {models.length > 8 && (
+              <li className="settings-hint">y {models.length - 8} más en el disco.</li>
+            )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

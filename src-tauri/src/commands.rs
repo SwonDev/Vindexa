@@ -19,6 +19,7 @@ use crate::db::{
     WishlistPriceStatus,
 };
 use crate::error::{AppError, AppResult};
+use crate::localmodel::{self, LocalModelSurvey};
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
     DatabaseRecoverySnapshot, GameDetail, GameListRequest, LibraryFilterOptions,
@@ -2554,6 +2555,22 @@ pub async fn issue_agent_client(
 #[tauri::command]
 pub async fn detect_agent_hosts() -> AppResult<Vec<agent::hosts::AgentHost>> {
     agent::hosts::detect()
+}
+
+/// Qué hay en esta máquina para conducir Vindexa hablando sin depender de nadie:
+/// motores instalados, modelos ya descargados y qué le cabe al ordenador.
+///
+/// Es sólo lectura y no toca la red: mira el disco y pregunta al sistema.
+#[tauri::command]
+pub async fn local_model_survey() -> AppResult<LocalModelSurvey> {
+    // El rastreo toca disco, así que sale del hilo de la interfaz.
+    tauri::async_runtime::spawn_blocking(|| LocalModelSurvey {
+        runtimes: localmodel::runtimes(),
+        models: localmodel::scan_models(),
+        hardware: localmodel::hardware(),
+    })
+    .await
+    .map_err(|error| AppError::new("local_model", format!("El rastreo falló: {error}")))
 }
 
 /// Qué agentes tiene Vindexa conectados ahora mismo, y si el automatismo está

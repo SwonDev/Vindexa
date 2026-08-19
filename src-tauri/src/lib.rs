@@ -1,4 +1,5 @@
 mod agent;
+mod localmodel;
 mod mcp;
 mod art_cache;
 mod browser;
@@ -318,6 +319,7 @@ pub fn run() {
             commands::agent_undo_as_client,
             commands::issue_agent_client,
             commands::detect_agent_hosts,
+            commands::local_model_survey,
             commands::agent_autolink_state,
             commands::set_agent_autolink_disabled,
             commands::connect_agent_host,

@@ -208,3 +208,36 @@ export interface AgentAutolinkStatus {
   links: AgentLinkRecord[];
   hosts: AgentHost[];
 }
+
+/** Motor capaz de ejecutar un modelo en local. */
+export interface LocalRuntime {
+  id: string;
+  label: string;
+  /** `null` significa que no está instalado. */
+  path: string | null;
+  formats: string[];
+}
+
+/** Un modelo ya descargado en el disco. */
+export interface LocalModel {
+  name: string;
+  path: string;
+  format: "gguf" | "mlx" | string;
+  sizeBytes: number;
+  /** Carpeta conocida donde apareció. */
+  source: string;
+}
+
+/** Lo que la máquina puede permitirse. `null` es «no se sabe», nunca cero. */
+export interface LocalHardware {
+  totalMemoryBytes: number | null;
+  cpuCores: number | null;
+  architecture: string;
+  usableModelBytes: number | null;
+}
+
+export interface LocalModelSurvey {
+  runtimes: LocalRuntime[];
+  models: LocalModel[];
+  hardware: LocalHardware;
+}

@@ -331,3 +331,75 @@
   width: 13px;
   height: 13px;
 }
+
+/* -----------------------------------------------------------------------------
+   Inventario de lo que hay en el ordenador para ejecutar un modelo.
+   -------------------------------------------------------------------------- */
+
+.agent-local {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--v-surface-selected);
+  border-left: 2px solid var(--v-lime);
+  background: var(--v-surface-raised);
+}
+
+.agent-local strong {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-local__hardware > span {
+  display: block;
+  margin-top: 2px;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+
+.agent-local__hardware p {
+  max-width: 62ch;
+  margin: 6px 0 0;
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+.agent-local__block ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-local__block li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 11px;
+}
+
+/* El nombre de un modelo puede ser larguísimo y no puede empujar su tamaño. */
+.agent-local__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-local__block li > span:last-child {
+  color: var(--v-muted);
+  white-space: nowrap;
+}
+
+.agent-local__block li svg {
+  width: 13px;
+  height: 13px;
+  color: var(--v-success);
+  vertical-align: -2px;
+}
