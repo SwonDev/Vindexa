@@ -707,19 +707,24 @@ Con honestidad, porque la lista importa tanto como lo construido.
   modelo. Qué modelo interpreta la frase, dónde corre y con qué coste es una
   decisión enteramente del agente. El contrato de esta página es JSON tipado y
   no cambia según el modelo.
-- **La interfaz de Vindexa.** No hay pantalla para emitir tokens, revisar el
-  registro ni confirmar acciones pendientes. Toda la lógica está en Rust y
-  probada, pero **no está conectada**: `lib.rs` y `commands.rs` todavía no
-  exponen ningún comando del puente. Sin ese cableado, ningún agente puede
-  llamar a nada.
 - **El proceso acompañante.** Vindexa no lanza ni supervisa ningún proceso de
-  agente.
+  agente. Es la pieza que falta para que un agente que corre fuera pueda
+  hablar con el puente sin abrir un puerto; el plan está en
+  [`HERMES.md`](HERMES.md).
 - **La verificación contra Hermes.** No se ha podido comprobar qué es Hermes
   exactamente ni qué convención de llamada a herramientas usa. El contrato se ha
   diseñado deliberadamente genérico —un objeto JSON con `intent` y sus
   argumentos— para que encaje tanto en un esquema de `tools` al estilo de las
   APIs de función como en cualquier envoltorio propio. Puede hacer falta una
   capa de adaptación fina en el lado del agente.
+
+**Hecho desde que se escribió esta lista:**
+
+- **El cableado.** `lib.rs` y `commands.rs` exponen los once comandos del
+  puente: despacho, confirmación, deshacer, emisión y rotación de tokens,
+  ámbitos, activación, revocación, listados de clientes y de auditoría.
+- **La pantalla.** Ajustes → Agentes emite el testigo, reparte permisos por
+  ámbito, enseña el registro de lo que cada agente ha hecho y deja deshacerlo.
 
 **Limitaciones conocidas de lo que sí está hecho:**
 
