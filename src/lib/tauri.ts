@@ -7,8 +7,10 @@ import type {
   AgentOutcome,
   AgentRequest,
   AgentScope,
+  CatalogSuggestions,
   ChatMessage,
   ChatTurn,
+  InstallPlan,
   IssuedAgentClient,
   LocalModelSurvey,
   NewAgentClient,
@@ -377,6 +379,10 @@ export const api = {
     invoke<AgentClientSummary>("set_agent_client_enabled", { clientId, enabled }),
   revokeAgentClient: (clientId: string) => invoke<void>("revoke_agent_client", { clientId }),
   localModelSurvey: () => invoke<LocalModelSurvey>("local_model_survey"),
+  suggestLocalModels: (usableBytes: number | null) =>
+    invoke<CatalogSuggestions>("suggest_local_models", { usableBytes }),
+  localModelInstallPlan: () => invoke<InstallPlan>("local_model_install_plan"),
+  installLocalRuntime: () => invoke<string>("install_local_runtime"),
   vindagentChat: (baseUrl: string, model: string, history: ChatMessage[]) =>
     invoke<ChatTurn>("vindagent_chat", { baseUrl, model, history }),
   agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),

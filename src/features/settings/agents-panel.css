@@ -403,3 +403,16 @@
   color: var(--v-success);
   vertical-align: -2px;
 }
+
+/* La orden que se va a ejecutar, tal cual, para poder leerla antes. */
+.agent-local__command {
+  display: block;
+  margin: 6px 0;
+  padding: 7px 9px;
+  overflow-x: auto;
+  border: 1px solid var(--v-surface-selected);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 11px;
+  white-space: nowrap;
+}

@@ -16,6 +16,8 @@
 //! | ¿Qué modelos hay ya descargados? | [`scan_models`] |
 //! | ¿Qué le cabe a esta máquina? | [`hardware`] |
 //! | ¿Hay ya algo sirviendo un modelo? | [`endpoints::discover`] |
+//! | ¿Y si no hay nada, qué me descargo? | [`catalog::suggest`] |
+//! | ¿Y cómo instalo el motor que falta? | [`install::plan`] |
 //!
 //! # Por qué no se rastrea el disco entero
 //!
@@ -25,7 +27,9 @@
 //! con la profundidad justa y un tope de archivos. Encontrar rápido lo que hay
 //! vale más que encontrar todo lo que podría haber.
 
+pub mod catalog;
 pub mod endpoints;
+pub mod install;
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

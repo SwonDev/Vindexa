@@ -20,9 +20,17 @@ vi.mock("@/lib/tauri", async (original) => {
       agentUndo: vi.fn(),
       agentAutolinkState: vi.fn(async () => ({ disabled: false, links: [], hosts: [] })),
       setAgentAutolinkDisabled: vi.fn(async () => undefined),
+      localModelInstallPlan: vi.fn(async () => ({
+        alreadyInstalled: true,
+        manager: null,
+        command: null,
+      })),
+      installLocalRuntime: vi.fn(),
+      suggestLocalModels: vi.fn(async () => ({ rationale: "", suggestions: [] })),
       localModelSurvey: vi.fn(async () => ({
         runtimes: [],
         models: [],
+        endpoints: [],
         hardware: {
           totalMemoryBytes: null,
           cpuCores: null,
@@ -198,6 +206,7 @@ describe("lo que hay en este ordenador", () => {
           formats: ["gguf"],
         },
       ],
+      endpoints: [],
       models: [
         {
           name: "Modelo-enorme",
@@ -218,5 +227,63 @@ describe("lo que hay en este ordenador", () => {
 
     expect(await screen.findByText("llama.cpp")).toBeInTheDocument();
     expect(screen.getByText(/no le cabe a esta máquina/)).toBeInTheDocument();
+  });
+});
+
+describe("cuando no hay con qué ejecutar un modelo", () => {
+  it("enseña la orden exacta antes de instalar nada", async () => {
+    // Instalar un paquete toca el sistema entero: se ve qué se va a ejecutar
+    // antes de ejecutarlo, y sólo corre si alguien lo pide.
+    vi.mocked(api.localModelInstallPlan).mockResolvedValue({
+      alreadyInstalled: false,
+      manager: "homebrew",
+      command: "brew install llama.cpp",
+    });
+    renderPanel();
+
+    expect(await screen.findByText("brew install llama.cpp")).toBeInTheDocument();
+    expect(api.installLocalRuntime).not.toHaveBeenCalled();
+  });
+
+  it("sin gestor de paquetes lo dice en vez de fingir que puede", async () => {
+    vi.mocked(api.localModelInstallPlan).mockResolvedValue({
+      alreadyInstalled: false,
+      manager: null,
+      command: null,
+    });
+    renderPanel();
+
+    expect(
+      await screen.findByText(/No se ha encontrado ningún gestor de paquetes/),
+    ).toBeInTheDocument();
+  });
+
+  it("propone modelos que le caben a la máquina", async () => {
+    vi.mocked(api.localModelSurvey).mockResolvedValue({
+      runtimes: [
+        {
+          id: "llamacpp",
+          label: "llama.cpp",
+          path: "/opt/homebrew/bin/llama-server",
+          formats: ["gguf"],
+        },
+      ],
+      models: [],
+      endpoints: [],
+      hardware: {
+        totalMemoryBytes: 32 * 1024 ** 3,
+        cpuCores: 10,
+        architecture: "aarch64",
+        usableModelBytes: 16 * 1024 ** 3,
+      },
+    });
+    vi.mocked(api.suggestLocalModels).mockResolvedValue({
+      rationale: "Con la memoria de esta máquina entra un modelo de unos 14 000 millones.",
+      suggestions: [{ repo: "unsloth/Qwen3-14B-GGUF", downloads: 123456, likes: 42 }],
+    });
+    renderPanel();
+
+    expect(await screen.findByText("unsloth/Qwen3-14B-GGUF")).toBeInTheDocument();
+    expect(api.suggestLocalModels).toHaveBeenCalledWith(16 * 1024 ** 3);
   });
 });

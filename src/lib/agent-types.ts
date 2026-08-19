@@ -269,3 +269,25 @@ export interface ChatTurn {
   reply: string;
   steps: ChatStep[];
 }
+
+/** Un modelo que se puede descargar, propuesto por Hugging Face. */
+export interface ModelSuggestion {
+  repo: string;
+  downloads: number;
+  likes: number;
+}
+
+export interface CatalogSuggestions {
+  /** Por qué se propone ese tamaño. Vacío si no se pudo decidir. */
+  rationale: string;
+  suggestions: ModelSuggestion[];
+}
+
+/** Qué haría falta para tener llama.cpp aquí. */
+export interface InstallPlan {
+  alreadyInstalled: boolean;
+  /** Gestor encontrado. `null` significa que habría que instalarlo a mano. */
+  manager: string | null;
+  /** La orden exacta, para poder leerla antes de ejecutarla. */
+  command: string | null;
+}

@@ -2585,6 +2585,39 @@ pub async fn local_model_survey() -> AppResult<LocalModelSurvey> {
     })
 }
 
+/// Qué modelo proponerle a esta máquina, preguntado a Hugging Face en el
+/// momento. Una lista escrita a mano envejecería en semanas y acabaría
+/// recomendando repositorios que ya no existen.
+#[tauri::command]
+pub async fn suggest_local_models(
+    usable_bytes: Option<u64>,
+) -> AppResult<localmodel::catalog::CatalogSuggestions> {
+    localmodel::catalog::suggest(usable_bytes).await
+}
+
+/// Qué haría falta para tener llama.cpp en esta máquina. No instala nada: dice
+/// con qué gestor de paquetes se haría y cuál sería la orden exacta.
+#[tauri::command]
+pub async fn local_model_install_plan() -> AppResult<localmodel::install::InstallPlan> {
+    Ok(localmodel::install::plan())
+}
+
+/// Instala llama.cpp con el gestor de paquetes del sistema.
+///
+/// Sólo se llama cuando alguien lo pide viendo antes la orden: instalar un
+/// paquete toca el sistema entero, no sólo Vindexa.
+#[tauri::command]
+pub async fn install_local_runtime() -> AppResult<String> {
+    tauri::async_runtime::spawn_blocking(localmodel::install::run)
+        .await
+        .map_err(|error| {
+            AppError::new(
+                "local_model_install",
+                format!("La instalación no pudo lanzarse: {error}"),
+            )
+        })?
+}
+
 /// Un turno de conversación con el agente que vive dentro de Vindexa.
 ///
 /// Devuelve la respuesta y, por separado, lo que haya hecho por el camino: un

@@ -531,6 +531,8 @@ function LocalModelsSection() {
         )}
       </div>
 
+      {instalados.length === 0 && <InstallRuntimeBlock />}
+
       <div className="agent-local__block">
         <strong>Modelos descargados</strong>
         {models.length === 0 ? (
@@ -555,6 +557,107 @@ function LocalModelsSection() {
           </ul>
         )}
       </div>
+
+      {models.length === 0 && <SuggestionsBlock usableBytes={cabe} />}
+    </div>
+  );
+}
+
+/**
+ * Cómo tener llama.cpp cuando no está.
+ *
+ * La orden se enseña antes de ejecutarla y sólo corre si alguien la pide.
+ * Conectar Vindexa a un agente ya instalado toca la configuración de esa
+ * aplicación y se deshace borrando una línea; instalar un paquete toca el
+ * sistema entero, tarda y puede pedir contraseña. Esa diferencia es la que
+ * separa lo que se hace solo de lo que se pregunta.
+ */
+function InstallRuntimeBlock() {
+  const queryClient = useQueryClient();
+  const plan = useQuery({
+    queryKey: ["agent", "install-plan"],
+    queryFn: api.localModelInstallPlan,
+    staleTime: 60_000,
+  });
+  const install = useMutation({
+    mutationFn: () => api.installLocalRuntime(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["agent", "local-models"] });
+      void queryClient.invalidateQueries({ queryKey: ["agent", "install-plan"] });
+    },
+  });
+
+  if (plan.isPending || !plan.data || plan.data.alreadyInstalled) return null;
+
+  return (
+    <div className="agent-local__block">
+      <strong>Instalar llama.cpp</strong>
+      {plan.data.command ? (
+        <>
+          <p className="settings-hint">
+            Se instalaría con {plan.data.manager}, ejecutando exactamente esto:
+          </p>
+          <code className="agent-local__command">{plan.data.command}</code>
+          <div className="button-row">
+            <Button size="sm" disabled={install.isPending} onClick={() => install.mutate()}>
+              {install.isPending ? <IconLoader2 className="is-spinning" /> : <IconPlus />} Instalar
+            </Button>
+          </div>
+          {install.isError && (
+            <p className="settings-hint" role="alert">
+              {getErrorMessage(install.error)}
+            </p>
+          )}
+          {install.isSuccess && <p className="settings-hint">{install.data}</p>}
+        </>
+      ) : (
+        <p className="settings-hint">
+          No se ha encontrado ningún gestor de paquetes con el que instalarlo. En la página de
+          llama.cpp está cómo hacerlo a mano para este sistema.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Qué descargarse cuando no hay ningún modelo.
+ *
+ * Los nombres salen de Hugging Face en el momento, no de una lista escrita
+ * aquí: una lista fija envejece en semanas y acaba recomendando repositorios
+ * que ya no existen, que es peor que no recomendar nada.
+ */
+function SuggestionsBlock({ usableBytes }: { usableBytes: number | null }) {
+  const catalog = useQuery({
+    queryKey: ["agent", "model-suggestions", usableBytes],
+    queryFn: () => api.suggestLocalModels(usableBytes),
+    staleTime: 10 * 60_000,
+    enabled: usableBytes !== null,
+  });
+
+  if (usableBytes === null) return null;
+  if (catalog.isPending) return <p className="settings-hint">Buscando modelos que te encajen…</p>;
+  if (catalog.isError || !catalog.data?.suggestions.length) {
+    return (
+      <p className="settings-hint">
+        No se pudo consultar Hugging Face ahora mismo. Cualquier modelo en formato GGUF que te quepa
+        en memoria sirve.
+      </p>
+    );
+  }
+
+  return (
+    <div className="agent-local__block">
+      <strong>Qué te iría bien</strong>
+      <p className="settings-hint">{catalog.data.rationale}</p>
+      <ul>
+        {catalog.data.suggestions.map((suggestion) => (
+          <li key={suggestion.repo}>
+            <span className="agent-local__name">{suggestion.repo}</span>
+            <span>{suggestion.downloads.toLocaleString("es-ES")} descargas</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
