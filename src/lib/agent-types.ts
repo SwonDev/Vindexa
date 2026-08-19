@@ -291,3 +291,41 @@ export interface InstallPlan {
   /** La orden exacta, para poder leerla antes de ejecutarla. */
   command: string | null;
 }
+
+/** Con qué modelo habla el agente de casa. */
+export interface AgentModelConfig {
+  /** Vacío significa «el que se detecte». */
+  baseUrl: string;
+  model: string;
+  /** Sólo `true` si se aceptó a sabiendas usar un servicio de fuera. */
+  remoteAllowed: boolean;
+  /** Si hay una clave guardada en el llavero. El valor no viaja nunca. */
+  hasApiKey: boolean;
+}
+
+export interface SaveAgentModelConfig {
+  baseUrl: string;
+  model: string;
+  remoteAllowed: boolean;
+  /** Clave nueva. Omitir deja la que hubiera; cadena vacía la borra. */
+  apiKey?: string;
+}
+
+/** Un encargo que el agente repite solo. */
+export interface ScheduledTask {
+  id: string;
+  instruction: string;
+  cadence: "diaria" | "semanal" | "mensual" | string;
+  enabled: boolean;
+  lastRunAt: string | null;
+  /** Resumen de lo último que hizo, o del error si falló. */
+  lastResult: string | null;
+  createdAt: string;
+}
+
+export interface SaveScheduledTask {
+  id?: string;
+  instruction: string;
+  cadence: string;
+  enabled?: boolean;
+}

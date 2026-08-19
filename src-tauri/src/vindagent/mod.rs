@@ -27,6 +27,9 @@
 //!   interfaz, porque un agente que ordena tu biblioteca sin contar qué hizo es
 //!   exactamente lo que nadie quiere.
 
+pub mod config;
+pub mod schedule;
+
 use crate::agent::bridge::{self, AgentRequest};
 use crate::agent::clients::{self, NewAgentClient};
 use crate::agent::ratelimit::RateLimiter;
@@ -287,17 +290,36 @@ fn ensure_loopback(base_url: &str) -> AppResult<()> {
     if url.scheme() != "http" {
         return Err(denegado());
     }
-    if !url.username().is_empty() || url.password().is_some() {
+    if !usable_base(&url) || !is_loopback(&url) {
         return Err(denegado());
     }
-    if !matches!(url.path(), "" | "/") || url.query().is_some() || url.fragment().is_some() {
-        return Err(denegado());
-    }
+    Ok(())
+}
+
+/// ¿Es una base a la que se le pueda añadir `/v1/...` sin sorpresas?
+///
+/// Se rechazan credenciales, ruta, consulta y fragmento: el destino se compone
+/// luego, y cualquiera de esas cosas serviría para llevar la petición a otro
+/// sitio del que se cree.
+pub(crate) fn usable_base(url: &url::Url) -> bool {
+    url.username().is_empty()
+        && url.password().is_none()
+        && matches!(url.path(), "" | "/")
+        && url.query().is_none()
+        && url.fragment().is_none()
+}
+
+/// ¿Apunta esta dirección a este mismo ordenador?
+///
+/// Mira el anfitrión de verdad, no cómo empieza el texto:
+/// `http://127.0.0.1:8080@servidor.ajeno.tld/` empieza por `http://127.0.0.1:`
+/// y viaja a otro sitio, porque lo de delante de la arroba son credenciales.
+pub(crate) fn is_loopback(url: &url::Url) -> bool {
     match url.host() {
-        Some(url::Host::Ipv4(address)) if address.is_loopback() => Ok(()),
-        Some(url::Host::Ipv6(address)) if address.is_loopback() => Ok(()),
-        Some(url::Host::Domain("localhost")) => Ok(()),
-        _ => Err(denegado()),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        Some(url::Host::Domain("localhost")) => true,
+        _ => false,
     }
 }
 
@@ -309,10 +331,21 @@ pub async fn chat(
     model: &str,
     history: &[ChatMessage],
 ) -> AppResult<ChatTurn> {
-    // Sólo el bucle local. No es una preferencia: es la frontera de esta
-    // función, y comprobarla aquí evita que un ajuste mal escrito mande la
-    // biblioteca de alguien a un servidor de internet.
-    ensure_loopback(base_url)?;
+    // La frontera por defecto es este ordenador. Se cruza sólo si alguien ha
+    // guardado a sabiendas una dirección de fuera en Ajustes: escribir mal una
+    // dirección no puede acabar mandando los títulos de una biblioteca a un
+    // servicio ajeno.
+    let saved = config::load(database).unwrap_or_default();
+    let permiso_de_fuera = saved.remote_allowed && saved.base_url.trim() == base_url.trim();
+    if permiso_de_fuera {
+        let url = url::Url::parse(base_url)
+            .map_err(|_| AppError::validation("La dirección del modelo no es válida."))?;
+        if !matches!(url.scheme(), "http" | "https") || !usable_base(&url) {
+            return Err(AppError::validation("La dirección del modelo no es válida."));
+        }
+    } else {
+        ensure_loopback(base_url)?;
+    }
     let token = ensure_token(database)?;
     let limiter = RateLimiter::default();
     let client = reqwest::Client::builder()
@@ -325,10 +358,21 @@ pub async fn chat(
         messages.push(json!({ "role": message.role, "content": message.content }));
     }
 
+    // La clave sólo se lee si hace falta, y sólo va a la dirección que la
+    // persona guardó: nunca a un servidor detectado por su cuenta.
+    let api_key = if permiso_de_fuera {
+        config::api_key()
+    } else {
+        None
+    };
+
     let mut steps = Vec::new();
     for _ in 0..MAX_TOOL_ROUNDS {
-        let response = client
-            .post(format!("{base_url}/v1/chat/completions"))
+        let mut peticion = client.post(format!("{base_url}/v1/chat/completions"));
+        if let Some(key) = api_key.as_deref() {
+            peticion = peticion.bearer_auth(key);
+        }
+        let response = peticion
             .json(&json!({
                 "model": model,
                 "messages": messages,
@@ -417,6 +461,26 @@ pub async fn chat(
         "vindagent",
         "El agente se ha quedado dando vueltas sin llegar a una respuesta. Vuelve a intentarlo con una petición más concreta.",
     ))
+}
+
+/// Con qué modelo hablar ahora mismo: lo guardado o, si no hay nada, lo que se
+/// detecte en el bucle local.
+///
+/// Devuelve `None` cuando no hay ningún modelo sirviendo. Ese caso no es un
+/// error: es que todavía no hay con qué hablar, y lo que toca es esperar.
+pub async fn current_target(database: &Database) -> Option<(String, String)> {
+    let saved = config::load(database).unwrap_or_default();
+    if !saved.base_url.trim().is_empty() && !saved.model.trim().is_empty() {
+        return Some((saved.base_url, saved.model));
+    }
+    let endpoints = crate::localmodel::endpoints::discover().await;
+    endpoints.into_iter().find_map(|endpoint| {
+        endpoint
+            .models
+            .into_iter()
+            .next()
+            .map(|model| (endpoint.base_url, model))
+    })
 }
 
 #[cfg(test)]

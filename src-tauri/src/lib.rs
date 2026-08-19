@@ -166,6 +166,47 @@ pub fn run() {
                 });
             }
 
+            // Los encargos del agente. No hace nada mientras no haya ninguno
+            // guardado, que es el caso de una instalación recién hecha: sin
+            // encargos, este bucle sólo comprueba una lista vacía.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(30 * 60)).await;
+                        let pendientes = vindagent::schedule::list(&database)
+                            .map(|tasks| tasks.iter().any(|task| task.enabled))
+                            .unwrap_or(false);
+                        if !pendientes {
+                            continue;
+                        }
+                        // Sin modelo no se inventa un resultado: el encargo
+                        // queda pendiente para cuando lo haya.
+                        let Some((base_url, model)) =
+                            vindagent::current_target(&database).await
+                        else {
+                            continue;
+                        };
+                        match vindagent::schedule::run_due(&database, &base_url, &model).await {
+                            Ok(report) if !report.ran.is_empty() || !report.failed.is_empty() => {
+                                eprintln!(
+                                    "Vindexa: encargos del agente ({} hechos, {} fallidos).",
+                                    report.ran.len(),
+                                    report.failed.len()
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                eprintln!(
+                                    "Vindexa: los encargos no pudieron correr: {}",
+                                    error.message
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+
             let startup_recovery = db::recovery::StartupRecovery::prepare(database.clone());
             let metadata_enrichment =
                 Arc::new(steam::metadata_enrichment::MetadataEnrichmentCoordinator::default());
@@ -353,6 +394,11 @@ pub fn run() {
             commands::detect_agent_hosts,
             commands::local_model_survey,
             commands::vindagent_chat,
+            commands::vindagent_config,
+            commands::list_agent_tasks,
+            commands::save_agent_task,
+            commands::delete_agent_task,
+            commands::save_vindagent_config,
             commands::suggest_local_models,
             commands::local_model_install_plan,
             commands::install_local_runtime,

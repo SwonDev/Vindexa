@@ -2618,6 +2618,60 @@ pub async fn install_local_runtime() -> AppResult<String> {
         })?
 }
 
+/// Con qué modelo habla el agente de casa. Vacío significa «el que se detecte».
+#[tauri::command]
+pub async fn vindagent_config(
+    state: State<'_, AppState>,
+) -> AppResult<vindagent::config::ModelConfig> {
+    database_read(&state, move |database| vindagent::config::load(&database)).await
+}
+
+/// Guarda con qué modelo hablar. Apuntar fuera de este ordenador exige haberlo
+/// marcado: escribir mal una dirección no puede acabar mandando los títulos de
+/// una biblioteca a un servicio ajeno.
+#[tauri::command]
+pub async fn save_vindagent_config(
+    state: State<'_, AppState>,
+    input: vindagent::config::SaveModelConfig,
+) -> AppResult<vindagent::config::ModelConfig> {
+    database_read(&state, move |database| {
+        vindagent::config::save(&database, &input)
+    })
+    .await
+}
+
+/// Encargos que el agente repite solo.
+#[tauri::command]
+pub async fn list_agent_tasks(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<vindagent::schedule::ScheduledTask>> {
+    database_read(&state, move |database| {
+        vindagent::schedule::list(&database)
+    })
+    .await
+}
+
+/// Crea o edita un encargo.
+#[tauri::command]
+pub async fn save_agent_task(
+    state: State<'_, AppState>,
+    input: vindagent::schedule::SaveScheduledTask,
+) -> AppResult<vindagent::schedule::ScheduledTask> {
+    database_read(&state, move |database| {
+        vindagent::schedule::save(&database, &input)
+    })
+    .await
+}
+
+/// Borra un encargo.
+#[tauri::command]
+pub async fn delete_agent_task(state: State<'_, AppState>, task_id: String) -> AppResult<()> {
+    database_read(&state, move |database| {
+        vindagent::schedule::delete(&database, &task_id)
+    })
+    .await
+}
+
 /// Un turno de conversación con el agente que vive dentro de Vindexa.
 ///
 /// Devuelve la respuesta y, por separado, lo que haya hecho por el camino: un

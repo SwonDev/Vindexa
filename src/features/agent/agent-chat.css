@@ -177,3 +177,112 @@
   outline: 2px solid var(--v-cyan);
   outline-offset: -1px;
 }
+
+/* El selector de modelo vive en la cabecera, donde antes iba su nombre: sólo
+   aparece cuando hay más de uno, porque con uno no hay nada que elegir. */
+.agent-chat__model {
+  width: 100%;
+  max-width: 100%;
+  padding: 1px 2px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--v-muted);
+  font: inherit;
+  font-size: 10px;
+}
+.agent-chat__model:hover,
+.agent-chat__model:focus-visible {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+/* Las dos caras del agente: hablarle ahora o dejarle un encargo. */
+.agent-chat__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px 0;
+}
+.agent-chat__tabs button {
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: none;
+  color: var(--v-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.agent-chat__tabs button[data-active="true"] {
+  border-color: var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.agent-chat__tasks {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 11px;
+  overflow-y: auto;
+}
+
+.agent-chat__task-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+}
+
+.agent-chat__task-form input,
+.agent-chat__task-form select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 11px;
+}
+
+.agent-chat__task-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-chat__task-list li {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+/* Un encargo pausado sigue estando, pero no compite por la atención. */
+.agent-chat__task-list li[data-enabled="false"] {
+  opacity: 0.6;
+}
+
+.agent-chat__task-list p {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-chat__task-list span {
+  color: var(--v-subtle);
+  font-size: 10px;
+}
+
+.agent-chat__task-result {
+  overflow-wrap: anywhere;
+}
+
+.agent-chat__task-list div {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}

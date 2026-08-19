@@ -4,6 +4,7 @@ import type {
   AgentAuditEntry,
   AgentAutolinkStatus,
   AgentClientSummary,
+  AgentModelConfig,
   AgentOutcome,
   AgentRequest,
   AgentScope,
@@ -14,6 +15,9 @@ import type {
   IssuedAgentClient,
   LocalModelSurvey,
   NewAgentClient,
+  SaveAgentModelConfig,
+  SaveScheduledTask,
+  ScheduledTask,
 } from "@/lib/agent-types";
 import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
@@ -383,6 +387,12 @@ export const api = {
     invoke<CatalogSuggestions>("suggest_local_models", { usableBytes }),
   localModelInstallPlan: () => invoke<InstallPlan>("local_model_install_plan"),
   installLocalRuntime: () => invoke<string>("install_local_runtime"),
+  listAgentTasks: () => invoke<ScheduledTask[]>("list_agent_tasks"),
+  saveAgentTask: (input: SaveScheduledTask) => invoke<ScheduledTask>("save_agent_task", { input }),
+  deleteAgentTask: (taskId: string) => invoke<void>("delete_agent_task", { taskId }),
+  vindagentConfig: () => invoke<AgentModelConfig>("vindagent_config"),
+  saveVindagentConfig: (input: SaveAgentModelConfig) =>
+    invoke<AgentModelConfig>("save_vindagent_config", { input }),
   vindagentChat: (baseUrl: string, model: string, history: ChatMessage[]) =>
     invoke<ChatTurn>("vindagent_chat", { baseUrl, model, history }),
   agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),
