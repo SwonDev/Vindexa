@@ -84,7 +84,8 @@ const GAME_SELECT: &str = "
               FROM collection_games cg
              WHERE cg.app_id = g.app_id) AS collection_ids,
            g.genres_json, g.developer,
-           g.platform_windows, g.platform_mac, g.platform_linux
+           g.platform_windows, g.platform_mac, g.platform_linux,
+           g.drm_state
       FROM games g
       JOIN game_personal p ON p.app_id = g.app_id
       JOIN statuses s ON s.id = p.status_id
@@ -212,26 +213,29 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
 }
 
 pub fn filter_options(connection: &Connection) -> AppResult<LibraryFilterOptions> {
-    let (total_games, metadata_games, achievement_games, steam_deck_games) = connection.query_row(
+    let (total_games, metadata_games, achievement_games, steam_deck_games, drm_games) = connection
+        .query_row(
         "SELECT COUNT(*),
                 COUNT(*) FILTER (WHERE metadata_status = 'success'),
                 COUNT(*) FILTER (WHERE achievements_status = 'success'),
-                COUNT(*) FILTER (WHERE steam_deck_status IS NOT NULL)
+                COUNT(*) FILTER (WHERE steam_deck_status IS NOT NULL),
+                COUNT(*) FILTER (WHERE drm_state <> 'unknown')
            FROM games
           WHERE NOT (
               ownership_source = 'family_shared'
               AND family_availability <> 'confirmed'
           )",
         [],
-        |row| {
-            Ok((
-                get_u64(row, 0)?,
-                get_u64(row, 1)?,
-                get_u64(row, 2)?,
-                get_u64(row, 3)?,
-            ))
-        },
-    )?;
+            |row| {
+                Ok((
+                    get_u64(row, 0)?,
+                    get_u64(row, 1)?,
+                    get_u64(row, 2)?,
+                    get_u64(row, 3)?,
+                    get_u64(row, 4)?,
+                ))
+            },
+        )?;
     let genres = distinct_metadata_values(connection, "genres_json")?;
     let categories = distinct_metadata_values(connection, "categories_json")?;
     let tags = {
@@ -255,6 +259,7 @@ pub fn filter_options(connection: &Connection) -> AppResult<LibraryFilterOptions
         metadata_games,
         achievement_games,
         steam_deck_games,
+        drm_games,
     })
 }
 
@@ -332,6 +337,14 @@ fn validate_filter_request(request: &GameListRequest) -> AppResult<()> {
         return Err(AppError::validation(
             "El filtro de compatibilidad con Steam Deck no es válido.",
         ));
+    }
+    if let Some(state) = request.drm_state.as_deref()
+        && !matches!(
+            state,
+            "drm_free" | "third_party_drm" | "steam_drm" | "unknown"
+        )
+    {
+        return Err(AppError::validation("El filtro de DRM no es válido."));
     }
     Ok(())
 }
@@ -630,6 +643,13 @@ pub fn list_games(
         clauses.push("g.steam_deck_status = ?".to_string());
         values.push(Box::new(status.to_string()));
     }
+    // `unknown` es «todavía no se ha comprobado», no «lleva DRM»: se filtra por
+    // el valor tal cual para que se pueda ver justamente eso, lo que falta por
+    // mirar, sin confundirlo con lo comprobado.
+    if let Some(state) = request.drm_state.as_deref() {
+        clauses.push("g.drm_state = ?".to_string());
+        values.push(Box::new(state.to_string()));
+    }
     push_date_filter(
         &mut clauses,
         &mut values,
@@ -859,6 +879,7 @@ fn map_game_summary(row: &Row<'_>) -> rusqlite::Result<GameSummary> {
         platform_windows: row.get::<_, Option<i64>>(36)?.map(|value| value != 0),
         platform_mac: row.get::<_, Option<i64>>(37)?.map(|value| value != 0),
         platform_linux: row.get::<_, Option<i64>>(38)?.map(|value| value != 0),
+        drm_state: row.get(39)?,
     })
 }
 

@@ -75,6 +75,22 @@ type DraggableListeners = ReturnType<typeof useDraggable>["listeners"];
  * necesita el gesto de puntero —el resto del arrastre lo gobierna el activador
  * accesible—, así que se acota aquí en un único punto.
  */
+/**
+ * Señas cortas que acompañan al título en la lista.
+ *
+ * No están en la cuadrícula a propósito: allí manda la carátula y cualquier
+ * rótulo encima la estropea. En la lista hay sitio para texto, así que se
+ * aprovecha. «Sin DRM» sólo aparece cuando está comprobado: callar no es lo
+ * mismo que decir que un juego lleva protección.
+ */
+function rowMarks(game: GameSummary): string[] {
+  const marks: string[] = [];
+  if (game.installed) marks.push("Instalado");
+  if (game.isEarlyAccess) marks.push("Early Access");
+  if (game.drmState === "drm_free") marks.push("Sin DRM");
+  return marks;
+}
+
 function pointerDragListener(
   listeners: DraggableListeners,
 ): React.PointerEventHandler<HTMLElement> | undefined {
@@ -853,9 +869,10 @@ const GameRow = memo(function GameRow({
             )}
             <div>
               <strong>{game.title}</strong>
-              {!compact && (game.installed || game.isEarlyAccess) && (
-                <span>{game.installed ? "Instalado" : "Early Access"}</span>
-              )}
+              {/* Señas del juego, no de su arte: por eso van aquí y nunca sobre
+                  la carátula. «Sin DRM» sólo aparece cuando está comprobado;
+                  callar no es lo mismo que decir que lleva protección. */}
+              {!compact && rowMarks(game).length > 0 && <span>{rowMarks(game).join(" · ")}</span>}
             </div>
           </div>
           <div className="game-row__status">

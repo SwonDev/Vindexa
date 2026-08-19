@@ -323,6 +323,14 @@ pub struct GameSummary {
     /// ficha completa de cada juego.
     pub genres: Vec<String>,
     pub developer: Option<String>,
+    /// Cómo se protege el juego: `drm_free`, `third_party_drm`, `steam_drm` o
+    /// `unknown`.
+    ///
+    /// Viaja en el resumen —y no sólo en la ficha— para que la lista pueda
+    /// señalar lo que no depende de ninguna tienda sin abrir juego por juego.
+    /// Nunca se pinta sobre la carátula: una carátula es del juego, no de cómo
+    /// se distribuye.
+    pub drm_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -401,6 +409,10 @@ pub struct LibraryFilterOptions {
     pub metadata_games: u64,
     pub achievement_games: u64,
     pub steam_deck_games: u64,
+    /// Juegos con el DRM ya comprobado. Sin ninguno, el filtro se ofrece
+    /// apagado: filtrar por un dato que nadie tiene sólo devuelve una lista
+    /// vacía y parece que la biblioteca está rota.
+    pub drm_games: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -473,6 +485,13 @@ pub struct GameListRequest {
     pub max_achievement_percent: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steam_deck_status: Option<String>,
+    /// Estado de DRM: `drm_free`, `third_party_drm`, `steam_drm` o `unknown`.
+    ///
+    /// Existe para poder ver de un vistazo qué parte de la biblioteca se puede
+    /// jugar sin depender de ninguna tienda. Va aquí y no en la carátula porque
+    /// una carátula es del juego, no de cómo se distribuye.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drm_state: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_date_from: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

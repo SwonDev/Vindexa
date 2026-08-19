@@ -65,6 +65,7 @@ fn database() -> Connection {
                 genres_json = '[\"Acción\",\"Aventura\"]',
                 categories_json = '[\"Cooperativo en línea\"]',
                 steam_deck_status = 'verified',
+                drm_state = 'drm_free',
                 achievements_unlocked = 5,
                 achievements_total = 10,
                 achievements_status = 'success'
@@ -191,6 +192,7 @@ fn exposes_only_real_filter_options_and_coverage() {
     assert_eq!(options.metadata_games, 2);
     assert_eq!(options.achievement_games, 2);
     assert_eq!(options.steam_deck_games, 1);
+    assert_eq!(options.drm_games, 1, "sólo cuenta lo comprobado");
     assert_eq!(options.genres, ["Acción", "Aventura", "Estrategia"]);
     assert_eq!(options.categories, ["Cooperativo en línea", "Un jugador"]);
     assert_eq!(options.tags[0].id, "relajante");
@@ -214,4 +216,41 @@ fn rejects_inverted_ranges_and_invalid_dates() {
             library::list_games(&connection, &request, None).expect_err("rechazar filtro ambiguo");
         assert_eq!(error.code, "validation");
     }
+}
+
+#[test]
+fn el_drm_se_filtra_por_lo_comprobado_y_lo_que_falta_por_mirar() {
+    // `unknown` es «aún no se ha comprobado», no «lleva DRM». Se puede pedir a
+    // propósito para ver qué queda por mirar, y no se mezcla con lo comprobado.
+    let connection = database();
+
+    assert_eq!(
+        ids(
+            &connection,
+            GameListRequest {
+                drm_state: Some("drm_free".into()),
+                ..GameListRequest::default()
+            }
+        ),
+        [1]
+    );
+    let sin_comprobar = ids(
+        &connection,
+        GameListRequest {
+            drm_state: Some("unknown".into()),
+            ..GameListRequest::default()
+        },
+    );
+    assert!(!sin_comprobar.contains(&1), "{sin_comprobar:?}");
+
+    let error = library::list_games(
+        &connection,
+        &GameListRequest {
+            drm_state: Some("libre".into()),
+            ..GameListRequest::default()
+        },
+        None,
+    )
+    .expect_err("rechazar un estado de DRM inventado");
+    assert_eq!(error.code, "validation");
 }

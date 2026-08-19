@@ -221,6 +221,11 @@ export interface GameSummary {
    * **no se sabe**, que no es lo mismo que «no compatible»: sin el dato, la
    * interfaz no puede desaconsejar una instalación.
    */
+  /**
+   * Cómo se protege el juego: `drm_free`, `third_party_drm`, `steam_drm` o
+   * `unknown` —que significa «aún no se ha comprobado», no «lleva DRM»—.
+   */
+  drmState: string;
   platformWindows?: boolean | null;
   platformMac?: boolean | null;
   platformLinux?: boolean | null;
@@ -343,6 +348,8 @@ export interface LibraryFilterOptions {
   metadataGames: number;
   achievementGames: number;
   steamDeckGames: number;
+  /** Juegos con el DRM ya comprobado. Sin ninguno, el filtro se ofrece apagado. */
+  drmGames: number;
 }
 
 export interface MetadataEnrichmentStatus {
@@ -394,6 +401,8 @@ export interface GameListRequest {
   minAchievementPercent?: number;
   maxAchievementPercent?: number;
   steamDeckStatus?: string;
+  /** `drm_free`, `third_party_drm`, `steam_drm` o `unknown`. */
+  drmState?: string;
   targetDateFrom?: string;
   targetDateTo?: string;
   minSessionMinutes?: number;

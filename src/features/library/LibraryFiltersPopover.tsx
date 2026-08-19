@@ -68,6 +68,7 @@ export function LibraryFiltersPopover({
   const metadataAvailable = Boolean(options?.metadataGames);
   const achievementsAvailable = Boolean(options?.achievementGames);
   const deckAvailable = Boolean(options?.steamDeckGames);
+  const drmAvailable = Boolean(options?.drmGames);
   const coverage = options?.totalGames
     ? `${options.metadataGames.toLocaleString("es-ES")} de ${options.totalGames.toLocaleString("es-ES")}`
     : "0";
@@ -297,6 +298,28 @@ export function LibraryFiltersPopover({
               {!achievementsAvailable && (
                 <AvailabilityNote>
                   Se habilitará cuando hayas actualizado los logros de al menos un juego.
+                </AvailabilityNote>
+              )}
+              {/* El DRM no se marca en la carátula: una carátula es del juego,
+                  no de cómo se distribuye. Aquí sí, porque aquí se pregunta
+                  justo eso: qué parte de la biblioteca no depende de nadie. */}
+              <FilterSelect
+                label="Protección anticopia (DRM)"
+                value={normalized.drmState}
+                onChange={(value) => set("drmState", value)}
+                choices={[
+                  { id: "drm_free", name: "Sin DRM" },
+                  { id: "third_party_drm", name: "DRM de terceros" },
+                  { id: "steam_drm", name: "Steam DRM" },
+                  { id: "unknown", name: "Sin comprobar" },
+                ]}
+                anyLabel="Cualquier protección"
+                disabled={!drmAvailable}
+              />
+              {!drmAvailable && (
+                <AvailabilityNote>
+                  Se habilitará cuando Vindexa haya comprobado el DRM de al menos un juego, cosa que
+                  ocurre al enriquecer sus fichas.
                 </AvailabilityNote>
               )}
               <FilterSelect

@@ -23,6 +23,8 @@ export interface LibraryFilters {
   minAchievementPercent?: number;
   maxAchievementPercent?: number;
   steamDeckStatus?: string;
+  /** `drm_free`, `third_party_drm`, `steam_drm` o `unknown`. */
+  drmState?: string;
   targetDateFrom?: string;
   targetDateTo?: string;
   minSessionMinutes?: number;
@@ -85,6 +87,19 @@ export function normalizeLibraryFilters(filters: LibraryFilters): LibraryFilters
   }
   return normalized;
 }
+
+/**
+ * Cómo se llama cada estado de DRM cuando se enseña.
+ *
+ * `unknown` no es «lleva DRM»: es que Vindexa aún no lo ha comprobado, y
+ * decirlo así evita que un dato que falta se lea como un dato que hay.
+ */
+export const DRM_FILTER_LABELS: Record<string, string> = {
+  drm_free: "Sin DRM",
+  third_party_drm: "DRM de terceros",
+  steam_drm: "Steam DRM",
+  unknown: "Sin comprobar",
+};
 
 function removeKey(key: keyof LibraryFilters) {
   return (filters: LibraryFilters): LibraryFilters => ({ ...filters, [key]: undefined });
@@ -197,6 +212,13 @@ export function filterChips(
       (value) => `${value} %`,
     ),
   );
+  if (filters.drmState) {
+    chips.push({
+      key: "drmState",
+      label: `DRM: ${DRM_FILTER_LABELS[filters.drmState] ?? filters.drmState}`,
+      remove: removeKey("drmState"),
+    });
+  }
   if (filters.steamDeckStatus) {
     chips.push({
       key: "steamDeckStatus",

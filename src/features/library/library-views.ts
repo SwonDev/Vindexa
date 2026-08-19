@@ -80,6 +80,7 @@ const singleValueFields = {
   tagId: "Etiqueta",
   collectionId: "Colección",
   steamDeckStatus: "Compatibilidad con Steam Deck",
+  drmState: "Protección anticopia (DRM)",
   installed: "Instalación",
   tracking: "Seguimiento",
   earlyAccess: "Acceso anticipado",
