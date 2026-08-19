@@ -35,7 +35,7 @@ import {
   SHORTCUTS_CHANGED_EVENT,
   shortcutLabel,
 } from "@/features/shell/shortcuts";
-import { handleTitleBarPointerDown } from "@/features/shell/window-chrome";
+import { fitWindowToAvailableSpace } from "@/features/shell/window-chrome";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppSection } from "@/lib/types";
@@ -91,7 +91,6 @@ const sections = [
 
 export function AppShell() {
   const [section, setSection] = useState<AppSection>("library");
-  const titleBarRef = useRef<HTMLElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -118,12 +117,10 @@ export function AppShell() {
     void queryClient.invalidateQueries({ queryKey: ["games"] });
   }, [metadataTerminalCount, queryClient]);
 
+  // Abrir ocupando el espacio disponible, una sola vez: después la ventana es
+  // de quien la usa.
   useEffect(() => {
-    const titleBar = titleBarRef.current;
-    if (!titleBar) return;
-    const onMouseDown = (event: MouseEvent) => handleTitleBarPointerDown(event);
-    titleBar.addEventListener("mousedown", onMouseDown);
-    return () => titleBar.removeEventListener("mousedown", onMouseDown);
+    void fitWindowToAvailableSpace();
   }, []);
 
   /**
@@ -549,7 +546,11 @@ export function AppShell() {
         <span className="sr-only" role="status" aria-live="polite">
           {syncAnnouncement}
         </span>
-        <header className="topbar" ref={titleBarRef}>
+        {/* `deep` hace que cualquier zona inerte de la barra arrastre la
+            ventana y que el doble clic la maximice. El script de Tauri excluye
+            solo botones, enlaces y campos, que es justo lo que aquí interesa
+            que siga siendo pulsable. */}
+        <header className="topbar" data-tauri-drag-region="deep">
           <div className="brand">
             <span className="brand__name">VINDEXA</span>
             <span className="brand__edition">DESKTOP</span>

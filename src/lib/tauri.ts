@@ -294,6 +294,9 @@ export const api = {
   listSmartRules: (collectionId: string) =>
     invoke<SmartRule[]>("list_smart_rules", { collectionId }),
   deleteCollection: (id: string) => invoke<void>("delete_collection", { id }),
+  /** Cambia sólo la apariencia: no toca el nombre, la descripción ni las reglas. */
+  setCollectionAppearance: (id: string, color: string, icon: string) =>
+    invoke<void>("set_collection_appearance", { id, color, icon }),
   reorderCollections: (ids: string[]) => invoke<void>("reorder_collections", { ids }),
   importLocalSteam: () => invoke<LocalSteamImportResult>("import_local_steam"),
   startSteamLogin: () => invoke<void>("start_steam_login"),
@@ -328,6 +331,8 @@ export const api = {
   installGame: (appId: number) => invoke<void>("install_game", { appId }),
   uninstallGame: (appId: number) => invoke<void>("uninstall_game", { appId }),
   openStore: (appId: number) => invoke<void>("open_store", { appId }),
+  /** Abre la portada de una tienda en el navegador integrado, con su sesión. */
+  openStoreBrowser: (storeId: string) => invoke<void>("open_store_browser", { storeId }),
   revealInstallation: (appId: number) => invoke<void>("reveal_installation", { appId }),
   cacheGameArt: (
     appId: number,

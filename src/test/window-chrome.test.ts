@@ -1,41 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleTitleBarPointerDown, isWindowDragArea } from "@/features/shell/window-chrome";
+import { fitWindowToAvailableSpace } from "@/features/shell/window-chrome";
 
-function mouseEvent(target: EventTarget | null, detail: number, button = 0) {
-  return { button, detail, target, preventDefault: vi.fn() };
-}
-
-describe("gestos de la barra de título", () => {
-  it("trata como zona de ventana el espacio inerte de la barra", () => {
-    document.body.innerHTML = `
-      <header class="topbar">
-        <div class="brand"><span>VINDEXA</span></div>
-        <button type="button">Ajustes</button>
-      </header>`;
-    const blank = document.querySelector(".brand span");
-    const control = document.querySelector("button");
-
-    expect(isWindowDragArea(blank)).toBe(true);
-    expect(isWindowDragArea(control)).toBe(false);
-    expect(isWindowDragArea(null)).toBe(false);
+/**
+ * El arrastre y el doble clic de la barra de título los resuelve el script de
+ * arrastre de Tauri —la barra los declara con `data-tauri-drag-region`—, así
+ * que lo que queda por comprobar aquí es que la ventana se abre ocupando el
+ * hueco real y que fuera del escritorio no intenta hablar con nadie.
+ */
+describe("ajuste de la ventana al abrirse", () => {
+  it("no pide nada cuando no hay contenedor de escritorio", async () => {
+    // En las pruebas y en el navegador el módulo de Tauri se importa igual,
+    // pero su puente no existe: pedirle algo dejaría la promesa esperando para
+    // siempre y con ella el arranque de la interfaz.
+    expect("__TAURI_INTERNALS__" in window).toBe(false);
+    await expect(fitWindowToAvailableSpace()).resolves.toBeUndefined();
   });
 
-  it("maximiza con el segundo clic de un doble clic sobre el espacio vacío", () => {
-    document.body.innerHTML = `<header class="topbar"><div class="brand"></div></header>`;
-    const blank = document.querySelector(".brand");
+  it("no falla si la pantalla no publica su espacio disponible", async () => {
+    const original = Object.getOwnPropertyDescriptor(window, "screen");
+    Object.defineProperty(window, "screen", {
+      value: { availWidth: 0, availHeight: 0 },
+      configurable: true,
+    });
+    const bridge = vi.fn();
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      value: { invoke: bridge },
+      configurable: true,
+    });
 
-    expect(handleTitleBarPointerDown(mouseEvent(blank, 1))).toBe("drag");
-    expect(handleTitleBarPointerDown(mouseEvent(blank, 2))).toBe("maximize");
-  });
+    await expect(fitWindowToAvailableSpace()).resolves.toBeUndefined();
 
-  it("no secuestra el gesto sobre controles ni con el botón secundario", () => {
-    document.body.innerHTML = `<header class="topbar"><button type="button">Ajustes</button></header>`;
-    const control = document.querySelector("button");
-    const onControl = mouseEvent(control, 2);
-    const secondary = mouseEvent(control, 1, 2);
-
-    expect(handleTitleBarPointerDown(onControl)).toBe("ignore");
-    expect(onControl.preventDefault).not.toHaveBeenCalled();
-    expect(handleTitleBarPointerDown(secondary)).toBe("ignore");
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    if (original) Object.defineProperty(window, "screen", original);
   });
 });

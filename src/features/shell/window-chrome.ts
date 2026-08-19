@@ -1,42 +1,31 @@
 /**
- * Comportamiento de la barra superior como barra de título nativa.
+ * Ajuste de la ventana al abrirse.
  *
- * La ventana se declara con `titleBarStyle: "Overlay"` y `hiddenTitle: true`,
- * así que la cabecera de Vindexa *es* la barra de título del sistema. Aquí se
- * resuelven los dos gestos que el sistema operativo esperaría de ella:
- * arrastrar la ventana desde una zona vacía y maximizar o restaurar con doble
- * clic.
+ * # Por qué el arrastre y el doble clic ya no viven aquí
  *
- * Se hace desde JavaScript en lugar de con `data-tauri-drag-region` para tener
- * control exacto sobre qué cuenta como «zona vacía» y para que el doble clic no
- * se dispare dos veces (una por el gestor nativo y otra por el de la interfaz).
+ * Vivieron, y no funcionaban. Resolver el gesto a mano obliga a acertar con el
+ * orden exacto en que cada sistema entrega los eventos —en macOS, pedir el
+ * arrastre al pulsar hace que el segundo clic no llegue nunca— y a mantener esa
+ * pieza para siempre. El propio Tauri ya trae ese trabajo hecho y probado en su
+ * zona de arrastre, así que la barra lo declara con `data-tauri-drag-region` y
+ * este módulo se queda sólo con lo que Tauri no cubre: abrir ocupando el hueco
+ * real de la pantalla.
  */
 
-/** Elementos que capturan el gesto: sobre ellos la barra no arrastra ni maximiza. */
-const INTERACTIVE_SELECTOR = [
-  "button",
-  "a[href]",
-  "input",
-  "select",
-  "textarea",
-  "kbd",
-  '[role="button"]',
-  '[role="tab"]',
-  '[role="menuitem"]',
-  '[contenteditable="true"]',
-  "[data-no-window-drag]",
-].join(", ");
-
-/** `true` cuando el gesto ocurrió sobre una parte inerte de la barra de título. */
-export function isWindowDragArea(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  if (target.closest(INTERACTIVE_SELECTOR)) return false;
-  const selection = target.ownerDocument?.defaultView?.getSelection();
-  // Si hay texto seleccionado el gesto pertenece a la selección, no a la ventana.
-  return !selection || selection.isCollapsed;
+/**
+ * ¿Hay un contenedor de escritorio al otro lado?
+ *
+ * Comprobarlo antes de pedir nada es lo que evita que una llamada de ventana se
+ * quede esperando para siempre una respuesta que nadie va a dar: en las pruebas
+ * y en `pnpm dev` el módulo de Tauri se importa igual, pero su puente no
+ * existe.
+ */
+function hasDesktopBridge(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 async function currentWindow() {
+  if (!hasDesktopBridge()) return undefined;
   try {
     const module = await import("@tauri-apps/api/window");
     return module.getCurrentWindow();
@@ -47,49 +36,36 @@ async function currentWindow() {
   }
 }
 
-/** Alterna entre maximizado y restaurado, como haría la barra de título nativa. */
-export async function toggleWindowMaximize(): Promise<void> {
-  const appWindow = await currentWindow();
-  if (!appWindow) return;
-  try {
-    await appWindow.toggleMaximize();
-  } catch {
-    // Una ventana no redimensionable no puede maximizarse: no es un error.
-  }
-}
-
-/** Cede el gesto al gestor de ventanas para mover la ventana con el puntero. */
-export async function startWindowDrag(): Promise<void> {
-  const appWindow = await currentWindow();
-  if (!appWindow) return;
-  try {
-    await appWindow.startDragging();
-  } catch {
-    // Ídem: sin ventana nativa el arrastre no aplica.
-  }
-}
-
 /**
- * Manejador único de `mousedown` para la barra de título.
+ * Abre la ventana ocupando el espacio disponible de la pantalla.
  *
- * `event.detail === 2` identifica el segundo clic de un doble clic. Resolver
- * ambos gestos en el mismo evento es imprescindible: en cuanto se llama a
- * `startDragging()` el sistema se apodera del puntero y el `dblclick` posterior
- * ya nunca llegaría al documento.
+ * No basta con `maximized` en la configuración ni con pedir `maximize()`: en
+ * macOS ambas cosas acaban en el *zoom* del sistema, que lleva la ventana al
+ * tamaño que la aplicación declara como preferido en vez de al que cabe.
+ * Medido: la ventana quedaba en 1440×870 sobre una pantalla útil de 1512×982.
+ *
+ * Quien sí conoce el hueco exacto es el propio motor web: `screen.avail*`
+ * descuenta la barra de menús, el Dock y cualquier otra barra del sistema. Es
+ * además la misma cuenta en las tres plataformas.
+ *
+ * Se ajusta sólo al abrir. Después la ventana es de quien la usa: si la
+ * redimensiona, nadie se lo deshace.
  */
-export function handleTitleBarPointerDown(event: {
-  button: number;
-  detail: number;
-  target: EventTarget | null;
-  preventDefault: () => void;
-}): "maximize" | "drag" | "ignore" {
-  if (event.button !== 0) return "ignore";
-  if (!isWindowDragArea(event.target)) return "ignore";
-  event.preventDefault();
-  if (event.detail >= 2) {
-    void toggleWindowMaximize();
-    return "maximize";
+export async function fitWindowToAvailableSpace(): Promise<void> {
+  if (typeof window === "undefined" || typeof window.screen === "undefined") return;
+  const appWindow = await currentWindow();
+  if (!appWindow) return;
+  const { availWidth, availHeight } = window.screen;
+  if (!availWidth || !availHeight) return;
+  // `availLeft` y `availTop` no están en todos los motores; su ausencia
+  // significa que el área útil empieza en el origen.
+  const left = (window.screen as Screen & { availLeft?: number }).availLeft ?? 0;
+  const top = (window.screen as Screen & { availTop?: number }).availTop ?? 0;
+  try {
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    await appWindow.setPosition(new LogicalPosition(left, top));
+    await appWindow.setSize(new LogicalSize(availWidth, availHeight));
+  } catch {
+    // Sin ventana nativa —pruebas, navegador— no hay nada que ajustar.
   }
-  void startWindowDrag();
-  return "drag";
 }

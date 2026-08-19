@@ -1274,6 +1274,10 @@ impl Database {
         organization::delete_collection(&mut self.open()?, id)
     }
 
+    pub fn set_collection_appearance(&self, id: &str, color: &str, icon: &str) -> AppResult<()> {
+        organization::set_collection_appearance(&mut self.open()?, id, color, icon)
+    }
+
     pub fn reorder_collections(&self, ids: &[String]) -> AppResult<()> {
         organization::reorder_collections(&mut self.open()?, ids)
     }

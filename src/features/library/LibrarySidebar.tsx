@@ -20,6 +20,7 @@ import {
   readLibrarySectionExpanded,
   writeLibrarySectionExpanded,
 } from "@/features/library/library-session";
+import { CollectionContextMenu, StoreContextMenu } from "@/features/library/SidebarContextMenus";
 import type { AppBootstrap } from "@/lib/types";
 import { collectionDropId, collectionOrderDragId, statusDropId } from "./library-dnd";
 
@@ -44,6 +45,9 @@ interface LibrarySidebarProps {
   onCreateCollection: () => void;
   draggingGames?: boolean | undefined;
   collectionReorderEnabled?: boolean | undefined;
+  /** Abre el editor completo de una colección desde su menú rápido. */
+  onEditCollection?: ((id: string) => void) | undefined;
+  onDeleteCollection?: ((id: string) => void) | undefined;
 }
 
 export function LibrarySidebar({
@@ -51,6 +55,8 @@ export function LibrarySidebar({
   scope,
   onScopeChange,
   onCreateCollection,
+  onEditCollection,
+  onDeleteCollection,
   draggingGames = false,
   collectionReorderEnabled = false,
 }: LibrarySidebarProps) {
@@ -93,14 +99,15 @@ export function LibrarySidebar({
             que tiene algo que enseñar. */}
         {EXTERNAL_STORES.map((store) =>
           (bootstrap?.stats.externalStoreGames?.[store.id] ?? 0) > 0 ? (
-            <SidebarItem
-              key={store.id}
-              active={scope.kind === "store" && scope.id === store.id}
-              icon={store.icon}
-              label={store.label}
-              count={bootstrap?.stats.externalStoreGames?.[store.id]}
-              onClick={() => onScopeChange({ kind: "store", id: store.id, label: store.label })}
-            />
+            <StoreContextMenu key={store.id} storeId={store.id} storeLabel={store.label}>
+              <SidebarItem
+                active={scope.kind === "store" && scope.id === store.id}
+                icon={store.icon}
+                label={store.label}
+                count={bootstrap?.stats.externalStoreGames?.[store.id]}
+                onClick={() => onScopeChange({ kind: "store", id: store.id, label: store.label })}
+              />
+            </StoreContextMenu>
           ) : null,
         )}
       </div>
@@ -161,16 +168,22 @@ export function LibrarySidebar({
         >
           <div className="sidebar-list">
             {bootstrap?.collections.map((collection) => (
-              <CollectionSidebarItem
+              <CollectionContextMenu
                 key={collection.id}
-                active={selected("collection", collection.id)}
                 collection={collection}
-                draggingGames={draggingGames}
-                reorderEnabled={collectionReorderEnabled}
-                onClick={() =>
-                  onScopeChange({ kind: "collection", id: collection.id, label: collection.name })
-                }
-              />
+                onEdit={() => onEditCollection?.(collection.id)}
+                onDelete={() => onDeleteCollection?.(collection.id)}
+              >
+                <CollectionSidebarItem
+                  active={selected("collection", collection.id)}
+                  collection={collection}
+                  draggingGames={draggingGames}
+                  reorderEnabled={collectionReorderEnabled}
+                  onClick={() =>
+                    onScopeChange({ kind: "collection", id: collection.id, label: collection.name })
+                  }
+                />
+              </CollectionContextMenu>
             ))}
           </div>
         </SortableContext>

@@ -351,6 +351,38 @@ pub fn save_collection(
     find_collection(connection, &collection_id)
 }
 
+/// Cambia sólo el color y el icono de una colección.
+///
+/// Existe aparte de [`save_collection`] a propósito. Aquél recibe la colección
+/// entera —nombre, descripción, modo y reglas— y guardarla desde un menú de
+/// acciones rápidas obligaría a reenviar campos que ese menú no conoce: las
+/// reglas de una colección inteligente se perderían por el camino. Cambiar la
+/// apariencia no debe poder tocar lo que la colección significa.
+pub fn set_collection_appearance(
+    connection: &mut Connection,
+    collection_id: &str,
+    color: &str,
+    icon: &str,
+) -> AppResult<()> {
+    let color = validate_color(color)?;
+    let icon = icon.trim();
+    if icon.is_empty() || icon.chars().count() > 40 {
+        return Err(AppError::validation(
+            "El icono de la colección no es válido.",
+        ));
+    }
+    let updated = connection.execute(
+        "UPDATE collections
+            SET color = ?2, icon = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE id = ?1",
+        params![collection_id, color, icon],
+    )?;
+    if updated != 1 {
+        return Err(AppError::not_found("La colección ya no existe."));
+    }
+    Ok(())
+}
+
 pub fn delete_collection(connection: &mut Connection, collection_id: &str) -> AppResult<()> {
     let transaction = connection.transaction()?;
     let deleted = transaction.execute("DELETE FROM collections WHERE id = ?1", [collection_id])?;
@@ -1993,6 +2025,77 @@ mod tests {
                 [app_id],
             )
             .expect("insertar datos personales");
+    }
+
+    #[test]
+    fn la_apariencia_se_cambia_sin_tocar_las_reglas_de_una_coleccion() {
+        // El menú de acciones rápidas sólo conoce el color y el icono. Si para
+        // cambiarlos tuviera que guardar la colección entera, las reglas de una
+        // inteligente se irían con el cambio, que es justo lo que esta función
+        // impide por construcción.
+        let mut connection = database();
+        let mut input = manual_collection("Roguelikes");
+        input.kind = "smart".to_string();
+        input.rules = vec![SmartRule {
+            id: None,
+            group_id: 0,
+            field: "genre".to_string(),
+            operator: "contains".to_string(),
+            value: serde_json::json!("Roguelike"),
+            position: 0,
+        }];
+        let id = save_collection(&mut connection, &input)
+            .expect("crear inteligente")
+            .id;
+
+        set_collection_appearance(&mut connection, &id, "#C1655C", "trophy").expect("apariencia");
+
+        let (color, icon, kind): (String, String, String) = connection
+            .query_row(
+                "SELECT color, icon, kind FROM collections WHERE id = ?1",
+                [&id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("leer la colección");
+        assert_eq!(color, "#C1655C");
+        assert_eq!(icon, "trophy");
+        assert_eq!(kind, "smart", "sigue siendo inteligente");
+
+        let reglas: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM smart_rules WHERE collection_id = ?1",
+                [&id],
+                |row| row.get(0),
+            )
+            .expect("contar reglas");
+        assert_eq!(reglas, 1, "las reglas sobreviven a un cambio de apariencia");
+    }
+
+    #[test]
+    fn una_apariencia_imposible_se_rechaza() {
+        let mut connection = database();
+        let id = save_collection(&mut connection, &manual_collection("Cualquiera"))
+            .expect("crear")
+            .id;
+
+        assert_eq!(
+            set_collection_appearance(&mut connection, &id, "no-es-un-color", "folder")
+                .expect_err("color inválido")
+                .code,
+            "validation"
+        );
+        assert_eq!(
+            set_collection_appearance(&mut connection, &id, "#5CAAC1", "  ")
+                .expect_err("icono vacío")
+                .code,
+            "validation"
+        );
+        assert_eq!(
+            set_collection_appearance(&mut connection, "no-existe", "#5CAAC1", "folder")
+                .expect_err("colección inexistente")
+                .code,
+            "not_found"
+        );
     }
 
     fn manual_collection(name: &str) -> SaveCollectionInput {

@@ -373,7 +373,12 @@
 .primary-nav {
   display: flex;
   align-items: stretch;
+  /* La rejilla de la barra reserva un ancho mínimo a esta columna, pero su
+     contenido puede pedir más: cinco pestañas con rótulo no bajan de 540 px. Sin
+     recortar aquí, lo que sobra se sale de la columna y se pinta encima de la
+     tarjeta de cuenta —se llegaban a leer dos textos superpuestos—. */
   min-width: 0;
+  overflow: hidden;
 }
 .primary-nav__item {
   position: relative;
@@ -874,6 +879,19 @@ kbd {
 }
 .sidebar-heading-row .sidebar-heading {
   flex: 1;
+}
+/* Muestra de color del menú rápido de una colección. Cuadrada y del mismo radio
+   que el resto de la aplicación: el color es el dato, no la forma. */
+.sidebar-swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(0 0 0 / 28%);
+  border-radius: 2px;
+}
+/* La opción activa se reconoce sin depender del color, que aquí es contenido. */
+[data-selected="true"] {
+  font-weight: 600;
 }
 .sidebar-item {
   display: grid;
@@ -3639,6 +3657,23 @@ input[type="search"]::-webkit-search-results-decoration {
   }
 }
 
+/* Entre este ancho y el mínimo de ventana, la barra deja de caber con todo el
+   texto. Se retira por orden de menor pérdida: primero el rótulo de la cuenta
+   —que el tooltip y la etiqueta accesible siguen diciendo— y sólo después los
+   de las pestañas, que conservan su icono, su tooltip y su `aria-label`. */
+@media (max-width: 1120px) {
+  .account-chip__label {
+    display: none;
+  }
+}
+@media (max-width: 1040px) {
+  .primary-nav__item span {
+    display: none;
+  }
+  .primary-nav__item {
+    padding: 0 13px;
+  }
+}
 @media (max-width: 960px) {
   .topbar {
     grid-template-columns: 64px minmax(360px, 1fr) auto;

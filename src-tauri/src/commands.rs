@@ -618,6 +618,21 @@ pub async fn delete_collection(state: State<'_, AppState>, id: String) -> AppRes
     database_read(&state, move |database| database.delete_collection(&id)).await
 }
 
+/// Cambia el color y el icono de una colección desde el menú de acciones
+/// rápidas, sin tocar su nombre, su descripción ni sus reglas.
+#[tauri::command]
+pub async fn set_collection_appearance(
+    state: State<'_, AppState>,
+    id: String,
+    color: String,
+    icon: String,
+) -> AppResult<()> {
+    database_read(&state, move |database| {
+        database.set_collection_appearance(&id, &color, &icon)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn list_smart_rules(
     state: State<'_, AppState>,
@@ -2312,6 +2327,18 @@ pub async fn uninstall_game(
 #[tauri::command]
 pub async fn open_store(app: AppHandle, app_id: u32) -> AppResult<()> {
     store_window::open(&app, app_id).await
+}
+
+/// Abre la portada de una tienda en el navegador integrado.
+///
+/// Cada tienda tiene su propio almacén de datos aislado, así que la ventana se
+/// abre **con la sesión que ya tengas iniciada en ella** y sin ver las cookies
+/// de las demás ni las de la aplicación. La allowlist de destinos y el filtro
+/// de contenido son los mismos que cuando se abre la ficha de un juego: esto no
+/// añade superficie, sólo un punto de entrada.
+#[tauri::command]
+pub async fn open_store_browser(app: AppHandle, store_id: String) -> AppResult<()> {
+    store_window::open_store_home(&app, &store_id).await
 }
 
 #[tauri::command]

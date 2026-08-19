@@ -51,6 +51,22 @@ pub fn run() {
                 metadata_enrichment,
                 achievements_lock: Arc::new(Mutex::new(())),
             });
+
+            // La ventana abre ocupando el espacio disponible.
+            //
+            // El ajuste `maximized` de la configuración no basta en macOS: allí
+            // «maximizar» es el *zoom* del sistema, que lleva la ventana al
+            // tamaño que la aplicación declara como preferido y no al que cabe
+            // en la pantalla. Pedirlo explícitamente al arrancar sí respeta el
+            // área útil —sin tapar la barra de menús ni el Dock— y en Windows y
+            // en Linux hace lo mismo que allí significa maximizar.
+            //
+            // Se ignora el fallo a propósito: una ventana que no ha podido
+            // maximizarse sigue siendo una ventana perfectamente usable, y no
+            // es motivo para no arrancar.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -85,6 +101,7 @@ pub fn run() {
             commands::save_collection,
             commands::preview_smart_collection,
             commands::delete_collection,
+            commands::set_collection_appearance,
             commands::list_smart_rules,
             commands::reorder_collections,
             commands::set_game_collections,
@@ -190,6 +207,7 @@ pub fn run() {
             commands::install_game,
             commands::uninstall_game,
             commands::open_store,
+            commands::open_store_browser,
             commands::reveal_installation,
             commands::cache_game_art,
             commands::clear_art_cache,

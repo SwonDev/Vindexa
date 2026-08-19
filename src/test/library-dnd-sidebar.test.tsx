@@ -1,4 +1,5 @@
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -36,19 +37,26 @@ const bootstrap = {
 } as AppBootstrap;
 
 function renderSidebar(onDragEnd = vi.fn<(event: DragEndEvent) => void>(), draggingGames = false) {
+  // La barra lateral incluye los menús de acciones rápidas, que hablan con el
+  // backend a través del cliente de consultas.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   render(
-    <DndContext onDragEnd={onDragEnd}>
-      <TooltipProvider>
-        <LibrarySidebar
-          bootstrap={bootstrap}
-          scope={{ kind: "all", label: "Todos los juegos" }}
-          draggingGames={draggingGames}
-          collectionReorderEnabled
-          onScopeChange={vi.fn()}
-          onCreateCollection={vi.fn()}
-        />
-      </TooltipProvider>
-    </DndContext>,
+    <QueryClientProvider client={client}>
+      <DndContext onDragEnd={onDragEnd}>
+        <TooltipProvider>
+          <LibrarySidebar
+            bootstrap={bootstrap}
+            scope={{ kind: "all", label: "Todos los juegos" }}
+            draggingGames={draggingGames}
+            collectionReorderEnabled
+            onScopeChange={vi.fn()}
+            onCreateCollection={vi.fn()}
+          />
+        </TooltipProvider>
+      </DndContext>
+    </QueryClientProvider>,
   );
   return onDragEnd;
 }

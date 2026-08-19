@@ -6,6 +6,36 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Acciones rápidas con el botón derecho en la barra lateral.** Una colección cambia de color y
+  de icono desde su propio menú, sin abrir el editor; y sobre una tienda, «Abrir en el navegador
+  integrado» la abre con la sesión que ya tengas iniciada en ella, porque cada una guarda la suya
+  aparte. Editar y eliminar siguen pidiendo confirmación o abriendo el editor: un menú rápido no
+  puede cambiar lo que una colección significa. La orden que envía sólo escribe el color y el
+  icono, así que las reglas de una colección inteligente no pueden perderse por un descuido.
+
+### Cambiado
+
+- **La ventana abre ocupando el espacio disponible.** El ajuste `maximized` no basta en macOS,
+  donde «maximizar» es el *zoom* del sistema y lleva la ventana al tamaño que la aplicación
+  declara como preferido: quedaba en 1440×870 sobre una pantalla útil de 1512×982. Ahora se mide
+  el hueco real —descontando la barra de menús y el Dock— y se ocupa entero. Después la ventana
+  es de quien la usa: si la redimensionas, nadie te lo deshace.
+- **El arrastre y el doble clic de la barra de título pasan a manos de Tauri.** Estaban resueltos
+  a mano y el doble clic no llegaba a dispararse: pedir el arrastre al pulsar hace que el sistema
+  se quede con el puntero y el segundo clic no llegue nunca. Declarar la barra como zona de
+  arrastre deja ese trabajo en el mecanismo del framework, que ya contempla el orden de eventos
+  de cada sistema.
+
+### Corregido
+
+- **La barra superior se solapaba consigo misma en ventanas estrechas.** Cinco pestañas con
+  rótulo no bajan de 540 px y su columna sólo tenía garantizados 400, así que lo que sobraba se
+  pintaba encima de la tarjeta de cuenta: se llegaban a leer dos textos superpuestos. Ahora la
+  navegación recorta lo que no cabe y, según va faltando sitio, se retira primero el rótulo de la
+  cuenta y después el de las pestañas —que conservan icono, tooltip y etiqueta accesible—.
+
 ## [0.1.3] · 2026-08-19
 
 ### Añadido

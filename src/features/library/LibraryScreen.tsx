@@ -153,6 +153,9 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
   /** Cursor de teclado. `detailId` sigue siendo, solo, la ficha abierta. */
   const [focusedId, setFocusedId] = useState<number>();
   const [collectionEditorOpen, setCollectionEditorOpen] = useState(false);
+  /** Colección que el menú rápido de la barra lateral manda editar o borrar. */
+  const [collectionToEdit, setCollectionToEdit] = useState<string>();
+  const [collectionToDelete, setCollectionToDelete] = useState<string>();
   const [operationMessage, setOperationMessage] = useState<string>();
   const [undoReceipt, setUndoReceipt] = useState<LibraryDropReceipt>();
   /**
@@ -1092,6 +1095,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           scope={scope}
           onScopeChange={changeScope}
           onCreateCollection={() => setCollectionEditorOpen(true)}
+          onEditCollection={(id) => {
+            setCollectionToEdit(id);
+            setCollectionEditorOpen(true);
+          }}
+          onDeleteCollection={setCollectionToDelete}
         />
         <section className="library-main">
           <LibraryToolbar
@@ -1122,6 +1130,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           scope={scope}
           onScopeChange={changeScope}
           onCreateCollection={() => setCollectionEditorOpen(true)}
+          onEditCollection={(id) => {
+            setCollectionToEdit(id);
+            setCollectionEditorOpen(true);
+          }}
+          onDeleteCollection={setCollectionToDelete}
         />
         <section className="library-main">
           <div className="screen-error">
@@ -1530,11 +1543,56 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
           <Suspense fallback={null}>
             <CollectionEditorDialog
               open={collectionEditorOpen}
-              onOpenChange={setCollectionEditorOpen}
+              onOpenChange={(open) => {
+                setCollectionEditorOpen(open);
+                // Cerrar el editor olvida qué se estaba editando: si no, el
+                // siguiente «Nueva colección» abriría la anterior.
+                if (!open) setCollectionToEdit(undefined);
+              }}
+              collection={bootstrap?.collections.find(
+                (candidate) => candidate.id === collectionToEdit,
+              )}
               statuses={bootstrap?.statuses}
             />
           </Suspense>
         )}
+        {/* Borrar una colección no se hace de un clic: es irreversible y el
+            menú rápido está a un descuido de distancia. */}
+        <AlertDialog
+          open={Boolean(collectionToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setCollectionToDelete(undefined);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                ¿Eliminar la colección{" "}
+                {bootstrap?.collections.find((item) => item.id === collectionToDelete)?.name}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Los juegos que contiene no se borran: siguen en tu biblioteca con su estado, su
+                progreso y sus notas. Lo que desaparece es la agrupación.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  const id = collectionToDelete;
+                  setCollectionToDelete(undefined);
+                  if (!id) return;
+                  void api
+                    .deleteCollection(id)
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["bootstrap"] }))
+                    .catch((cause: unknown) => setOperationMessage(getErrorMessage(cause)));
+                }}
+              >
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog
           open={Boolean(uninstallTarget)}
           onOpenChange={(open) => {
