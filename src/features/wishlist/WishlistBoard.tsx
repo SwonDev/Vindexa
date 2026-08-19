@@ -449,7 +449,9 @@ export function WishlistBoard({
         <span className="sr-only" role="status" aria-live="polite" />
       )}
 
-      {entries.length > 0 && (
+      {/* En lista, la cobertura y su botón viajan dentro de la propia lista: dos
+          barras de recuento, una encima de otra, decían lo mismo dos veces. */}
+      {entries.length > 0 && layout !== "list" && (
         <div className="wishlist-prices" data-pending={prices.isFetching}>
           <b className="wishlist-prices__figure">{coverage.headline}</b>
           {/* El matiz va en texto, no en color: es lo que impide leer la cifra
@@ -498,6 +500,9 @@ export function WishlistBoard({
           <WishlistList
             overview={overview}
             prices={prices.data ?? []}
+            coverage={coverage}
+            refreshing={refreshPrices.isPending}
+            onRefreshPrices={() => refreshPrices.mutate()}
             onSelect={setSelectedAppId}
             {...(selected ? { selectedAppId: selected.game.appId } : {})}
             renderRowMenu={(entry, children) => (

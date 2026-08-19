@@ -183,6 +183,27 @@ describe("deseados en lista", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2 en oferta");
   });
 
+  it("la cobertura de precios va en la misma línea que el recuento", async () => {
+    // Eran dos barras, una encima de otra, con dos cifras del mismo tipo: se
+    // leían como dos cosas distintas diciendo lo mismo.
+    render(
+      <TooltipProvider>
+        <WishlistList
+          overview={overview([entry(1, "Uno"), entry(2, "Dos")])}
+          prices={[price(1, 999)]}
+          coverage={{ headline: "1 de 2 con precio", caveat: "1 juego sin precio consultado." }}
+          onRefreshPrices={vi.fn()}
+          onSelect={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    const recuento = screen.getByRole("status");
+    expect(recuento).toHaveTextContent("2 juegos");
+    expect(recuento).toHaveTextContent("1 de 2 con precio");
+    expect(within(recuento).getByRole("button", { name: /Actualizar precios/ })).toBeVisible();
+  });
+
   it("sin coincidencias lo dice, en vez de dejar el hueco en blanco", async () => {
     const user = userEvent.setup();
     renderList([entry(1, "Hollow Knight")]);

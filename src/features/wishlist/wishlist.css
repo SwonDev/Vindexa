@@ -1878,3 +1878,15 @@
 .wishlist-list {
   min-height: 0;
 }
+
+/* La cobertura de precios y su botón, en la misma línea que el recuento: son
+   dos cifras del mismo tipo y en barras separadas se leían como dos cosas. */
+.wishlist-list__coverage {
+  margin-left: auto;
+  color: var(--v-muted);
+}
+
+.wishlist-list__refresh {
+  height: 22px;
+  padding: 0 6px;
+}

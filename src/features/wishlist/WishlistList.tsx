@@ -1,9 +1,10 @@
-import { IconSearch, IconTag } from "@tabler/icons-react";
+import { IconLoader2, IconRefresh, IconSearch, IconTag } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
 import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { SegmentedControl } from "@/components/motion/SegmentedControl";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -57,12 +58,25 @@ const ROW_HEIGHT = 34;
 export function WishlistList({
   overview,
   prices,
+  coverage,
+  refreshing = false,
+  onRefreshPrices,
   selectedAppId,
   onSelect,
   renderRowMenu,
 }: {
   overview: WishlistOverview | undefined;
   prices: readonly WishlistPriceStatus[];
+  /**
+   * Cuántos precios se conocen de toda la lista.
+   *
+   * Va en la misma línea que el recuento de lo filtrado porque las dos cifras
+   * son recuentos: en barras separadas, una encima de otra, se leían como dos
+   * cosas distintas diciendo lo mismo.
+   */
+  coverage?: { headline: string; caveat?: string } | undefined;
+  refreshing?: boolean | undefined;
+  onRefreshPrices?: (() => void) | undefined;
   selectedAppId?: number | undefined;
   onSelect: (appId: number) => void;
   /** Menú contextual de cada fila, que aporta la pantalla dueña de las acciones. */
@@ -174,6 +188,27 @@ export function WishlistList({
             <IconTag aria-hidden="true" size={12} />
             {enOferta === 1 ? "1 en oferta" : `${enOferta} en oferta`}
           </span>
+        )}
+        {coverage && (
+          <span className="wishlist-list__coverage" title={coverage.caveat}>
+            {coverage.headline}
+          </span>
+        )}
+        {onRefreshPrices && (
+          <Button
+            className="wishlist-list__refresh"
+            variant="ghost"
+            size="xs"
+            disabled={refreshing}
+            onClick={onRefreshPrices}
+          >
+            {refreshing ? (
+              <IconLoader2 className="is-spinning" aria-hidden="true" />
+            ) : (
+              <IconRefresh aria-hidden="true" />
+            )}
+            {refreshing ? "Consultando…" : "Actualizar precios"}
+          </Button>
         )}
       </p>
 
