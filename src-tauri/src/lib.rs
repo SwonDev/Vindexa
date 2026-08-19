@@ -236,6 +236,38 @@ pub fn run() {
                 });
             }
 
+            // Las rebajas de la tienda que aún no son tuyas.
+            //
+            // Traerlas es una petición; entenderlas —géneros, categorías,
+            // estudio— es una ficha por oferta, y sin eso no se puede decir cuál
+            // te interesa. Las tres cosas van juntas y cada seis horas, que es
+            // el ritmo al que Steam cambia sus rebajas.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(150)).await;
+                    loop {
+                        match steam::deal_radar::run_if_due(&database).await {
+                            Ok(Some(report)) => {
+                                eprintln!(
+                                    "Vindexa: ofertas al día ({} recibidas, {} nuevas, {} ya tuyas, {} puntuadas).",
+                                    report.received,
+                                    report.discovered,
+                                    report.already_known,
+                                    report.scored
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudieron repasar las ofertas: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+                    }
+                });
+            }
+
             // Los regalos de Epic. Rotan los jueves y caducan: preguntarlo
             // una vez al día basta, y así el aviso llega el mismo día en que
             // empieza la promoción en vez de cuando a alguien se le ocurra
@@ -432,6 +464,8 @@ pub fn run() {
             commands::forget_game_prices,
             commands::refresh_wishlist_prices,
             commands::game_preview,
+            commands::store_deals,
+            commands::dismiss_store_deal,
             commands::epic_free_games,
             commands::dismiss_epic_free_game,
             commands::open_epic_free_game,

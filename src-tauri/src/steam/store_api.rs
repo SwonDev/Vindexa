@@ -514,6 +514,88 @@ pub fn parse_screenshots(app_id: u32, bytes: &[u8]) -> AppResult<Vec<String>> {
         .collect())
 }
 
+/// Rasgos de un juego: géneros, categorías y quién lo hace.
+///
+/// Es lo que la puntuación necesita y lo único que se pide: `basic` trae el
+/// estudio y el editor, `genres` y `categories` el resto. Sin capturas, sin
+/// vídeos y sin descripción, que es lo que pesa.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StoreFacets {
+    pub genres: Vec<String>,
+    pub categories: Vec<String>,
+    pub developer: Option<String>,
+    pub publisher: Option<String>,
+}
+
+pub async fn fetch_facets(app_id: u32) -> Result<Option<StoreFacets>, StoreMetadataFailure> {
+    if app_id == 0 {
+        return Err(AppError::validation("El AppID de Steam no es válido.").into());
+    }
+    let bytes = descargar(
+        store_client().map_err(StoreMetadataFailure::from)?,
+        STORE_DETAILS_ENDPOINT,
+        &[
+            ("appids", app_id.to_string()),
+            ("filters", "basic,genres,categories".to_string()),
+            ("cc", STORE_COUNTRY.to_string()),
+            ("l", "spanish".to_string()),
+        ],
+    )
+    .await?;
+    parse_facets(app_id, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Analiza los rasgos. Separado de la red para poder comprobarlo.
+pub fn parse_facets(app_id: u32, bytes: &[u8]) -> AppResult<Option<StoreFacets>> {
+    let raiz: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_store_invalid_json",
+            "La tienda devolvió una respuesta que no se puede leer.",
+        )
+    })?;
+    let Some(entrada) = raiz.get(app_id.to_string()) else {
+        return Ok(None);
+    };
+    if entrada.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Ok(None);
+    }
+    let Some(data) = entrada.get("data").and_then(serde_json::Value::as_object) else {
+        return Ok(None);
+    };
+
+    let etiquetas = |clave: &str| -> Vec<String> {
+        data.get(clave)
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.get("description").and_then(serde_json::Value::as_str))
+                    .map(|value| sanitize_bounded_text(value, MAX_NOTICE_CHARS))
+                    .filter(|value| !value.is_empty())
+                    .take(MAX_METADATA_ITEMS)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    // `developers` y `publishers` son listas; se guarda el primero, que es con
+    // el que el modelo de gustos aprende.
+    let primero = |clave: &str| -> Option<String> {
+        data.get(clave)
+            .and_then(serde_json::Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(serde_json::Value::as_str)
+            .map(|value| sanitize_bounded_text(value, MAX_NOTICE_CHARS))
+            .filter(|value| !value.is_empty())
+    };
+
+    Ok(Some(StoreFacets {
+        genres: etiquetas("genres"),
+        categories: etiquetas("categories"),
+        developer: primero("developers"),
+        publisher: primero("publishers"),
+    }))
+}
+
 /// Sólo los avisos de DRM y las categorías de un juego.
 ///
 /// Sirve para completar el veredicto de DRM de una biblioteca ya enriquecida

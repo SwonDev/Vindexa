@@ -35,6 +35,7 @@ import type {
   CuratedListDetail,
   DatabaseDiagnostics,
   DatabaseRecoverySnapshot,
+  DealCandidate,
   DiscoverySnapshot,
   DlcFilter,
   DlcRefreshReport,
@@ -185,6 +186,9 @@ export const api = {
    * después responde de lo guardado.
    */
   gamePreview: (appId: number) => invoke<GamePreview>("game_preview", { appId }),
+  /** Rebajas que aún no son tuyas, ordenadas por afinidad con tu historial. */
+  storeDeals: (limit?: number) => invoke<DealCandidate[]>("store_deals", { limit }),
+  dismissStoreDeal: (appId: number) => invoke<void>("dismiss_store_deal", { appId }),
   epicFreeGames: (refresh?: boolean) =>
     invoke<EpicFreeOffer[]>("epic_free_games", { refresh: refresh ?? false }),
   dismissEpicFreeGame: (offerId: string) => invoke<void>("dismiss_epic_free_game", { offerId }),

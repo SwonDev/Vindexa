@@ -1,5 +1,6 @@
 import { HoverCard as HoverCardPrimitive } from "radix-ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import type * as React from "react";
+import { forwardRef, type ReactNode, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "@/components/motion/use-reduced-motion";
 import { api } from "@/lib/tauri";
 import "./game-preview-card.css";
@@ -52,51 +53,71 @@ export interface GamePreviewCardProps {
   children: ReactNode;
 }
 
-export function GamePreviewCard({
-  appId,
-  title,
-  fallback,
-  facts,
-  headline,
-  disabled = false,
-  children,
-}: GamePreviewCardProps) {
-  const [open, setOpen] = useState(false);
-  const reducedMotion = useReducedMotion();
+/**
+ * Todo lo que no es de este componente va al disparador. Es lo que permite que
+ * un menú contextual envuelva esta vista rápida y siga abriéndose: sus
+ * manejadores llegan hasta el elemento real en vez de perderse aquí.
+ */
+type GamePreviewCardAllProps = GamePreviewCardProps &
+  Omit<React.HTMLAttributes<HTMLElement>, keyof GamePreviewCardProps>;
 
-  return (
-    <HoverCardPrimitive.Root
-      openDelay={OPEN_DELAY_MS}
-      closeDelay={0}
-      open={disabled ? false : open}
-      onOpenChange={setOpen}
-    >
-      <HoverCardPrimitive.Trigger asChild>{children}</HoverCardPrimitive.Trigger>
-      <HoverCardPrimitive.Portal>
-        <HoverCardPrimitive.Content
-          className="game-preview"
-          side="right"
-          align="start"
-          sideOffset={10}
-          collisionPadding={12}
-          // No roba el foco ni el ratón: es una ayuda para mirar, no un panel
-          // con el que interactuar. Quien quiera actuar tiene el clic derecho.
-          onPointerDownOutside={(event) => event.preventDefault()}
-        >
-          <PreviewBody
-            appId={appId}
-            title={title}
-            fallback={fallback}
-            facts={facts}
-            headline={headline}
-            open={open && !disabled}
-            reducedMotion={reducedMotion}
-          />
-        </HoverCardPrimitive.Content>
-      </HoverCardPrimitive.Portal>
-    </HoverCardPrimitive.Root>
-  );
-}
+/**
+ * # Por qué reenvía las props que no conoce
+ *
+ * Este componente convive con el menú contextual, y los dos envuelven al mismo
+ * elemento. `ContextMenuTrigger asChild` clona a su hijo y le pasa sus
+ * manejadores; si ese hijo es un componente que los ignora, **el menú deja de
+ * abrirse sin que falle nada**: es exactamente el fallo que dejó a la aplicación
+ * sin clic derecho durante toda la vida de un archivo.
+ *
+ * Reenviando `ref` y el resto de props al disparador de la vista rápida, la
+ * composición funciona en cualquier orden. Hay una prueba que monta los dos
+ * juntos y pulsa de verdad.
+ */
+export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllProps>(
+  function GamePreviewCard(
+    { appId, title, fallback, facts, headline, disabled = false, children, ...rest },
+    ref,
+  ) {
+    const [open, setOpen] = useState(false);
+    const reducedMotion = useReducedMotion();
+
+    return (
+      <HoverCardPrimitive.Root
+        openDelay={OPEN_DELAY_MS}
+        closeDelay={0}
+        open={disabled ? false : open}
+        onOpenChange={setOpen}
+      >
+        <HoverCardPrimitive.Trigger asChild ref={ref} {...rest}>
+          {children}
+        </HoverCardPrimitive.Trigger>
+        <HoverCardPrimitive.Portal>
+          <HoverCardPrimitive.Content
+            className="game-preview"
+            side="right"
+            align="start"
+            sideOffset={10}
+            collisionPadding={12}
+            // No roba el foco ni el ratón: es una ayuda para mirar, no un panel
+            // con el que interactuar. Quien quiera actuar tiene el clic derecho.
+            onPointerDownOutside={(event) => event.preventDefault()}
+          >
+            <PreviewBody
+              appId={appId}
+              title={title}
+              fallback={fallback}
+              facts={facts}
+              headline={headline}
+              open={open && !disabled}
+              reducedMotion={reducedMotion}
+            />
+          </HoverCardPrimitive.Content>
+        </HoverCardPrimitive.Portal>
+      </HoverCardPrimitive.Root>
+    );
+  },
+);
 
 function PreviewBody({
   appId,

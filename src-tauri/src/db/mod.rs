@@ -1,6 +1,7 @@
 pub mod archive;
 mod catalog;
 pub mod curated;
+pub mod deals;
 pub mod discovery;
 pub mod dlc;
 pub mod epic_free;
@@ -1014,6 +1015,53 @@ impl Database {
     ) -> AppResult<preview::GamePreview> {
         let mut connection = self.open()?;
         preview::save(&mut connection, app_id, thumbnails, now)
+    }
+
+    // --- Ofertas de la tienda ----------------------------------------------
+
+    pub fn sync_store_deals(
+        &self,
+        deals: &[crate::steam::deals::StoreDeal],
+        now: DateTime<Utc>,
+    ) -> AppResult<deals::DealSyncReport> {
+        let mut connection = self.open()?;
+        deals::sync(&mut connection, deals, now)
+    }
+
+    pub fn pending_deal_facets(&self, limit: u32) -> AppResult<Vec<u32>> {
+        deals::pending_facets(&self.open()?, limit)
+    }
+
+    pub fn save_deal_facets(
+        &self,
+        app_id: u32,
+        genres: &[String],
+        categories: &[String],
+        developer: Option<&str>,
+        publisher: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> AppResult<()> {
+        deals::save_facets(
+            &self.open()?,
+            app_id,
+            genres,
+            categories,
+            developer,
+            publisher,
+            now,
+        )
+    }
+
+    pub fn score_store_deals(&self) -> AppResult<usize> {
+        priority::score_deals(&mut self.open()?, Utc::now())
+    }
+
+    pub fn store_deals(&self, limit: u32) -> AppResult<Vec<deals::DealCandidate>> {
+        deals::list(&self.open()?, limit)
+    }
+
+    pub fn dismiss_store_deal(&self, app_id: u32, now: DateTime<Utc>) -> AppResult<()> {
+        deals::dismiss(&self.open()?, app_id, now)
     }
 
     // --- Regalos de Epic ---------------------------------------------------

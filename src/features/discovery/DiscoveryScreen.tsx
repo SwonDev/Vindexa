@@ -39,6 +39,7 @@ import { Artwork } from "@/components/common/Artwork";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Eyebrow } from "@/components/common/Eyebrow";
 import { GameContextMenu } from "@/components/common/GameContextMenu";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { LoadingState } from "@/components/common/LoadingState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ProgressMeter } from "@/components/common/ProgressMeter";
@@ -52,6 +53,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EpicFreeBlock } from "@/features/discovery/EpicFreeBlock";
+import { StoreDealsBlock } from "@/features/discovery/StoreDealsBlock";
 import { UpcomingReleasesBlock } from "@/features/discovery/UpcomingReleasesBlock";
 import {
   type GameQuickActions,
@@ -281,84 +283,55 @@ export function DiscoveryScreen({
       />
 
       <div className="discovery-body">
-        <aside className="discovery-rail" aria-label="Controles de seguimiento">
-          <section className="rail-block" aria-labelledby="radar-nav-title">
-            <h2 className="rail-block__title" id="radar-nav-title">
-              Radar personal
-            </h2>
-            <RadarNav
-              view={radarView}
-              counts={{
-                tracking: trackedTotal,
-                reminders: discovery.data?.reminders.length ?? 0,
-                forgotten: discovery.data?.forgotten.length ?? 0,
-                almost: discovery.data?.almostFinished.length ?? 0,
-              }}
-              busy={radarBusy}
-              onSelect={setRadarView}
-            />
-          </section>
-
-          <section className="rail-block" aria-labelledby="assist-title">
-            <h2 className="rail-block__title" id="assist-title">
-              Elección asistida
-            </h2>
-            <div className="decision-field">
-              <span id="decision-duration-label">
-                <IconClock aria-hidden="true" /> Tiempo disponible
-              </span>
-              <Select value={duration} onValueChange={setDuration}>
-                <SelectTrigger aria-label="Tiempo disponible">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30 minutos</SelectItem>
-                  <SelectItem value="60">1 hora</SelectItem>
-                  <SelectItem value="120">2 horas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="decision-field">
-              <span id="decision-mood-label">
-                <IconMoodSmile aria-hidden="true" /> Tipo de experiencia
-              </span>
-              <Select value={mood} onValueChange={setMood}>
-                <SelectTrigger aria-label="Tipo de experiencia">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Cualquiera</SelectItem>
-                  <SelectItem value="relaxed">Relajada</SelectItem>
-                  <SelectItem value="focused">Concentrada</SelectItem>
-                  <SelectItem value="competitive">Competitiva</SelectItem>
-                  <SelectItem value="story">Narrativa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              className="rail-block__action"
-              onClick={() => recommendation.mutate()}
-              disabled={recommendation.isPending || (bootstrap?.stats.totalGames ?? 0) === 0}
-            >
-              {recommendation.isPending ? <IconLoader2 className="is-spinning" /> : <IconWand />}
-              Elige por mí
-            </Button>
-            <p className="rail-block__hint">
-              La explicación muestra qué datos reales influyeron. Si falta un dato, Vindexa lo dirá.
-            </p>
-          </section>
-        </aside>
-
         <div className="discovery-main">
           <section className="decision-panel" aria-labelledby="decision-title">
+            {/* Los controles viven donde se usan. Tenían una columna entera para
+                ellos solos, con dos desplegables y un botón, y esa columna se
+                quedaba vacía el resto de su alto mientras el centro no tenía
+                sitio para nada. */}
             <div className="panel-heading">
               <div>
                 <Eyebrow>DECISIÓN</Eyebrow>
                 <h2 id="decision-title">Recomendación explicable</h2>
               </div>
-              <span>
-                {durationLabel(duration)} · {moodLabel(mood)}
-              </span>
+              <div className="decision-controls">
+                <Select value={duration} onValueChange={setDuration}>
+                  <SelectTrigger aria-label="Tiempo disponible">
+                    <IconClock aria-hidden="true" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30">30 minutos</SelectItem>
+                    <SelectItem value="60">1 hora</SelectItem>
+                    <SelectItem value="120">2 horas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={mood} onValueChange={setMood}>
+                  <SelectTrigger aria-label="Tipo de experiencia">
+                    <IconMoodSmile aria-hidden="true" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Cualquiera</SelectItem>
+                    <SelectItem value="relaxed">Relajada</SelectItem>
+                    <SelectItem value="focused">Concentrada</SelectItem>
+                    <SelectItem value="competitive">Competitiva</SelectItem>
+                    <SelectItem value="story">Narrativa</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={() => recommendation.mutate()}
+                  disabled={recommendation.isPending || (bootstrap?.stats.totalGames ?? 0) === 0}
+                >
+                  {recommendation.isPending ? (
+                    <IconLoader2 className="is-spinning" />
+                  ) : (
+                    <IconWand />
+                  )}
+                  Elige por mí
+                </Button>
+              </div>
             </div>
             <RecommendationResult
               recommendation={recommendation}
@@ -380,6 +353,19 @@ export function DiscoveryScreen({
                 {radarCountLabel}
               </span>
             </div>
+            {/* Las cuatro vistas, en fila y encima de lo que filtran, en vez de
+                en una columna aparte a la izquierda. */}
+            <RadarNav
+              view={radarView}
+              counts={{
+                tracking: trackedTotal,
+                reminders: discovery.data?.reminders.length ?? 0,
+                forgotten: discovery.data?.forgotten.length ?? 0,
+                almost: discovery.data?.almostFinished.length ?? 0,
+              }}
+              busy={radarBusy}
+              onSelect={setRadarView}
+            />
             <p className="radar-panel__description">{activeView.description}</p>
             <div
               id="radar-panel"
@@ -440,6 +426,7 @@ export function DiscoveryScreen({
           {/* Lo que caduca va primero: un regalo de Epic dura una semana y no
               vuelve, mientras que un lanzamiento previsto sigue ahí mañana. */}
           <EpicFreeBlock />
+          <StoreDealsBlock />
           <UpcomingReleasesBlock />
           <NotificationRulesPanel />
           <PublicationsBlock
@@ -527,8 +514,11 @@ function RadarNav({
     <div
       className="radar-nav"
       role="tablist"
-      aria-orientation="vertical"
-      aria-labelledby="radar-nav-title"
+      // Horizontal desde que las cuatro vistas viven en fila sobre la lista que
+      // filtran. El recorrido con flechas admite las cuatro direcciones, así que
+      // lo que cambia es lo que se anuncia, no lo que funciona.
+      aria-orientation="horizontal"
+      aria-label="Radar personal"
       onKeyDown={move}
     >
       {radarViews.map(({ id, label, icon: ViewIcon }) => (
@@ -746,39 +736,59 @@ function GameRadarList({
           onCopyTitle={acciones.onCopyTitle}
           onCopyAppId={acciones.onCopyAppId}
         >
-          <li>
-            <Artwork
-              appId={game.appId}
-              src={game.iconUrl ?? game.coverUrl}
-              title={game.title}
-              kind="icon"
-            />
-            <div className="radar-list__copy">
-              <strong>{game.title}</strong>
-              <span>{radarMetadata(game, view)}</span>
-            </div>
-            <ProgressMeter
-              className="radar-list__progress"
-              value={game.progress}
-              label={`Progreso de ${game.title}: ${game.progress}%`}
-            />
-            {view === "tracking" ? (
-              /* Una etiqueta pasiva no puede llevar el relleno del botón
+          {/* La carátula grande y sus capturas al detenerse: en una lista de
+              iconos de veinticuatro píxeles, el título no dice qué es el juego. */}
+          <GamePreviewCard
+            appId={game.appId}
+            title={game.title}
+            fallback={
+              <Artwork
+                appId={game.appId}
+                src={game.coverUrl ?? game.headerUrl}
+                title={game.title}
+                kind="cover"
+              />
+            }
+            facts={[
+              { label: "Estado", value: game.statusName },
+              { label: "Jugado", value: formatPlaytime(game.playtimeMinutes) },
+              { label: "Progreso", value: `${game.progress} %` },
+            ]}
+          >
+            <li>
+              <Artwork
+                appId={game.appId}
+                src={game.iconUrl ?? game.coverUrl}
+                title={game.title}
+                kind="icon"
+              />
+              <div className="radar-list__copy">
+                <strong>{game.title}</strong>
+                <span>{radarMetadata(game, view)}</span>
+              </div>
+              <ProgressMeter
+                className="radar-list__progress"
+                value={game.progress}
+                label={`Progreso de ${game.title}: ${game.progress}%`}
+              />
+              {view === "tracking" ? (
+                /* Una etiqueta pasiva no puede llevar el relleno del botón
                principal: compite con la única acción real de la pantalla. */
-              <Badge variant="outline" data-installed={game.installed}>
-                {game.installed ? "Instalado" : "No instalado"}
-              </Badge>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={reminding}
-                onClick={() => onRemind(game)}
-              >
-                <IconBellPlus /> Recordarme
-              </Button>
-            )}
-          </li>
+                <Badge variant="outline" data-installed={game.installed}>
+                  {game.installed ? "Instalado" : "No instalado"}
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={reminding}
+                  onClick={() => onRemind(game)}
+                >
+                  <IconBellPlus /> Recordarme
+                </Button>
+              )}
+            </li>
+          </GamePreviewCard>
         </GameContextMenu>
       ))}
     </ul>

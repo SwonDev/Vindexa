@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -63,6 +64,39 @@ describe("guarda del menú contextual", () => {
     });
     await waitFor(() =>
       expect(screen.getByRole("menuitem", { name: "Cambiar color" })).toBeVisible(),
+    );
+  });
+});
+
+describe("vista rápida y menú contextual sobre el mismo juego", () => {
+  it("el clic derecho sigue abriendo el menú con la vista rápida encima", async () => {
+    // El fallo que esto vigila: `ContextMenuTrigger asChild` clona a su hijo y le
+    // pasa sus manejadores. Si ese hijo es un componente que no los reenvía —y
+    // `HoverCard.Root` no pinta ningún nodo—, el menú deja de abrirse **sin que
+    // falle nada**: compila, tipa y las pruebas de cada pieza por separado
+    // siguen en verde. Es la misma clase de fallo que dejó la aplicación entera
+    // sin clic derecho.
+    conGuardas();
+    const user = userEvent.setup();
+    render(
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <GamePreviewCard appId={620} title="Portal 2">
+            <button type="button">Portal 2</button>
+          </GamePreviewCard>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem>Abrir ficha</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>,
+    );
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("button", { name: "Portal 2" }),
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Abrir ficha" })).toBeVisible(),
     );
   });
 });

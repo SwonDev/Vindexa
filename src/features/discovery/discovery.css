@@ -24,9 +24,13 @@
 
 /* Cuerpo en tres columnas -------------------------------------------------- */
 
+/* Dos columnas, no tres.
+   La de la izquierda existía para seis controles —cuatro filtros y dos
+   desplegables— y se quedaba vacía el resto de su alto mientras el centro no
+   tenía sitio. Los controles se han ido a donde se usan. */
 .discovery-body {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) minmax(292px, 25%);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 30%);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -422,9 +426,12 @@
 
 /* Radar -------------------------------------------------------------------- */
 
+/* Cuatro filas: cabecera, pestañas, descripción y lista.
+   Con tres, la navegación nueva empujaba la lista a una fila implícita y el
+   único juego de la vista aparecía pegado al fondo del panel. */
 .radar-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -456,6 +463,8 @@
 
 .radar-list {
   display: grid;
+  /* Arriba, no repartidos: una lista de un elemento no se centra en el hueco. */
+  align-content: start;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1562,4 +1571,179 @@
   padding: 8px 12px;
   color: var(--v-subtle);
   font-size: 11px;
+}
+
+/* --- Ofertas para ti ------------------------------------------------------
+   Comparte la caja de los demás bloques del carril: mismo borde, mismo fondo,
+   misma cabecera. Lo que cambia es la columna de coincidencia, que es lo único
+   que esta sección aporta sobre el escaparate de la tienda. */
+.store-deals {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.store-deals__head {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.store-deals__head > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--v-lime);
+}
+
+.store-deals__head h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-deals__count {
+  color: var(--v-lime);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.store-deals__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store-deals__item {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.store-deals__item:last-child {
+  border-bottom: 0;
+}
+
+.store-deals__target {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.store-deals__target:hover:not(:disabled),
+.store-deals__target:focus-visible {
+  background: color-mix(in srgb, var(--v-surface-raised) 70%, transparent);
+  outline: none;
+}
+
+.store-deals__discount {
+  display: inline-flex;
+  justify-content: center;
+  padding: 1px 0;
+  border: 1px solid var(--v-lime);
+  color: var(--v-lime);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.store-deals__discount[data-empty="true"] {
+  border-color: transparent;
+}
+
+.store-deals__title {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La coincidencia es lo que esta sección aporta: se lee, pero no compite con el
+   precio, que es lo que decide. */
+.store-deals__match {
+  color: var(--v-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.store-deals__match[data-strong="true"] {
+  color: var(--v-cyan);
+}
+
+.store-deals__amount {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.store-deals__note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--v-subtle);
+  font-size: 11px;
+}
+
+/* --- Controles de la decisión, en línea con su título ---------------------- */
+.decision-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.decision-controls [data-slot="select-trigger"] {
+  height: 30px;
+  background: var(--background);
+  font-size: 11px;
+}
+
+.decision-controls [data-slot="select-trigger"] > svg:first-child {
+  color: var(--v-muted);
+}
+
+/* --- Navegación del radar, ahora en fila ---------------------------------- */
+.radar-panel .radar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.radar-panel .radar-nav__item {
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+}
+
+.radar-panel .radar-nav__item[aria-selected="true"] {
+  border-color: var(--border);
+  background: var(--v-surface-raised);
+}
+
+/* La descripción de la vista es una línea de contexto, no un párrafo. */
+.radar-panel__description {
+  padding: 7px 12px;
 }

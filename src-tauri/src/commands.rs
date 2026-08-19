@@ -1292,6 +1292,27 @@ pub async fn game_preview(
     blocking(move || database.save_preview(app_id, &capturas, now)).await
 }
 
+// --- Ofertas de la tienda -----------------------------------------------------
+
+/// Rebajas de la tienda que aún no son tuyas, ordenadas por lo que te gusta.
+#[tauri::command]
+pub async fn store_deals(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+) -> AppResult<Vec<crate::db::deals::DealCandidate>> {
+    let database = state.database.clone();
+    let limit = limit.unwrap_or(40).clamp(1, 200);
+    blocking(move || database.store_deals(limit)).await
+}
+
+/// Descarta una oferta para que deje de aparecer.
+#[tauri::command]
+pub async fn dismiss_store_deal(state: State<'_, AppState>, app_id: u32) -> AppResult<()> {
+    let database = state.database.clone();
+    let now = Utc::now();
+    blocking(move || database.dismiss_store_deal(app_id, now)).await
+}
+
 // --- Regalos de Epic ----------------------------------------------------------
 
 /// Los juegos que Epic regala esta semana, con lo que Vindexa sabe de tu

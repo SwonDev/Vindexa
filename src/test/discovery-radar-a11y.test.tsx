@@ -134,11 +134,16 @@ describe("accesibilidad del radar personal", () => {
     mockedApi.listNotificationRules.mockResolvedValue([]);
   });
 
-  it("expone un tablist vertical conectado con su panel", async () => {
+  it("expone un tablist horizontal conectado con su panel", async () => {
+    // Las cuatro vistas viven en fila sobre la lista que filtran desde que se
+    // quitó la columna de la izquierda, que ocupaba un cuarto de la pantalla
+    // para seis controles. Lo que se anuncia tiene que coincidir con lo que se
+    // ve: un lector de pantalla que oye «vertical» y encuentra una fila deja de
+    // saber qué flecha usar.
     renderScreen();
 
     const tablist = await screen.findByRole("tablist", { name: "Radar personal" });
-    expect(tablist).toHaveAttribute("aria-orientation", "vertical");
+    expect(tablist).toHaveAttribute("aria-orientation", "horizontal");
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs).toHaveLength(4);

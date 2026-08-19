@@ -40,6 +40,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import {
   AnimatedNumber,
   DragFeedbackSurface,
@@ -668,26 +669,41 @@ function OffersStrip({
       <ul className="wishlist-offers__list" id={listId}>
         {visible.map((offer) => (
           <li key={offer.appId}>
-            <button
-              type="button"
-              className="wishlist-offers__item"
-              data-selected={offer.appId === selectedAppId}
-              data-meets-target={offer.meetsTarget}
-              onClick={() => onSelect(offer.appId)}
+            {/* La razón de mirar una lista de ofertas es saber qué es cada
+                juego; el título no lo dice y la carátula tampoco. */}
+            <GamePreviewCard
+              appId={offer.appId}
+              title={offer.title}
+              headline={
+                <>
+                  <b>{formatCents(offer.finalCents, offer.currency)}</b>
+                  <s>{formatCents(offer.initialCents, offer.currency)}</s>
+                  <span>−{offer.discountPercent} %</span>
+                </>
+              }
+              facts={offer.meetsTarget ? [{ label: "Objetivo", value: "Ya lo cumple" }] : []}
             >
-              <span className="wishlist-offers__discount">-{offer.discountPercent} %</span>
-              <span className="wishlist-offers__title">{offer.title}</span>
-              <span className="wishlist-offers__amount">
-                {formatCents(offer.finalCents, offer.currency)}
-              </span>
-              {/* El precio anterior va tachado y detrás del vigente: lo que se
+              <button
+                type="button"
+                className="wishlist-offers__item"
+                data-selected={offer.appId === selectedAppId}
+                data-meets-target={offer.meetsTarget}
+                onClick={() => onSelect(offer.appId)}
+              >
+                <span className="wishlist-offers__discount">-{offer.discountPercent} %</span>
+                <span className="wishlist-offers__title">{offer.title}</span>
+                <span className="wishlist-offers__amount">
+                  {formatCents(offer.finalCents, offer.currency)}
+                </span>
+                {/* El precio anterior va tachado y detrás del vigente: lo que se
                   paga es lo primero que hay que poder leer. */}
-              <s className="wishlist-offers__before">
-                {formatCents(offer.initialCents, offer.currency)}
-              </s>
-              {offer.stale && <span className="wishlist-offers__stale">precio caducado</span>}
-              <IconChevronRight aria-hidden="true" />
-            </button>
+                <s className="wishlist-offers__before">
+                  {formatCents(offer.initialCents, offer.currency)}
+                </s>
+                {offer.stale && <span className="wishlist-offers__stale">precio caducado</span>}
+                <IconChevronRight aria-hidden="true" />
+              </button>
+            </GamePreviewCard>
           </li>
         ))}
       </ul>

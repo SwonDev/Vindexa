@@ -2242,6 +2242,68 @@ pub fn score_upcoming(connection: &mut Connection, now: DateTime<Utc>) -> AppRes
     Ok(candidates.len())
 }
 
+/// Puntúa las ofertas de la tienda con el mismo modelo que los lanzamientos.
+///
+/// Es deliberadamente el mismo: una oferta y un lanzamiento son la misma
+/// pregunta —«¿esto me interesa?»— y responderla con dos criterios distintos
+/// haría que la misma coincidencia diera dos números según dónde se mirase.
+///
+/// Sólo puntúa lo que ya tiene rasgos guardados. Lo demás se queda sin
+/// puntuación, que no es lo mismo que puntuación cero.
+pub fn score_deals(connection: &mut Connection, now: DateTime<Utc>) -> AppResult<usize> {
+    let weights = load_taste_weights(connection)?;
+    let library = load_priority_rows(connection, &BTreeMap::new(), &BTreeMap::new())?;
+    let minutes = facet_minutes(&library);
+    let updated_at = timestamp(now);
+
+    struct Candidate {
+        app_id: u32,
+        facets: Vec<(Facet, String)>,
+    }
+
+    let candidates = {
+        let mut statement = connection.prepare(
+            "SELECT app_id, genres_json, categories_json, developer, publisher
+               FROM store_deals
+              WHERE dismissed_at IS NULL AND facets_fetched_at IS NOT NULL
+              ORDER BY app_id ASC",
+        )?;
+        statement
+            .query_map([], |row| {
+                let genres = parse_facet_list(&row.get::<_, String>(1)?);
+                let categories = parse_facet_list(&row.get::<_, String>(2)?);
+                let developer: Option<String> = row.get(3)?;
+                let publisher: Option<String> = row.get(4)?;
+                Ok(Candidate {
+                    app_id: row.get(0)?,
+                    facets: upcoming_facets(
+                        &genres,
+                        &categories,
+                        developer.as_ref(),
+                        publisher.as_ref(),
+                    ),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    let transaction = connection.transaction()?;
+    {
+        let mut update = transaction.prepare_cached(
+            "UPDATE store_deals
+                SET match_score = ?2, match_reason = ?3, updated_at = ?4
+              WHERE app_id = ?1",
+        )?;
+        for candidate in &candidates {
+            let result = affinity_for(&candidate.facets, &weights);
+            let reason = compose_match_reason(&result, &minutes);
+            update.execute(params![candidate.app_id, result.score, reason, updated_at])?;
+        }
+    }
+    transaction.commit()?;
+    Ok(candidates.len())
+}
+
 fn map_upcoming(row: &Row<'_>) -> rusqlite::Result<UpcomingRelease> {
     Ok(UpcomingRelease {
         app_id: row.get(0)?,

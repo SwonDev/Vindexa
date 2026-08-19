@@ -1452,6 +1452,25 @@ export interface GamePreview {
 }
 
 /**
+ * Una rebaja de la tienda que todavía no es tuya.
+ *
+ * `matchScore` a `null` es «aún no se ha podido puntuar» —faltan sus géneros—,
+ * no «no te interesa». Cero sería una afirmación que nadie ha comprobado.
+ */
+export interface DealCandidate {
+  appId: number;
+  title: string;
+  headerUrl?: string | null;
+  finalCents: number;
+  initialCents: number;
+  discountPercent: number;
+  currency: string;
+  source: string;
+  matchScore?: number | null;
+  matchReason: string;
+}
+
+/**
  * Un juego que Epic regala esta semana.
  *
  * `hoursLeft` a `null` es «no se sabe cuándo acaba», no «acaba ya»: Epic no
