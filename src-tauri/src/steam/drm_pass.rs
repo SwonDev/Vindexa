@@ -49,9 +49,19 @@ const BATCH_SIZE: u32 = 200;
 const REQUEST_INTERVAL: Duration = Duration::from_millis(1_500);
 
 const LAST_AUTO_KEY: &str = "drm.last_auto_pass";
-/// Cada cuánto se vuelve a intentar. Lo que hoy queda sin veredicto suele ser un
-/// juego retirado de la tienda; insistir cada hora no lo arregla.
-const AUTO_INTERVAL_HOURS: i64 = 12;
+
+/// Cada cuánto se repasa **mientras quede biblioteca por mirar**.
+///
+/// La primera vez hay miles de juegos sin veredicto —los que se enriquecieron
+/// antes de que existiera la clasificación— y una tanda son doscientos. A doce
+/// horas por tanda, completar una biblioteca de cuatro mil juegos llevaría más
+/// de una semana de aplicación abierta; a diez minutos, unas tres horas.
+const CATCHUP_INTERVAL_MINUTES: i64 = 10;
+
+// No hay ritmo «en reposo»: cuando no queda nada por mirar, esta pasada se
+// calla del todo. Un juego preguntado y sin veredicto no vuelve por aquí, pero
+// tampoco se queda olvidado: el enriquecimiento de fichas vuelve a pasar por él
+// a los siete días y escribe el DRM igual que esta pasada.
 
 /// Qué dejó una pasada.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,11 +119,16 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<DrmPassReport> {
 }
 
 /// Repasa si toca, sin que nadie lo pida.
+///
+/// El ritmo depende de lo que quede: con biblioteca por mirar va cada diez
+/// minutos hasta terminar, y luego se calla.
 pub async fn run_if_due(database: &Database) -> AppResult<Option<DrmPassReport>> {
-    if pending_count(database)? == 0 {
+    let pendientes = pending_count(database)?;
+    if pendientes == 0 {
         return Ok(None);
     }
-    if !is_due(database)? {
+    let espera = chrono::Duration::minutes(CATCHUP_INTERVAL_MINUTES);
+    if !is_due(database, espera)? {
         return Ok(None);
     }
     let report = run(database, 0).await?;
@@ -156,7 +171,7 @@ fn pending_count(database: &Database) -> AppResult<u32> {
     Ok(total.max(0) as u32)
 }
 
-fn is_due(database: &Database) -> AppResult<bool> {
+fn is_due(database: &Database, espera: chrono::Duration) -> AppResult<bool> {
     let connection = database.open()?;
     let last: Option<String> = connection
         .query_row(
@@ -171,8 +186,7 @@ fn is_due(database: &Database) -> AppResult<bool> {
     let Ok(moment) = chrono::DateTime::parse_from_rfc3339(&last) else {
         return Ok(true);
     };
-    Ok(Utc::now().signed_duration_since(moment.with_timezone(&Utc))
-        >= chrono::Duration::hours(AUTO_INTERVAL_HOURS))
+    Ok(Utc::now().signed_duration_since(moment.with_timezone(&Utc)) >= espera)
 }
 
 fn mark_done(database: &Database) -> AppResult<()> {

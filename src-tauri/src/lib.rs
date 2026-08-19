@@ -231,7 +231,10 @@ pub fn run() {
                                 error.message
                             ),
                         }
-                        tokio::time::sleep(std::time::Duration::from_secs(30 * 60)).await;
+                        // Cinco minutos: el propio repaso decide si toca según
+                        // lo que quede por mirar, así que despertar a menudo no
+                        // significa preguntar a menudo.
+                        tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;
                     }
                 });
             }
