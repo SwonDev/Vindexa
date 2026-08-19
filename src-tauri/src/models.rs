@@ -133,6 +133,11 @@ pub struct LibraryStats {
     /// coincidir con lo que se ve. Este recuento existe para que el archivado
     /// nunca sea un agujero negro y la interfaz pueda ofrecer verlos.
     pub archived_games: i64,
+    /// Juegos que la tienda oficial declara sin DRM.
+    ///
+    /// Es el recuento del acceso directo de la barra lateral. No incluye lo que
+    /// aún no se ha comprobado: `unknown` es «no se sabe», no «lleva DRM».
+    pub drm_free_games: i64,
     /// Juegos visibles en el catálogo de Steam Family.
     ///
     /// No se suman a `total_games`, porque catálogo visible no es licencia y

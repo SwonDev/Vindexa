@@ -133,6 +133,11 @@ export interface LibraryStats {
   trackedGames: number;
   totalPlaytimeMinutes: number;
   /**
+   * Juegos que la tienda oficial declara sin DRM. No incluye lo que aún no se
+   * ha comprobado: `unknown` es «no se sabe», no «lleva DRM».
+   */
+  drmFreeGames: number;
+  /**
    * Juegos archivados. No están sumados en `totalGames`: el total tiene que
    * coincidir con lo que se ve. Esta cifra existe para que el archivado nunca
    * sea un agujero negro y la interfaz pueda ofrecer verlos.

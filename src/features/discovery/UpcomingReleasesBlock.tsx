@@ -217,10 +217,15 @@ export function UpcomingReleasesBlock() {
         </Button>
       </header>
 
-      <p className="upcoming-block__privacy">
+      {/* El dato importa y no cambia nunca, así que no necesita tres líneas
+          fijas encima de la lista: se dice en una, y la frase entera está a un
+          puntero de distancia. Lo que ocupa sitio permanente es lo que cambia. */}
+      <p
+        className="upcoming-block__privacy"
+        title="El modelo de gustos se calcula íntegramente en tu equipo, a partir de tu biblioteca y de tus respuestas. No sale de aquí ni se envía a ningún servidor."
+      >
         <IconLock aria-hidden="true" />
-        El modelo de gustos se calcula íntegramente en tu equipo, a partir de tu biblioteca y de tus
-        respuestas. No sale de aquí ni se envía a ningún servidor.
+        Se calcula en tu equipo; no sale de aquí.
       </p>
 
       {report && (
@@ -403,7 +408,7 @@ function UpcomingRow({
           facts={[
             { label: "Sale", value: date.label },
             ...(studio ? [{ label: "Estudio", value: studio }] : []),
-            { label: "Coincidencia", value: `${Math.round(item.matchScore)} %` },
+            { label: "Coincidencia", value: `${match.band} · ${match.percent} %` },
           ]}
         >
           <RevealOnScroll asChild delayMs={Math.min(index * 24, 160)}>

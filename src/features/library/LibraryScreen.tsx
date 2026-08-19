@@ -267,6 +267,9 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry, onOpenSettin
       // por este camino es lo que les da estados, colecciones, prioridad, notas
       // y ficha: exactamente lo mismo que a los propios.
       ...(scope.kind === "family" ? { ownershipSource: "family_shared" as const } : {}),
+      // Sin DRM es un ámbito, no un filtro suelto: se puede combinar con
+      // búsqueda, estado y orden como cualquier otro.
+      ...(scope.kind === "drmFree" ? { drmState: "drm_free" } : {}),
       // Y lo mismo con las demás tiendas: desde la migración 037 sus juegos
       // viven en la biblioteca con su ficha personal, así que se piden por el
       // mismo camino y traen consigo estados, colecciones, arrastre, prioridad,

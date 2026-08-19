@@ -1747,3 +1747,28 @@
 .radar-panel__description {
   padding: 7px 12px;
 }
+
+/* --- Lanzamientos: menos alto por fila ------------------------------------
+   Cada fila llevaba carátula, título, fecha, estudio, barra de coincidencia,
+   razón y cuatro botones. En una columna estrecha eso son ciento cincuenta
+   píxeles por juego y tres juegos por pantalla. Las acciones viven ya en el
+   menú contextual, así que aquí se quedan compactas. */
+.upcoming-row {
+  padding: 8px 10px;
+}
+
+.upcoming-actions {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.upcoming-match__reason {
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.upcoming-block__privacy {
+  padding: 5px 10px;
+  font-size: 10px;
+}

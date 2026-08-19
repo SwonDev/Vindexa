@@ -146,11 +146,14 @@ describe("próximos lanzamientos puntuados", () => {
   });
 
   it("dice en la interfaz que el modelo se calcula en el equipo", async () => {
+    // Se dice en una línea y la frase entera queda a un puntero de distancia:
+    // el dato importa y no cambia nunca, así que no ocupa tres renglones fijos
+    // encima de una lista que sí cambia.
     renderBlock();
 
-    expect(
-      await screen.findByText(/se calcula íntegramente en tu equipo/i, { exact: false }),
-    ).toBeVisible();
+    const aviso = await screen.findByText(/Se calcula en tu equipo/i);
+    expect(aviso).toBeVisible();
+    expect(aviso.getAttribute("title")).toContain("No sale de aquí ni se envía a ningún servidor");
   });
 
   it("registra la opinión sobre el candidato sin prometer un cambio inmediato", async () => {

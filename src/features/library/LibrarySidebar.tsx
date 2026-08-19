@@ -8,6 +8,7 @@ import {
   IconDeviceGamepad2,
   IconGripVertical,
   IconPlus,
+  IconShieldCheck,
   IconSquareFilled,
   IconUsersGroup,
 } from "@tabler/icons-react";
@@ -60,7 +61,7 @@ const EXTERNAL_STORES = [
 ] as const;
 
 export interface LibraryScope {
-  kind: "all" | "installed" | "family" | "store" | "status" | "collection";
+  kind: "all" | "installed" | "drmFree" | "family" | "store" | "status" | "collection";
   /** Identificador del estado, la colección o la tienda. */
   id?: string;
   label: string;
@@ -127,6 +128,18 @@ export function LibrarySidebar({
           count={bootstrap?.stats.installedGames}
           onClick={() => onScopeChange({ kind: "installed", label: "Instalados" })}
         />
+        {/* Sin DRM sólo aparece cuando hay algo que enseñar: una entrada con
+            cero al lado no es un acceso directo, es una pregunta sin responder.
+            Lo que no se ha comprobado no cuenta: `unknown` no es «lleva DRM». */}
+        {(bootstrap?.stats.drmFreeGames ?? 0) > 0 && (
+          <SidebarItem
+            active={selected("drmFree")}
+            icon={IconShieldCheck}
+            label="Sin DRM"
+            count={bootstrap?.stats.drmFreeGames}
+            onClick={() => onScopeChange({ kind: "drmFree", label: "Sin DRM" })}
+          />
+        )}
         <SidebarItem
           active={selected("family")}
           icon={IconUsersGroup}

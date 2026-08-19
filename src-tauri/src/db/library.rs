@@ -187,7 +187,12 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     -- prestados que están en la biblioteca. Un recuento que no
                     -- coincide con lo que hay dentro es un fallo.
                     (SELECT COUNT(*) FROM games f
-                      WHERE f.ownership_source = 'family_shared')
+                      WHERE f.ownership_source = 'family_shared'),
+                    -- Juegos que la tienda declara sin DRM. Es el recuento del
+                    -- acceso directo de la barra lateral, así que se cuenta con
+                    -- las mismas exclusiones que el resto: si no coincide con lo
+                    -- que sale al pulsarlo, sobra.
+                    COALESCE(SUM(CASE WHEN g.drm_state = 'drm_free' THEN 1 ELSE 0 END), 0)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
@@ -205,6 +210,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     total_playtime_minutes: row.get(5)?,
                     archived_games: row.get(6)?,
                     family_catalog_games: row.get(7)?,
+                    drm_free_games: row.get(8)?,
                     external_store_games: external_store_games.clone(),
                 })
             },

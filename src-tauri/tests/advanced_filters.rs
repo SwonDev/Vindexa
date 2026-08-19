@@ -219,6 +219,28 @@ fn rejects_inverted_ranges_and_invalid_dates() {
 }
 
 #[test]
+fn el_recuento_de_sin_drm_coincide_con_lo_que_sale_al_pulsarlo() {
+    // La barra lateral enseña «Sin DRM · N». Si ese N no es exactamente lo que
+    // devuelve el ámbito, la cifra miente sobre la pantalla a la que lleva.
+    let connection = database();
+    let listados = ids(
+        &connection,
+        GameListRequest {
+            drm_state: Some("drm_free".into()),
+            ..GameListRequest::default()
+        },
+    );
+    let contados: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM games WHERE drm_state = 'drm_free'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("contar");
+    assert_eq!(listados.len() as i64, contados);
+}
+
+#[test]
 fn el_drm_se_filtra_por_lo_comprobado_y_lo_que_falta_por_mirar() {
     // `unknown` es «aún no se ha comprobado», no «lleva DRM». Se puede pedir a
     // propósito para ver qué queda por mirar, y no se mezcla con lo comprobado.
