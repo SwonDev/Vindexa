@@ -21,18 +21,19 @@
  * - Lo ya resuelto no se vuelve a pedir, así que la segunda vuelta no cuesta
  *   nada.
  *
- * # El presupuesto manda, y hay que parar antes de llegar
+ * # Qué lo frena
  *
- * La caché tiene un techo en disco configurable en Ajustes. No basta con
- * confiar en que el mantenimiento desaloje lo menos usado cuando se llene: si
- * el arte completo ocupa más que el techo, la precarga y el desalojo entran en
- * un tira y afloja infinito —se descarga, se llena, se borra, se vuelve a
- * descargar— que gasta red y disco sin dejar nada a cambio. Comprobado sobre
- * una biblioteca real: la caché **bajaba** de tamaño mientras esto corría.
+ * Por defecto la caché no tiene techo, así que lo normal es que esto recorra la
+ * biblioteca entera y pare al terminarla. Sólo hay dos motivos para detenerse
+ * antes, y ninguno es un número inventado:
  *
- * Por eso se para al llegar al {@link FILL_LIMIT} del presupuesto. El margen
- * que queda es para lo que se pide al mirar, que siempre tiene prioridad sobre
- * lo que se adelanta.
+ * - Alguien fijó un techo a mano por debajo de lo que su biblioteca necesita.
+ *   Seguir adelantando ahí provocaría un tira y afloja con el desalojo —se
+ *   descarga, se llena, se borra, se vuelve a descargar— que gasta red y disco
+ *   sin dejar nada. Comprobado sobre una biblioteca real cuando el techo de
+ *   fábrica eran 512 MiB: la caché **bajaba** de tamaño mientras esto corría.
+ * - El disco se está quedando sin sitio. Ese límite es físico y no se negocia:
+ *   quien se queda sin espacio no es Vindexa, es el sistema entero.
  */
 
 import { useEffect } from "react";
@@ -46,12 +47,12 @@ const BATCH = 24;
 const FALLBACK_DELAY_MS = 1_500;
 
 /**
- * Parte del presupuesto que puede ocupar lo adelantado.
+ * Parte del techo que puede ocupar lo adelantado.
  *
- * El resto queda libre para lo que se pide al mirar, que no puede quedarse sin
- * sitio por culpa de una precarga.
+ * El margen que queda es para lo que se pide al mirar, que siempre va primero:
+ * una precarga no puede dejar sin sitio a la carátula que estás mirando.
  */
-const FILL_LIMIT = 0.85;
+const FILL_LIMIT = 0.95;
 
 /** Cada cuántas tandas se vuelve a medir el disco. Medirlo cuesta recorrerlo. */
 const CHECK_EVERY = 5;
@@ -102,7 +103,14 @@ export function useIdleArtworkPrefetch(enabled: boolean): void {
           if (batches % CHECK_EVERY === 0) {
             try {
               const usage = await api.getArtCacheUsage();
-              if (usage.bytes >= usage.budgetBytes * FILL_LIMIT) return;
+              if (usage.budgetBytes !== null && usage.bytes >= usage.budgetBytes * FILL_LIMIT) {
+                return;
+              }
+              // `null` es «no se sabe», y adelantar a ciegas contra el disco no
+              // se hace: se para igual que si estuviera lleno.
+              if (usage.freeDiskBytes === null || usage.freeDiskBytes <= usage.minFreeDiskBytes) {
+                return;
+              }
             } catch {
               // Sin la medida no se sigue: adelantar a ciegas es lo que
               // provocaba el tira y afloja con el desalojo.

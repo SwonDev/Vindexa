@@ -30,9 +30,9 @@ pub fn run() {
             fs::create_dir_all(&cache_dir)?;
 
             let database = Database::new(data_dir.join("vindexa.sqlite3"));
-            // Presupuesto en disco de la caché de arte. Subir la calidad del
-            // arte multiplica lo que ocupa, así que el techo se fija antes de
-            // servir la primera imagen.
+            // Techo en disco de la caché de arte. Lo normal es que no haya
+            // ninguno; se lee antes de servir la primera imagen por si quien usa
+            // la aplicación fijó uno a mano.
             if let Ok(connection) = database.open()
                 && let Ok(preferences) = db::organization::load_preferences(&connection)
             {

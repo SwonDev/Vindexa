@@ -155,18 +155,39 @@ pub struct AppPreferences {
     pub periodic_sync_minutes: u32,
     pub confirm_uninstall: bool,
     pub library_sort: String,
-    /// Presupuesto en disco de la caché de arte, en mebibytes. Subir la calidad
-    /// del arte multiplica el espacio ocupado, así que el techo es explícito y
-    /// gobierna el desalojo por uso menos reciente.
+    /// Techo en disco de la caché de arte, en mebibytes. Cero —lo normal—
+    /// significa sin techo: el arte de la biblioteca se queda entero en el
+    /// disco y sólo lo desaloja quedarse sin espacio libre de verdad.
     #[serde(default = "default_art_cache_mib")]
     pub art_cache_mib: u32,
     #[serde(default)]
     pub shortcuts: ShortcutBindings,
 }
 
-pub const DEFAULT_ART_CACHE_MIB: u32 = 512;
+/// Sin techo: la caché de arte crece con la biblioteca.
+///
+/// Es el valor de fábrica y no hay ninguna razón para que sea otro. Vindexa es
+/// una aplicación local: el arte vive en el disco de quien la usa, y ponerle un
+/// número arbitrario sólo servía para que su propia biblioteca no cupiera en su
+/// propio disco. Tampoco crece sin fin: lo acota el número de juegos que se
+/// tienen.
+///
+/// El único límite real es físico, y lo vigila la caché: nunca se come el
+/// margen de disco libre que el sistema necesita para funcionar.
+pub const UNLIMITED_ART_CACHE_MIB: u32 = 0;
+pub const DEFAULT_ART_CACHE_MIB: u32 = UNLIMITED_ART_CACHE_MIB;
+/// Techo mínimo que se puede fijar a mano. Por debajo, la biblioteca se
+/// quedaría sin portadas.
 pub const MIN_ART_CACHE_MIB: u32 = 128;
-pub const MAX_ART_CACHE_MIB: u32 = 8_192;
+/// Techo máximo que se puede fijar a mano.
+pub const MAX_ART_CACHE_MIB: u32 = 65_536;
+
+/// ¿Es un techo de caché de arte que se pueda guardar?
+///
+/// Cero es válido y es lo habitual: significa que no hay techo.
+pub fn is_valid_art_cache_mib(mib: u32) -> bool {
+    mib == UNLIMITED_ART_CACHE_MIB || (MIN_ART_CACHE_MIB..=MAX_ART_CACHE_MIB).contains(&mib)
+}
 
 /// Primer identificador que Vindexa asigna por su cuenta.
 ///

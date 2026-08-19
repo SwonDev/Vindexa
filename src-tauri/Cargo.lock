@@ -4975,6 +4975,7 @@ dependencies = [
  "block2",
  "chrono",
  "keyring",
+ "libc",
  "objc2",
  "objc2-foundation",
  "objc2-web-kit",
@@ -4993,6 +4994,7 @@ dependencies = [
  "url",
  "uuid",
  "webkit2gtk",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

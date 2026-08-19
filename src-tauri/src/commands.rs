@@ -2420,10 +2420,16 @@ pub async fn save_preferences(
     state: State<'_, AppState>,
     preferences: AppPreferences,
 ) -> AppResult<()> {
+    // El techo de la caché se aplicaba sólo al arrancar, así que cambiarlo aquí
+    // no hacía nada hasta reiniciar. Se aplica en cuanto se guarda, y sólo si
+    // se guarda: un valor rechazado por la validación no debe llegar a mandar.
+    let art_cache_mib = preferences.art_cache_mib;
     database_read(&state, move |database| {
         database.save_preferences(&preferences)
     })
-    .await
+    .await?;
+    art_cache::set_max_cache_bytes(u64::from(art_cache_mib) * 1024 * 1024);
+    Ok(())
 }
 
 #[tauri::command]

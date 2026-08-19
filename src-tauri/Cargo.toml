@@ -34,6 +34,15 @@ tokio = { version = "=1.53.1", features = ["io-util", "net", "rt", "sync", "time
 url = "=2.5.8"
 uuid = { version = "=1.24.0", features = ["serde", "v4"] }
 
+# Espacio libre en disco: es el único límite real de la caché de arte, así que
+# hay que poder preguntárselo al sistema. Ambas ya estaban en el árbol de
+# dependencias; aquí sólo se declaran para usarlas de forma directa.
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.189"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
 objc2 = "=0.6.4"

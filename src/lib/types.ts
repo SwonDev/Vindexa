@@ -161,7 +161,7 @@ export interface AppPreferences {
   periodicSyncMinutes: number;
   confirmUninstall: boolean;
   librarySort: GameSort;
-  /** Presupuesto en disco de la caché de arte, en MiB (128–8192). */
+  /** Techo en disco de la caché de arte, en MiB. Cero —lo normal— es sin techo. */
   artCacheMib: number;
   shortcuts: ShortcutBindings;
 }
@@ -1509,8 +1509,13 @@ export interface ArtworkTarget {
   coverUrl: string;
 }
 
-/** Cuánto ocupa la caché de arte en disco y cuánto se le permite ocupar. */
+/** Cuánto ocupa la caché de arte en disco y qué la limita de verdad. */
 export interface ArtCacheUsage {
   bytes: number;
-  budgetBytes: number;
+  /** Techo fijado a mano en Ajustes. `null` —lo normal— es sin techo. */
+  budgetBytes: number | null;
+  /** Espacio libre en el disco. `null` es «no se sabe», no «hay de sobra». */
+  freeDiskBytes: number | null;
+  /** Margen de disco que Vindexa no se come nunca. */
+  minFreeDiskBytes: number;
 }

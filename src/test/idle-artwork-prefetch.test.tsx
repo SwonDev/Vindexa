@@ -42,10 +42,13 @@ function conReposoInmediato() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Por defecto, disco de sobra: cada prueba que quiera lo contrario lo dice.
+  // Por defecto, sin techo y con disco de sobra: cada prueba que quiera lo
+  // contrario lo dice.
   vi.mocked(api.getArtCacheUsage).mockResolvedValue({
     bytes: 10_000_000,
-    budgetBytes: 512 * 1024 * 1024,
+    budgetBytes: null,
+    freeDiskBytes: 200 * 1024 * 1024 * 1024,
+    minFreeDiskBytes: 2 * 1024 * 1024 * 1024,
   });
 });
 
@@ -78,7 +81,59 @@ describe("completar la caché de arte en los ratos libres", () => {
     expect(pedidas.every((entrada) => entrada.appId >= 1000)).toBe(true);
   });
 
-  it("para al acercarse al techo de la caché en vez de pelearse con el desalojo", async () => {
+  it("sin techo recorre la biblioteca entera aunque la caché ya pese", async () => {
+    // Es el caso normal: el arte de la biblioteca cabe en el disco de quien la
+    // usa, y adelantarlo entero es justo lo que se quiere.
+    const reposo = conReposoInmediato();
+    vi.mocked(api.listArtworkTargets).mockResolvedValue(
+      Array.from({ length: 50 }, (_, index) => ({
+        appId: 3000 + index,
+        coverUrl: `https://shared.steamstatic.com/store_item_assets/steam/apps/${3000 + index}/library_600x900_2x.jpg`,
+      })),
+    );
+    vi.mocked(api.getArtCacheUsage).mockResolvedValue({
+      bytes: 40 * 1024 * 1024 * 1024,
+      budgetBytes: null,
+      freeDiskBytes: 200 * 1024 * 1024 * 1024,
+      minFreeDiskBytes: 2 * 1024 * 1024 * 1024,
+    });
+
+    renderHook(() => useIdleArtworkPrefetch(true));
+    await waitFor(() => expect(api.listArtworkTargets).toHaveBeenCalled());
+    await reposo.agotar(20);
+
+    const pedidas = vi
+      .mocked(prefetchArtwork)
+      .mock.calls.flatMap(([entradas]) => entradas as { appId: number }[]);
+    expect(pedidas.length).toBe(50);
+  });
+
+  it("para si el disco se está quedando sin sitio", async () => {
+    // Ese límite es físico y no se negocia: quien se queda sin espacio no es
+    // Vindexa, es el sistema entero.
+    const reposo = conReposoInmediato();
+    vi.mocked(api.listArtworkTargets).mockResolvedValue(
+      Array.from({ length: 50 }, (_, index) => ({
+        appId: 4000 + index,
+        coverUrl: `https://shared.steamstatic.com/store_item_assets/steam/apps/${4000 + index}/library_600x900_2x.jpg`,
+      })),
+    );
+    vi.mocked(api.getArtCacheUsage).mockResolvedValue({
+      bytes: 3 * 1024 * 1024 * 1024,
+      budgetBytes: null,
+      freeDiskBytes: 1024 * 1024 * 1024,
+      minFreeDiskBytes: 2 * 1024 * 1024 * 1024,
+    });
+
+    renderHook(() => useIdleArtworkPrefetch(true));
+    await waitFor(() => expect(api.listArtworkTargets).toHaveBeenCalled());
+    await reposo.agotar();
+    await waitFor(() => expect(api.getArtCacheUsage).toHaveBeenCalled());
+
+    expect(prefetchArtwork).not.toHaveBeenCalled();
+  });
+
+  it("para al acercarse a un techo fijado a mano en vez de pelearse con el desalojo", async () => {
     const reposo = conReposoInmediato();
     vi.mocked(api.listArtworkTargets).mockResolvedValue(
       Array.from({ length: 50 }, (_, index) => ({
@@ -86,11 +141,14 @@ describe("completar la caché de arte en los ratos libres", () => {
         coverUrl: `https://shared.steamstatic.com/store_item_assets/steam/apps/${2000 + index}/library_600x900_2x.jpg`,
       })),
     );
-    // La caché ya roza el presupuesto: seguir adelantando sólo provocaría que
-    // el mantenimiento borre justo lo que se acaba de descargar.
+    // La caché ya roza el techo que alguien fijó a mano: seguir adelantando
+    // sólo provocaría que el mantenimiento borre justo lo que se acaba de
+    // descargar.
     vi.mocked(api.getArtCacheUsage).mockResolvedValue({
       bytes: 500 * 1024 * 1024,
       budgetBytes: 512 * 1024 * 1024,
+      freeDiskBytes: 200 * 1024 * 1024 * 1024,
+      minFreeDiskBytes: 2 * 1024 * 1024 * 1024,
     });
 
     renderHook(() => useIdleArtworkPrefetch(true));

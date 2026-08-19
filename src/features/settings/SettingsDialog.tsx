@@ -655,7 +655,7 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
       periodicSyncMinutes: 60,
       confirmUninstall: true,
       librarySort: "manual",
-      artCacheMib: 512,
+      artCacheMib: 0,
       shortcuts: DEFAULT_SHORTCUTS,
     },
   );
@@ -707,16 +707,17 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
       </SettingRow>
       <SettingRow
         label="Caché de arte"
-        description="Vindexa guarda las portadas y los banners oficiales en su máxima resolución. Al llegar al techo, desaloja primero lo que hace más tiempo que no se ve."
+        description="Vindexa guarda las portadas y los banners oficiales en su máxima resolución para que la biblioteca se pinte desde el disco, sin volver a descargarlos. Sin límite es lo normal: sólo ocupa lo que tiene tu biblioteca, y nunca se come el espacio que tu sistema necesita para funcionar."
       >
         <Select
           value={String(preferences.artCacheMib)}
           onValueChange={(mib) => update({ ...preferences, artCacheMib: Number(mib) })}
         >
-          <SelectTrigger className="w-40" aria-label="Presupuesto de la caché de arte">
+          <SelectTrigger className="w-40" aria-label="Techo de la caché de arte">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="0">Sin límite</SelectItem>
             <SelectItem value="128">128 MiB</SelectItem>
             <SelectItem value="256">256 MiB</SelectItem>
             <SelectItem value="512">512 MiB</SelectItem>
@@ -724,6 +725,9 @@ function AppearanceSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefine
             <SelectItem value="2048">2 GiB</SelectItem>
             <SelectItem value="4096">4 GiB</SelectItem>
             <SelectItem value="8192">8 GiB</SelectItem>
+            <SelectItem value="16384">16 GiB</SelectItem>
+            <SelectItem value="32768">32 GiB</SelectItem>
+            <SelectItem value="65536">64 GiB</SelectItem>
           </SelectContent>
         </Select>
       </SettingRow>

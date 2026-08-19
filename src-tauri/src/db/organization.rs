@@ -1084,11 +1084,9 @@ pub fn save_preferences(
             "El criterio de ordenación de la biblioteca no es válido.",
         ));
     }
-    if preferences.art_cache_mib < crate::models::MIN_ART_CACHE_MIB
-        || preferences.art_cache_mib > crate::models::MAX_ART_CACHE_MIB
-    {
+    if !crate::models::is_valid_art_cache_mib(preferences.art_cache_mib) {
         return Err(AppError::validation(
-            "El presupuesto de la caché de arte debe estar entre 128 MiB y 8 GiB.",
+            "El techo de la caché de arte debe ser «sin límite» o estar entre 128 MiB y 64 GiB.",
         ));
     }
     validate_shortcuts(&preferences.shortcuts)?;

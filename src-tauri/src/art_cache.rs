@@ -10,7 +10,7 @@
 //! 2. **Persistencia**: escritura atómica (temporal + `fsync` + `rename`),
 //!    validación de integridad al leer (firma, dimensiones y cierre del
 //!    formato), revalidación HTTP con `ETag`/`Last-Modified`, recolección de
-//!    basura en ambas direcciones y desalojo LRU con presupuesto configurable.
+//!    basura en ambas direcciones y, si hace falta, desalojo LRU por último uso.
 //! 3. **Robustez de red**: tiempos límite, techo de bytes, presupuesto de
 //!    descargas simultáneas, `Retry-After`, backoff exponencial acotado,
 //!    deduplicación de vuelo y cancelación limpia.
@@ -71,8 +71,18 @@ const PAGE_BACKGROUND_FILE: &str = "page_bg_raw.jpg";
 /// Steam sirve el arte con `cache-control: max-age=315360000`. Revalidar cada
 /// treinta días es más que suficiente y mantiene el camino caliente sin red.
 const REVALIDATE_AFTER: &str = "-30 days";
-/// Presupuesto por defecto de la caché de arte en disco.
-const DEFAULT_MAX_CACHE_BYTES: u64 = 512 * 1024 * 1024;
+/// Sin techo. Es el valor de fábrica: Vindexa es una aplicación local y el arte
+/// de la biblioteca vive en el disco de quien la usa, así que no hay ninguna
+/// razón para inventarse un límite. El arte tampoco crece sin fin: lo acota el
+/// número de juegos que se tienen.
+const NO_LIMIT: u64 = 0;
+/// Suelo de espacio libre en el volumen donde vive la caché.
+///
+/// La caché no tiene techo, pero el disco sí tiene fondo: si se llena del todo,
+/// lo que se rompe no es Vindexa, es el sistema. Por debajo de este margen el
+/// mantenimiento desaloja lo menos usado hasta recuperarlo. No es un límite a la
+/// caché: es no comerse el último gigabyte de nadie.
+const MIN_FREE_DISK_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// Bytes iniciales que se leen para validar firma y extraer dimensiones. El
 /// marcador SOF de los JPEG oficiales aparece antes del byte 1.100 incluso con
 /// EXIF (`page_bg_raw.jpg`); 8 KiB deja margen amplio.
@@ -113,7 +123,7 @@ static RECENT_USE: OnceLock<Mutex<HashMap<PathBuf, Instant>>> = OnceLock::new();
 static LAST_MAINTENANCE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 static MAINTENANCE_RUNNING: AtomicBool = AtomicBool::new(false);
 static ART_INDEX_REFRESH_STARTED: AtomicBool = AtomicBool::new(false);
-static MAX_CACHE_BYTES: AtomicU64 = AtomicU64::new(DEFAULT_MAX_CACHE_BYTES);
+static MAX_CACHE_BYTES: AtomicU64 = AtomicU64::new(NO_LIMIT);
 static VALIDATED: OnceLock<Mutex<HashMap<PathBuf, ValidationEntry>>> = OnceLock::new();
 
 /// Resultado de una validación completa, reutilizable mientras el archivo no
@@ -128,36 +138,117 @@ struct ValidationEntry {
     facts: ImageFacts,
 }
 
-/// Presupuesto máximo en disco para el arte cacheado. Al superarse, el
-/// mantenimiento desaloja por orden de último uso.
-#[allow(
-    dead_code,
-    reason = "punto de conexión con las preferencias de la aplicación"
-)]
+/// Fija el techo en disco del arte cacheado. Cero significa **sin techo**, que
+/// es lo normal; sólo lo cambia quien lo pone a mano en Ajustes.
 pub fn set_max_cache_bytes(limit: u64) {
-    // Un presupuesto ridículo dejaría la biblioteca sin portadas.
-    MAX_CACHE_BYTES.store(limit.max(1024 * 1024), Ordering::Relaxed);
+    // Un techo ridículo dejaría la biblioteca sin portadas.
+    let value = if limit == NO_LIMIT {
+        NO_LIMIT
+    } else {
+        limit.max(1024 * 1024)
+    };
+    MAX_CACHE_BYTES.store(value, Ordering::Relaxed);
 }
 
-fn max_cache_bytes() -> u64 {
-    MAX_CACHE_BYTES.load(Ordering::Relaxed)
+/// El techo fijado a mano, si lo hay.
+fn cache_budget() -> Option<u64> {
+    match MAX_CACHE_BYTES.load(Ordering::Relaxed) {
+        NO_LIMIT => None,
+        bytes => Some(bytes),
+    }
 }
 
-/// Cuánto ocupa la caché de arte y cuánto se le permite ocupar.
+/// Espacio libre en el volumen donde vive la caché.
+///
+/// Es el único límite real: sin techo artificial, lo que decide cuánto arte
+/// cabe es el disco de quien usa la aplicación.
+mod disk {
+    use std::path::Path;
+
+    #[cfg(unix)]
+    pub fn free_bytes(path: &Path) -> Option<u64> {
+        use std::ffi::CString;
+        use std::mem::MaybeUninit;
+        use std::os::unix::ffi::OsStrExt;
+
+        let raw = CString::new(path.as_os_str().as_bytes()).ok()?;
+        // SAFETY: `raw` es una ruta terminada en nul que vive durante toda la
+        // llamada, y la estructura sólo se lee cuando `statvfs` dice que la ha
+        // rellenado.
+        let stats = unsafe {
+            let mut stats = MaybeUninit::<libc::statvfs>::uninit();
+            if libc::statvfs(raw.as_ptr(), stats.as_mut_ptr()) != 0 {
+                return None;
+            }
+            stats.assume_init()
+        };
+        // `f_bavail` son los bloques libres para un proceso sin privilegios,
+        // que es exactamente lo que Vindexa puede llegar a ocupar.
+        contador(stats.f_bavail)?.checked_mul(contador(stats.f_frsize)?)
+    }
+
+    /// Lleva a `u64` un contador del sistema de archivos.
+    ///
+    /// El ancho de estos campos cambia de plataforma —en macOS los bloques son
+    /// de 32 bits y en Linux de 64—, así que la conversión se escribe una vez y
+    /// vale para las dos.
+    #[cfg(unix)]
+    fn contador(value: impl TryInto<u64>) -> Option<u64> {
+        value.try_into().ok()
+    }
+
+    #[cfg(windows)]
+    pub fn free_bytes(path: &Path) -> Option<u64> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        wide.push(0);
+        let mut free = 0_u64;
+        // SAFETY: `wide` termina en nul y vive durante la llamada; `free` sólo
+        // se lee si la llamada dice que lo ha escrito.
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        (ok != 0).then_some(free)
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    pub fn free_bytes(_path: &Path) -> Option<u64> {
+        // Sin forma de preguntarlo, no se inventa una cifra: quien lo consume
+        // trata `None` como «no lo sé» y no como «hay de sobra».
+        None
+    }
+}
+
+/// Cuánto ocupa la caché de arte y qué la limita de verdad.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheUsage {
     pub bytes: u64,
-    pub budget_bytes: u64,
+    /// Techo fijado a mano en Ajustes. Lo normal es que no haya ninguno.
+    pub budget_bytes: Option<u64>,
+    /// Espacio libre en el volumen donde vive la caché. `None` cuando el
+    /// sistema no sabe decirlo: eso es «no lo sé», no «hay de sobra».
+    pub free_disk_bytes: Option<u64>,
+    /// Margen de disco que Vindexa no se come nunca.
+    pub min_free_disk_bytes: u64,
 }
 
-/// Mide lo que ocupa la caché en disco.
+/// Mide lo que ocupa la caché en disco y con cuánto sitio cuenta.
 ///
 /// Hace falta para que llenarla por adelantado sepa cuándo parar. Sin este dato
-/// la precarga descarga sin fin: llega al techo, el mantenimiento desaloja lo
-/// menos usado, y la siguiente tanda vuelve a bajar lo que se acaba de borrar.
-/// Comprobado: con una biblioteca cuyo arte completo ocupa el doble del
-/// presupuesto, la caché **bajaba** de tamaño mientras la precarga corría.
+/// la precarga descarga sin fin: llena, el mantenimiento desaloja lo menos
+/// usado, y la siguiente tanda vuelve a bajar lo que se acaba de borrar.
+/// Comprobado con el techo antiguo de 512 MiB: con una biblioteca cuyo arte
+/// completo ocupaba el doble, la caché **bajaba** de tamaño mientras la
+/// precarga corría. Sin techo eso ya no pasa, y lo único que queda por vigilar
+/// es que el disco no se quede sin fondo.
 pub fn usage(cache_root: &Path) -> CacheUsage {
     let root = cache_root.join("steam-art");
     let mut bytes = 0_u64;
@@ -177,7 +268,9 @@ pub fn usage(cache_root: &Path) -> CacheUsage {
     }
     CacheUsage {
         bytes,
-        budget_bytes: max_cache_bytes(),
+        budget_bytes: cache_budget(),
+        free_disk_bytes: disk::free_bytes(cache_root),
+        min_free_disk_bytes: MIN_FREE_DISK_BYTES,
     }
 }
 
@@ -2307,9 +2400,20 @@ pub fn maintain(
     report.removed_rows = prune_orphan_rows(database, cache_root)?;
 
     // Desalojo LRU: se ordena por último uso ascendente y se elimina hasta
-    // entrar en presupuesto, respetando lo que está en uso.
+    // volver a caber, respetando lo que está en uso.
+    //
+    // Por defecto no hay techo y esto no llega a entrar: el arte de la
+    // biblioteca se queda entero en disco, que es de lo que se trata. Sólo
+    // aparece si alguien fija un techo a mano, o si el disco se está quedando
+    // sin fondo —eso no es un límite de Vindexa, es el disco.
     let mut total: u64 = survivors.iter().map(|(_, _, size)| *size).sum();
-    let budget = max_cache_bytes();
+    let mut budget = cache_budget().unwrap_or(u64::MAX);
+    if let Some(free) = disk::free_bytes(cache_root)
+        && free < MIN_FREE_DISK_BYTES
+    {
+        let missing = MIN_FREE_DISK_BYTES - free;
+        budget = budget.min(total.saturating_sub(missing));
+    }
     if total > budget {
         survivors.sort_by_key(|(_, last_use, _)| *last_use);
         for (path, _, size) in &survivors {
@@ -2392,16 +2496,17 @@ fn download_error() -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ArtKind, ArtVariant, Conditional, DEFAULT_MAX_CACHE_BYTES, Density, FetchedAsset,
-        MAX_CONCURRENT_DOWNLOADS, MaintenanceReport, NegativeEntry, PAGE_BACKGROUND_FILE,
+        ArtKind, ArtVariant, Conditional, Density, FetchedAsset, MAX_CONCURRENT_DOWNLOADS,
+        MIN_FREE_DISK_BYTES, NO_LIMIT, MaintenanceReport, NegativeEntry, PAGE_BACKGROUND_FILE,
         allowed_content_type, cache, cache_file_name, candidate_sources, clear_negative,
         derive_library_asset, download_slots, effective_pixels, ensure_within_root, existing_cache,
         fast_path_candidates, fetch_asset, fingerprint_from_file_name, has_valid_trailer,
         image_dimensions, join_art_cache_task, local_library_art, maintain, matches_magic_bytes,
         negative_cache, negative_cache_hit, record_cached_path, request_lock, retryable_status,
         revalidation_due, rung_for, selected_rank, set_max_cache_bytes, source_fingerprint,
-        store_asset, trusted_cached_path, valid_image_file, validate_source_url,
+        store_asset, trusted_cached_path, usage, valid_image_file, validate_source_url,
     };
+    use super::{cache_budget, disk};
     use crate::db::Database;
     use crate::error::AppError;
     use reqwest::StatusCode;
@@ -2901,6 +3006,44 @@ mod tests {
     // --- LRU -----------------------------------------------------------------
 
     #[test]
+    fn cero_significa_sin_techo_y_el_resto_se_respeta() {
+        set_max_cache_bytes(NO_LIMIT);
+        assert_eq!(cache_budget(), None, "cero es «sin techo», no «cero bytes»");
+
+        set_max_cache_bytes(4 * 1024 * 1024 * 1024);
+        assert_eq!(cache_budget(), Some(4 * 1024 * 1024 * 1024));
+
+        // Un techo ridículo dejaría la biblioteca sin portadas.
+        set_max_cache_bytes(1);
+        assert_eq!(cache_budget(), Some(1024 * 1024));
+
+        set_max_cache_bytes(NO_LIMIT);
+    }
+
+    #[test]
+    fn el_disco_libre_se_mide_de_verdad() {
+        // El único límite que le queda a la caché es físico, así que la cifra
+        // tiene que salir del sistema y no de una constante.
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let free = disk::free_bytes(directory.path()).expect("medir el disco");
+        assert!(free > 0, "un volumen montado y escribible no tiene cero libre");
+        assert!(
+            free < 1024 * 1024 * 1024 * 1024 * 1024,
+            "un petabyte huele a unidad mal interpretada: {free}"
+        );
+    }
+
+    #[test]
+    fn sin_techo_lo_que_ocupa_se_informa_con_el_disco_que_queda() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        set_max_cache_bytes(NO_LIMIT);
+        let medida = usage(directory.path());
+        assert_eq!(medida.budget_bytes, None);
+        assert!(medida.free_disk_bytes.is_some(), "hay que saber qué queda");
+        assert_eq!(medida.min_free_disk_bytes, MIN_FREE_DISK_BYTES);
+    }
+
+    #[test]
     fn lru_eviction_frees_space_without_touching_files_in_use() {
         let directory = TempDir::new().expect("crear directorio temporal");
         let database = temp_database(&directory);
@@ -2937,8 +3080,8 @@ mod tests {
             paths.push(path);
         }
 
-        // Con presupuesto de sobra no se desaloja nada.
-        set_max_cache_bytes(DEFAULT_MAX_CACHE_BYTES);
+        // Sin techo no se desaloja nada, que es el caso normal.
+        set_max_cache_bytes(NO_LIMIT);
         let quiet = maintain(&database, &cache_root, &[]).expect("mantenimiento sin presión");
         assert_eq!(quiet.evicted_files, 0);
         assert!(paths.iter().all(|path| path.exists()));
@@ -2955,7 +3098,7 @@ mod tests {
         assert!(!paths[1].exists(), "el más antiguo desalojable cae primero");
         assert!(paths[2].exists(), "el más reciente sobrevive");
         assert!(report.bytes_after <= 5 * 1024 * 1024, "{report:?}");
-        set_max_cache_bytes(DEFAULT_MAX_CACHE_BYTES);
+        set_max_cache_bytes(NO_LIMIT);
     }
 
     // --- Path traversal ------------------------------------------------------

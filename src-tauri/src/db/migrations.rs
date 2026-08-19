@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 /// `VNDX` en ASCII. Permite rechazar cualquier SQLite que no haya sido creado
 /// por Vindexa antes de una restauración.
 pub const APPLICATION_ID: i64 = 0x564E4458;
-pub const CURRENT_VERSION: i64 = 40;
+pub const CURRENT_VERSION: i64 = 41;
 
 struct Migration {
     version: i64,
@@ -212,6 +212,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 40,
         name: "upcoming_checks",
         sql: include_str!("../../migrations/040_upcoming_checks.sql"),
+    },
+    Migration {
+        version: 41,
+        name: "art_cache_fits_the_library",
+        sql: include_str!("../../migrations/041_art_cache_fits_the_library.sql"),
     },
 ];
 
