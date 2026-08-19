@@ -168,6 +168,23 @@ pub const DEFAULT_ART_CACHE_MIB: u32 = 512;
 pub const MIN_ART_CACHE_MIB: u32 = 128;
 pub const MAX_ART_CACHE_MIB: u32 = 8_192;
 
+/// Primer identificador que Vindexa asigna por su cuenta.
+///
+/// La biblioteca se indexa por AppID de Steam, y un juego de Epic, de GOG o de
+/// itch.io no tiene ninguno. Para que pueda organizarse como los demás se le da
+/// uno local a partir de aquí: Steam anda por los siete millones largos y
+/// numera de forma creciente, así que no alcanzará este tramo.
+///
+/// Sirve además de frontera: por encima de este número, **el juego no existe
+/// para Steam**. Ninguna consulta a su API —fichas, precios, logros, arte— debe
+/// llevar uno de estos identificadores, porque no significa nada allí.
+pub const LOCAL_APP_ID_BASE: u32 = 2_000_000_000;
+
+/// ¿Este identificador lo asignó Vindexa en vez de Steam?
+pub fn is_local_app_id(app_id: u32) -> bool {
+    app_id >= LOCAL_APP_ID_BASE
+}
+
 fn default_art_cache_mib() -> u32 {
     DEFAULT_ART_CACHE_MIB
 }
@@ -394,6 +411,13 @@ pub struct GameListRequest {
     pub early_access: Option<bool>,
     pub is_free: Option<bool>,
     pub ownership_source: Option<String>,
+    /// Ámbito de una tienda que no es Steam: `epic`, `gog` o `itch`.
+    ///
+    /// Devuelve **todos** los juegos que esa tienda te ha vendido, incluidos los
+    /// que además tienes en Steam. Tener un juego en dos tiendas no lo convierte
+    /// en dos juegos, pero sí tiene que aparecer al mirar cualquiera de ellas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_store: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub never_played: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

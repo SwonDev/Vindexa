@@ -124,15 +124,13 @@ impl StoredSession {
     }
 }
 
-fn entry(store: ExternalStore) -> AppResult<keyring::Entry> {
-    keyring::Entry::new(SERVICE, keychain_account(store)).map_err(keyring_error)
-}
+use crate::keychain;
 
 /// Guarda la sesión en el llavero, sustituyendo la anterior si la había.
 pub fn save(store: ExternalStore, session: &StoredSession) -> AppResult<()> {
     session.validate()?;
     let encoded = serde_json::to_string(session).map_err(|_| invalid_session())?;
-    entry(store)?.set_password(&encoded).map_err(keyring_error)
+    keychain::set(SERVICE, keychain_account(store), &encoded).map_err(keyring_error)
 }
 
 /// Lee la sesión guardada. `None` significa «no hay sesión», que es un estado
@@ -142,7 +140,7 @@ pub fn save(store: ExternalStore, session: &StoredSession) -> AppResult<()> {
 /// Dejarla ahí condenaría a la tienda a fallar en cada arranque sin que nadie
 /// pudiera arreglarlo salvo desde Acceso a Llaveros.
 pub fn load(store: ExternalStore) -> AppResult<Option<StoredSession>> {
-    let raw = match entry(store)?.get_password() {
+    let raw = match keychain::get(SERVICE, keychain_account(store)) {
         Ok(value) => value,
         Err(keyring::Error::NoEntry) => return Ok(None),
         Err(error) => return Err(keyring_error(error)),
@@ -159,7 +157,7 @@ pub fn load(store: ExternalStore) -> AppResult<Option<StoredSession>> {
 /// ¿Queda algo guardado para esta tienda? Es lo que responde la comprobación
 /// que la interfaz ofrece tras cerrar sesión.
 pub fn has(store: ExternalStore) -> AppResult<bool> {
-    match entry(store)?.get_password() {
+    match keychain::get(SERVICE, keychain_account(store)) {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
         Err(error) => Err(keyring_error(error)),
@@ -168,7 +166,7 @@ pub fn has(store: ExternalStore) -> AppResult<bool> {
 
 /// Borra la sesión. Que no hubiera nada que borrar no es un fallo.
 pub fn delete(store: ExternalStore) -> AppResult<()> {
-    match entry(store)?.delete_credential() {
+    match keychain::delete(SERVICE, keychain_account(store)) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(keyring_error(error)),
     }

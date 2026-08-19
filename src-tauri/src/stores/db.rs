@@ -22,6 +22,7 @@
 
 use crate::db::rich_metadata::{DrmEvidence, DrmState};
 use crate::error::{AppError, AppResult};
+use crate::models::LOCAL_APP_ID_BASE;
 use crate::stores::matching::{MatchCandidate, SteamTitleIndex};
 use crate::stores::{
     DiscoveredGame, ExternalStore, MAX_DISCOVERED_GAMES, ScanStatus, StoreOrigin, StoreScan,
@@ -289,6 +290,7 @@ pub(crate) fn persist_scan_in_transaction(
         }
     }
 
+    link_into_library(transaction)?;
     upsert_account(transaction, scan)?;
 
     Ok(ExternalStoreScanReport {
@@ -307,6 +309,125 @@ pub(crate) fn persist_scan_in_transaction(
         error_code: scan.error_code.clone(),
         error_message: scan.error_message.clone(),
     })
+}
+
+/// Da a cada juego externo su sitio en la biblioteca.
+///
+/// La migración 037 hizo esto con lo que ya había; esta función lo hace con lo
+/// que llega después, que es lo que evita que aquello fuera un apaño de una sola
+/// vez. Se llama al final de cada sincronización y de cada importación.
+///
+/// Tres pasos, en este orden:
+///
+/// 1. **El que ya está en Steam apunta a su fila.** Tener un juego en Steam y en
+///    GOG no son dos juegos, es uno con dos procedencias.
+/// 2. **El resto recibe un identificador local** ([`LOCAL_APP_ID_BASE`]),
+///    continuando la numeración existente. Se asigna en Rust y no en SQL a
+///    propósito: la numeración depende de lo que ya hay en la tabla, y una
+///    consulta que lee y escribe a la vez es justo donde se cuelan los errores
+///    difíciles de ver.
+/// 3. **Entra en `games` y en `game_personal`.** Sin ficha personal no hay
+///    estado, ni colección, ni orden manual, ni arrastre: la biblioteca une las
+///    dos tablas y sin la segunda el juego no existe para ella.
+///
+/// Devuelve cuántos juegos se han incorporado.
+pub(crate) fn link_into_library(transaction: &Transaction<'_>) -> AppResult<usize> {
+    transaction.execute(
+        "UPDATE external_games
+            SET local_app_id = matched_app_id
+          WHERE local_app_id IS NULL
+            AND matched_app_id IS NOT NULL
+            AND EXISTS (SELECT 1 FROM games g WHERE g.app_id = external_games.matched_app_id)",
+        [],
+    )?;
+
+    let pendientes: Vec<(String, String)> = {
+        let mut statement = transaction.prepare(
+            "SELECT store, external_id
+               FROM external_games
+              WHERE local_app_id IS NULL
+              ORDER BY store, external_id",
+        )?;
+        let filas = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        filas.collect::<Result<_, _>>()?
+    };
+
+    if !pendientes.is_empty() {
+        let siguiente: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(local_app_id), ?1 - 1) + 1
+               FROM external_games
+              WHERE local_app_id >= ?1",
+            params![i64::from(LOCAL_APP_ID_BASE)],
+            |row| row.get(0),
+        )?;
+        let mut asignar = transaction.prepare(
+            "UPDATE external_games SET local_app_id = ?3
+              WHERE store = ?1 AND external_id = ?2 AND local_app_id IS NULL",
+        )?;
+        for (indice, (store, external_id)) in pendientes.iter().enumerate() {
+            let asignado = siguiente + indice as i64;
+            asignar.execute(params![store, external_id, asignado])?;
+        }
+    }
+
+    // El juego entra con lo que su tienda publica. Nada se inventa: si no hay
+    // carátula, la fila la deja vacía y la interfaz enseña sus iniciales.
+    let incorporados = transaction.execute(
+        "INSERT INTO games (
+            app_id, title, cover_url, header_url,
+            playtime_minutes, playtime_recent_minutes,
+            ownership_source, family_availability, external_store
+         )
+         SELECT e.local_app_id, e.title, e.cover_url, e.header_url,
+                0, 0, 'owned', 'not_applicable', e.store
+           FROM external_games e
+          WHERE e.local_app_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM games g WHERE g.app_id = e.local_app_id)",
+        [],
+    )?;
+
+    transaction.execute(
+        "INSERT INTO game_personal (app_id, status_id)
+         SELECT g.app_id, 'unclassified'
+           FROM games g
+          WHERE g.external_store IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM game_personal p WHERE p.app_id = g.app_id)",
+        [],
+    )?;
+
+    // Comprarlo en otra tienda es tenerlo. Cuando el emparejado cae sobre una
+    // fila que venía del préstamo familiar, esa fila deja de ser un préstamo:
+    // la biblioteca esconde los préstamos sin confirmar, y sin esto se
+    // esconderían con ellos juegos que constan comprados. Pasó de verdad, con
+    // 158 juegos de Epic. Que además esté prestado en Steam sigue guardado en
+    // `family_catalog_games`; lo que cambia es quién decide si se enseña.
+    transaction.execute(
+        "UPDATE games
+            SET ownership_source = 'owned',
+                family_availability = 'not_applicable',
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE ownership_source = 'family_shared'
+            AND EXISTS (SELECT 1 FROM external_games e WHERE e.local_app_id = games.app_id)",
+        [],
+    )?;
+
+    // La carátula puede llegar más tarde que el juego —Epic la publica en otra
+    // llamada—, así que se refresca sin pisar nada que ya tuviera valor.
+    transaction.execute(
+        "UPDATE games
+            SET cover_url = COALESCE(games.cover_url, (
+                    SELECT e.cover_url FROM external_games e
+                     WHERE e.local_app_id = games.app_id AND e.cover_url <> ''
+                     LIMIT 1)),
+                header_url = COALESCE(games.header_url, (
+                    SELECT e.header_url FROM external_games e
+                     WHERE e.local_app_id = games.app_id AND e.header_url <> ''
+                     LIMIT 1))
+          WHERE games.external_store IS NOT NULL",
+        [],
+    )?;
+
+    Ok(incorporados)
 }
 
 /// Marca como no instalados los juegos de esta tienda que ya no aparecen en
@@ -418,7 +539,12 @@ fn manual_decisions(
 }
 
 fn build_steam_index(connection: &Connection) -> AppResult<SteamTitleIndex> {
-    let mut statement = connection.prepare("SELECT app_id, title FROM games")?;
+    // Sólo juegos de Steam. Desde que los de las demás tiendas también viven en
+    // `games`, una consulta sin este filtro dejaría que un juego de GOG se
+    // emparejara **consigo mismo** —o con su gemelo de Epic— y el vínculo
+    // «también está en Steam» pasaría a significar cualquier cosa.
+    let mut statement =
+        connection.prepare("SELECT app_id, title FROM games WHERE external_store IS NULL")?;
     let candidates = statement
         .query_map([], |row| {
             Ok(MatchCandidate {
@@ -876,10 +1002,12 @@ mod tests {
         list_accounts, persist_scan, rematch, set_manual_match, unlink,
     };
     use crate::db::rich_metadata::DrmState;
+    use crate::models::LOCAL_APP_ID_BASE;
     use crate::stores::test_support::{insert_steam_game, migrated_database};
     use crate::stores::{
         DiscoveredGame, ExternalStore, ScanSource, ScanStatus, StoreOrigin, StoreScan,
     };
+    use rusqlite::params;
 
     fn game(external_id: &str, title: &str, installed: bool) -> DiscoveredGame {
         DiscoveredGame {
@@ -1360,6 +1488,118 @@ mod tests {
         let error = set_manual_match(&connection, ExternalStore::Gog, "1207658924", Some(999_999))
             .expect_err("rechazar un AppID inexistente");
         assert_eq!(error.code, "not_found");
+    }
+
+    #[test]
+    fn un_juego_de_otra_tienda_entra_en_la_biblioteca_y_se_puede_organizar() {
+        let (_directory, mut connection) = migrated_database();
+        // Uno que Steam no tiene y otro que sí: el primero es un juego nuevo
+        // para la biblioteca, el segundo es el mismo juego comprado dos veces.
+        insert_steam_game(&connection, 22370, "Fallout 3");
+        persist_scan(
+            &mut connection,
+            &successful_scan(
+                ExternalStore::Gog,
+                vec![
+                    game("1207658924", "Fallout 3", false),
+                    game("1207658925", "Beneath a Steel Sky", false),
+                ],
+            ),
+        )
+        .expect("escanear");
+
+        fn vinculo(connection: &rusqlite::Connection, external_id: &str) -> i64 {
+            connection
+                .query_row(
+                    "SELECT local_app_id FROM external_games WHERE store = 'gog' AND external_id = ?1",
+                    params![external_id],
+                    |row| row.get(0),
+                )
+                .expect("leer el vínculo")
+        }
+
+        // El que ya estaba en Steam apunta a esa fila: un juego, no dos.
+        assert_eq!(vinculo(&connection, "1207658924"), 22370);
+        // El que no estaba recibe identificador propio y entra como juego suyo.
+        let nuevo = vinculo(&connection, "1207658925");
+        assert!(nuevo >= i64::from(LOCAL_APP_ID_BASE), "{nuevo}");
+
+        let (titulo, tienda, propiedad): (String, String, String) = connection
+            .query_row(
+                "SELECT title, external_store, ownership_source FROM games WHERE app_id = ?1",
+                params![nuevo],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("el juego está en la biblioteca");
+        assert_eq!(titulo, "Beneath a Steel Sky");
+        assert_eq!(tienda, "gog");
+        assert_eq!(propiedad, "owned", "un juego comprado es tuyo");
+
+        // Y con ficha personal, que es lo que permite clasificarlo, arrastrarlo
+        // y planificarlo. Sin ella la biblioteca ni siquiera lo devolvería.
+        let estado: String = connection
+            .query_row(
+                "SELECT status_id FROM game_personal WHERE app_id = ?1",
+                params![nuevo],
+                |row| row.get(0),
+            )
+            .expect("tiene ficha personal");
+        assert_eq!(estado, "unclassified");
+
+        // Un juego prestado en Steam que además consta comprado en otra tienda
+        // deja de esconderse: la compra manda sobre el préstamo.
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source, family_availability)
+                 VALUES (900001, 'Prestado y comprado', 'family_shared', 'unknown')",
+                [],
+            )
+            .expect("insertar prestado");
+        connection
+            .execute(
+                "INSERT INTO game_personal(app_id, status_id) VALUES (900001, 'unclassified')",
+                [],
+            )
+            .expect("ficha del prestado");
+        persist_scan(
+            &mut connection,
+            &successful_scan(
+                ExternalStore::Epic,
+                vec![game("epic-1", "Prestado y comprado", false)],
+            ),
+        )
+        .expect("escanear Epic");
+        let (propiedad, disponibilidad): (String, String) = connection
+            .query_row(
+                "SELECT ownership_source, family_availability FROM games WHERE app_id = 900001",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("leer el prestado");
+        assert_eq!(propiedad, "owned", "comprarlo en otra tienda es tenerlo");
+        assert_eq!(disponibilidad, "not_applicable");
+
+        // Reescanear no duplica ni reasigna: el identificador es estable.
+        persist_scan(
+            &mut connection,
+            &successful_scan(
+                ExternalStore::Gog,
+                vec![
+                    game("1207658924", "Fallout 3", false),
+                    game("1207658925", "Beneath a Steel Sky", false),
+                ],
+            ),
+        )
+        .expect("reescanear");
+        assert_eq!(vinculo(&connection, "1207658925"), nuevo);
+        let total: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM games WHERE external_store IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar");
+        assert_eq!(total, 1, "reescanear no crea un juego nuevo");
     }
 
     #[test]

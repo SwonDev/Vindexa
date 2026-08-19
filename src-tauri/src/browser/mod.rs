@@ -51,6 +51,20 @@ mod tests {
     }
 
     #[test]
+    fn la_verificacion_humana_pasa_las_dos_fronteras() {
+        // Dejar entrar el marco del captcha y bloquear después sus recursos
+        // daría el mismo resultado que no dejarlo entrar: el captcha no
+        // arranca. Las dos listas tienen que decir lo mismo.
+        for rule in stores::HUMAN_VERIFICATION_HOSTS {
+            assert!(
+                blocker::is_allowed_asset_host(rule.domain()),
+                "{} sirve la verificación humana y el bloqueador debe permitirlo",
+                rule.domain()
+            );
+        }
+    }
+
+    #[test]
     fn no_blocked_domain_can_ever_serve_a_store_document() {
         for blocked in blocker::BLOCKED_DOMAINS {
             let candidate = Url::parse(&format!("https://{}/", blocked.domain))

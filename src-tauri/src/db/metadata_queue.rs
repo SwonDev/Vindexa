@@ -46,6 +46,11 @@ pub fn enqueue(
                     g.ownership_source = 'family_shared'
                     AND g.family_availability <> 'confirmed'
               )
+                -- Un juego de Epic, GOG o itch.io no existe en Steam: pedir su
+                -- ficha allí devolvería vacío y lo dejaría marcado como «sin
+                -- datos» para reintentarlo cada semana. Sus datos vienen de su
+                -- propia tienda.
+                AND g.external_store IS NULL
                 AND (
                     g.metadata_fetched_at IS NULL
                     OR (g.metadata_status = 'success'
@@ -107,6 +112,7 @@ fn enqueue_one(connection: &Connection, app_id: u32, priority: u8) -> AppResult<
          SELECT g.app_id, ?2
            FROM games g
           WHERE g.app_id = ?1
+            AND g.external_store IS NULL
             AND NOT (
                 g.ownership_source = 'family_shared'
                 AND g.family_availability <> 'confirmed'

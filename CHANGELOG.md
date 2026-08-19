@@ -6,6 +6,83 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+## [0.1.3] · 2026-08-19
+
+### Añadido
+
+- **Los juegos de Epic, GOG e itch.io entran en la biblioteca y se organizan como los demás.**
+  Vivían en una tabla de catálogo sin ficha personal, así que no había dónde guardarles un
+  estado, una colección, una prioridad ni una nota: se miraban y nada más, sin arrastre ni
+  planificador. Ahora tienen su sitio en la biblioteca, con el mismo listado, los mismos filtros
+  y la misma ficha. Es el mismo camino que recorrió el préstamo familiar en la 0.1.1.
+  - Entran como **propios**, porque lo son: se compraron. Cuentan en «Todos los juegos».
+  - Un juego que tienes en dos tiendas **no se duplica**: apunta a la fila que ya existía y
+    aparece igualmente al mirar cualquiera de las dos.
+  - Como `games` se indexa por AppID de Steam y estos juegos no tienen ninguno, se les asigna uno
+    local a partir de 2.000.000.000. Ese número marca además una frontera: por encima de él, el
+    juego no existe para Steam, y ninguna consulta a su API lo lleva.
+- **Su arte también se guarda en local.** La caché sólo aceptaba imágenes de Steam, así que las
+  carátulas de las demás tiendas se volvían a descargar en cada arranque. Ahora se guardan como
+  las de Steam y se pintan sin esperar.
+
+### Corregido
+
+- **Ni Epic ni itch.io aparecían en la barra lateral por muchos juegos que trajeran.** Sus
+  ámbitos salen de los recuentos del arranque, y sincronizar una tienda no los invalidaba: había
+  que cerrar y volver a abrir la aplicación, y mientras tanto parecía que la sincronización no
+  había servido de nada. GOG sí aparecía sólo porque se había sincronizado antes de abrirla.
+- **Las carátulas de las tiendas que no son Steam no cargaban.** La política de contenido de la
+  ventana permitía imágenes de los dominios de Steam y de ninguno más, así que sólo se veía la de
+  los juegos emparejados con Steam. Se añaden los dominios de GOG, Epic e itch.io, medidos sobre
+  una biblioteca real.
+- **Las pruebas pedían la contraseña del llavero.** Alguna abría el llavero de verdad, y como el
+  binario de pruebas cambia de firma en cada compilación, macOS lo trata como un programa nuevo y
+  vuelve a preguntar: «Permitir siempre» no servía de nada. Además hacía que el resultado
+  dependiera de qué secretos tuviera esa máquina. Ahora todo el acceso pasa por un único módulo
+  que, al compilar para pruebas, guarda en memoria.
+
+- **El banner de todas las fichas se veía gris azulado.** Steam publica dos imágenes anchas por
+  juego: `library_hero`, que es la ilustración a color, y el fondo de la página de la tienda, que
+  viene ya oscurecido y difuminado porque está pensado para escribir encima. La caché de arte
+  ordena sus candidatas de mejor a peor, pero para decidir el puesto de la que pedía la interfaz
+  miraba el nombre del archivo, y el fondo de la tienda no se pide por nombre sino por ruta
+  (`/images/storepagebackground/app/1337760`). Al no reconocerlo, lo colocaba en el primer puesto
+  —«esto es lo mejor que hay»— y **ninguna** ficha llegaba a intentar `library_hero`, aunque
+  existiera y respondiera. Ahora esa ruta se traduce a su peldaño real, el más bajo de los tres.
+  La prueba que cubría esta escalera pedía las candidatas sin fuente elegida, que es justo el
+  único camino que la aplicación no recorre; la nueva usa el que sí.
+- **Una base de datos vacía borraba toda la caché de arte.** El mantenimiento elimina la carpeta
+  de cada juego que no encuentra en la base, y una base sin juegos no significa «ninguno vale»
+  sino «todavía no sé nada»: el primer arranque, una restauración a medias o una cuarentena
+  reciente pasan por ese estado con toda normalidad. Ocurrió: tras una cuarentena, la aplicación
+  arrancó en vacío y el barrido se llevó cientos de megas de arte ya descargado. Ahora una base
+  sin juegos no borra nada; si de verdad sobra algo, el barrido siguiente lo encontrará igual.
+
+- **La importación de itch.io no llegaba a guardar ni un juego.** Cuando se agotan las claves de
+  descarga, itch.io no devuelve una lista vacía sino una tabla vacía —su servidor corre sobre
+  Lua, donde una tabla sin contenido no distingue entre lista y diccionario—, y esa última
+  página rompía el análisis. La importación se caía **después** de haber leído bien todas las
+  anteriores, así que el resultado era siempre el mismo: «itch.io respondió con un formato que
+  Vindexa no reconoce» y cero juegos, por muchas veces que se reintentara. Ahora las dos formas
+  se leen igual, y `null` tampoco es un fallo.
+- **El inicio de sesión de Epic y de GOG se quedaba girando para siempre.** Los dos incrustan su
+  verificación humana en un marco de un tercero —hCaptcha en Epic, reCAPTCHA en GOG—, y el motor
+  web entrega también las navegaciones de los marcos a la política de la ventana, que sólo
+  conocía los dominios de la tienda. El captcha se cancelaba antes de arrancar y la comprobación
+  del correo no volvía nunca. Esos dos proveedores tienen ahora un permiso propio y acotado:
+  cargan el marco pero no se convierten en la página de la ventana, así que ni aparecen en la
+  barra de direcciones ni entran en el historial.
+- **Un marco sin dirección se tomaba por un destino prohibido.** El captcha crea varios marcos
+  vacíos, a veces con un fragmento detrás, y sólo se aceptaba la cadena `about:blank` exacta.
+  Las páginas internas del motor (`about:config` y demás) siguen cerradas.
+
+### Cambiado
+
+- **Los avisos de bloqueo del navegador integrado dicen qué se bloqueó.** Un rechazo por esquema
+  ya nombra el esquema, como el de destino ya nombraba el anfitrión. Nunca la dirección
+  completa: la de un `data:` lleva el documento dentro y la de un retorno de sesión lleva el
+  código de autorización.
+
 ## [0.1.2] · 2026-08-18
 
 ### Corregido

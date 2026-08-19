@@ -57,6 +57,15 @@ const DEFINITIVE_NEGATIVE_TTL: Duration = Duration::from_secs(15 * 60);
 const MAX_CONCURRENT_DOWNLOADS: usize = 6;
 const MAX_CANDIDATES: usize = 10;
 
+/// Peldaño al que corresponde el fondo de la página de la tienda.
+///
+/// Steam sirve el mismo bitmap por dos rutas: como archivo de biblioteca
+/// (`…/apps/{id}/page_bg_raw.jpg`) y por la ruta de la tienda
+/// (`/images/storepagebackground/app/{id}`). Es la misma imagen y ocupa el
+/// mismo puesto en la escalera del banner: el más bajo de los tres anchos,
+/// porque Steam la publica ya oscurecida y difuminada para escribir encima.
+const PAGE_BACKGROUND_FILE: &str = "page_bg_raw.jpg";
+
 // --- Persistencia -----------------------------------------------------------
 
 /// Steam sirve el arte con `cache-control: max-age=315360000`. Revalidar cada
@@ -1472,11 +1481,46 @@ fn is_allowed_library_host(host: &str) -> bool {
     )
 }
 
+/// Dominios desde los que las demás tiendas sirven su arte.
+///
+/// Medidos sobre una biblioteca real el 2026-08-19: GOG entrega sus carátulas
+/// desde `images.gog.com`, Epic desde `cdn1.epicgames.com` e itch.io desde
+/// `img.itch.zone`. Se admiten sus subdominios porque el reparto entre CDNs es
+/// cosa de cada tienda y cambia sin avisar; lo que no cambia es el dominio.
+const EXTERNAL_STORE_ART_DOMAINS: &[&str] = &[
+    "gog.com",
+    "epicgames.com",
+    "unrealengine.com",
+    "itch.zone",
+    "itch.io",
+];
+
+/// ¿Sirve este anfitrión el arte de alguna de las tiendas soportadas?
+///
+/// Exige el punto separador, así que `epicgames.com.atacante.tld` no cuela.
+fn is_external_store_art_host(host: &str) -> bool {
+    EXTERNAL_STORE_ART_DOMAINS
+        .iter()
+        .any(|domain| match host.strip_suffix(domain) {
+            None => false,
+            Some("") => true,
+            Some(prefix) => prefix.len() > 1 && prefix.ends_with('.'),
+        })
+}
+
 /// Último segmento de la ruta de una URL de arte. Sirve igual para las rutas
 /// planas (`/apps/570/header.jpg`) que para las que la API de tienda devuelve
 /// con hash (`/apps/570/<sha1>/header.jpg`).
 fn asset_file_name(source: &str) -> Option<String> {
     let url = Url::parse(source).ok()?;
+    // El fondo de la página de la tienda no se pide por nombre de archivo sino
+    // por ruta —`/images/storepagebackground/app/1337760`—, así que su «nombre»
+    // sería el propio identificador del juego: un nombre que no está en ninguna
+    // escalera. Aquí se le devuelve el que le corresponde, porque es el mismo
+    // bitmap que `page_bg_raw.jpg`.
+    if url.path().starts_with("/images/storepagebackground/app/") {
+        return Some(PAGE_BACKGROUND_FILE.to_owned());
+    }
     let tail = url.path().rsplit('/').next()?;
     (!tail.is_empty()).then(|| tail.to_owned())
 }
@@ -1492,6 +1536,13 @@ fn asset_file_name(source: &str) -> Option<String> {
 /// nombre real vale más que cualquier conjetura por convención. Adelantar la
 /// escalera derivada era precisamente lo que hacía caer la portada de esos
 /// juegos hasta la cabecera apaisada, recortada a proporción de cartel.
+///
+/// La excepción es el fondo de la página de la tienda, que [`asset_file_name`]
+/// traduce a su peldaño real. Sin esa traducción entraba aquí como nombre
+/// desconocido, se quedaba en el primer puesto —«esto es lo mejor que hay»— y
+/// **ningún** banner llegaba a intentar `library_hero`: la ficha de todos los
+/// juegos se pintaba con el fondo que Steam publica ya oscurecido y difuminado
+/// para poner texto encima, y la biblioteca entera se veía gris azulada.
 fn selected_rank(variant: ArtVariant, selected: Option<&str>) -> usize {
     let ladder = variant.ladder();
     let Some(file) = selected.and_then(asset_file_name) else {
@@ -1590,6 +1641,21 @@ fn candidate_sources(
     let selected = selected_source
         .map(str::trim)
         .filter(|value| !value.is_empty());
+
+    // Un juego que no es de Steam no tiene escalera que subir: sus imágenes no
+    // se derivan de un AppID por convención, las publica su tienda con la ruta
+    // que quiera. Derivar aquí produciría URLs de Steam para un identificador
+    // que Steam no conoce, y cada una costaría una petición y un 404.
+    if crate::models::is_local_app_id(app_id) {
+        let mut candidates: Vec<String> = Vec::new();
+        push(&mut candidates, selected);
+        push(&mut candidates, art.cover.as_deref());
+        push(&mut candidates, art.header.as_deref());
+        push(&mut candidates, art.icon.as_deref());
+        candidates.truncate(MAX_CANDIDATES);
+        return Ok(candidates);
+    }
+
     let own_column = match variant.kind {
         ArtKind::Cover => art.cover.as_deref(),
         ArtKind::Header => art.header.as_deref(),
@@ -1715,7 +1781,15 @@ pub(crate) fn validate_source_url(value: &str, app_id: u32) -> AppResult<()> {
     let valid_library_source = is_allowed_library_host(host)
         && url.path().contains(&format!("/apps/{app_id}/"))
         && valid_cache_buster;
-    let valid_source = valid_hero_source || valid_library_source;
+    // El arte de Epic, GOG e itch.io no lleva el identificador en la ruta —cada
+    // tienda numera a su manera— y su cadena de consulta no es un simple
+    // rompecachés: GOG añade `?namespace=gamesdb`. Se comprueba lo que sí puede
+    // comprobarse: que el juego sea de una de esas tiendas y que la imagen
+    // venga de un dominio suyo. Sin esto, su arte no se podía guardar en local
+    // y había que volver a descargarlo en cada arranque.
+    let valid_external_store_source =
+        crate::models::is_local_app_id(app_id) && is_external_store_art_host(host);
+    let valid_source = valid_hero_source || valid_library_source || valid_external_store_source;
     if !valid_source || url.fragment().is_some() {
         return Err(AppError::validation(
             "La imagen no pertenece a un dominio y ruta oficiales permitidos de Steam.",
@@ -2111,6 +2185,21 @@ pub fn maintain(
         return Ok(report);
     }
     let known = known_app_ids(database)?;
+    // Una base sin juegos no dice «ninguna de estas imágenes vale»: dice «aún
+    // no sé nada». Distinguirlo importa porque la biblioteca puede estar vacía
+    // por un instante y con toda normalidad —el primer arranque, una base
+    // recién puesta en cuarentena, una restauración a medias— y la regla de
+    // abajo borra el directorio de cada AppID que no reconoce.
+    //
+    // Pasó de verdad: tras una cuarentena, la aplicación arrancó con la base
+    // vacía, el barrido no reconoció ni un AppID y se llevó por delante todo el
+    // arte guardado. Al repoblarse por red en vez de desde la caché local de
+    // Steam, la biblioteca entera cambió de aspecto. Borrar cientos de megas de
+    // trabajo por una lectura que aún no significa nada no compensa: si de
+    // verdad sobran, el barrido siguiente los encontrará igual.
+    if known.is_empty() {
+        return Ok(report);
+    }
     let now = SystemTime::now();
     let mut survivors: Vec<(PathBuf, SystemTime, u64)> = Vec::new();
 
@@ -2266,14 +2355,14 @@ fn download_error() -> AppError {
 mod tests {
     use super::{
         ArtKind, ArtVariant, Conditional, DEFAULT_MAX_CACHE_BYTES, Density, FetchedAsset,
-        MAX_CONCURRENT_DOWNLOADS, MaintenanceReport, NegativeEntry, allowed_content_type, cache,
-        cache_file_name, candidate_sources, clear_negative, derive_library_asset, download_slots,
-        effective_pixels, ensure_within_root, existing_cache, fast_path_candidates, fetch_asset,
-        fingerprint_from_file_name, has_valid_trailer, image_dimensions, join_art_cache_task,
-        local_library_art, maintain, matches_magic_bytes, negative_cache, negative_cache_hit,
-        record_cached_path, request_lock, retryable_status, revalidation_due, rung_for,
-        selected_rank, set_max_cache_bytes, source_fingerprint, store_asset, trusted_cached_path,
-        valid_image_file, validate_source_url,
+        MAX_CONCURRENT_DOWNLOADS, MaintenanceReport, NegativeEntry, PAGE_BACKGROUND_FILE,
+        allowed_content_type, cache, cache_file_name, candidate_sources, clear_negative,
+        derive_library_asset, download_slots, effective_pixels, ensure_within_root, existing_cache,
+        fast_path_candidates, fetch_asset, fingerprint_from_file_name, has_valid_trailer,
+        image_dimensions, join_art_cache_task, local_library_art, maintain, matches_magic_bytes,
+        negative_cache, negative_cache_hit, record_cached_path, request_lock, retryable_status,
+        revalidation_due, rung_for, selected_rank, set_max_cache_bytes, source_fingerprint,
+        store_asset, trusted_cached_path, valid_image_file, validate_source_url,
     };
     use crate::db::Database;
     use crate::error::AppError;
@@ -2672,6 +2761,30 @@ mod tests {
     }
 
     #[test]
+    fn una_base_vacia_no_se_lleva_por_delante_el_arte_guardado() {
+        // Reproduce lo que ocurrió tras una cuarentena: la aplicación arranca
+        // con la base vacía y el barrido no reconoce ni un AppID. Antes de esta
+        // guarda, esa lectura —que sólo significa «aún no sé nada»— borraba
+        // cientos de megas de arte y la biblioteca entera cambiaba de aspecto.
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = temp_database(&directory);
+        let cache_root = directory.path().join("cache");
+        let guardado = cache_root.join("steam-art").join("620");
+        fs::create_dir_all(&guardado).expect("crear dir");
+        let portada = guardado.join("cover-0000000000000009.jpg");
+        fs::write(&portada, jpeg(600, 900)).expect("escribir portada");
+
+        let report = maintain(&database, &cache_root, &[]).expect("mantener");
+
+        assert!(
+            portada.exists(),
+            "el arte tiene que sobrevivir a una base que todavía no dice nada"
+        );
+        assert_eq!(report.removed_directories, 0);
+        assert_eq!(report.removed_files, 0);
+    }
+
+    #[test]
     fn broken_rows_are_pruned_and_orphan_directories_removed() {
         let directory = TempDir::new().expect("crear directorio temporal");
         let database = temp_database(&directory);
@@ -3007,6 +3120,60 @@ mod tests {
         assert!(pixels(HERO, "library_hero.jpg") > pixels(HERO, "page_bg_raw.jpg"));
         assert!(pixels(HERO, "page_bg_raw.jpg") > pixels(HERO, "capsule_616x353.jpg"));
         assert!(pixels(HERO, "capsule_616x353.jpg") > pixels(HERO, "header.jpg"));
+    }
+
+    #[test]
+    fn el_fondo_de_la_tienda_no_se_confunde_con_el_mejor_banner() {
+        // Lo que la ficha pide de verdad: la columna `hero_url`, que appdetails
+        // rellena con el fondo de la página de la tienda. La prueba de al lado
+        // pasa `None` y por eso nunca vio este camino, que es el único que se
+        // recorre en la aplicación.
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = temp_database(&directory);
+        let fondo =
+            "https://store.akamai.steamstatic.com/images/storepagebackground/app/1337760?t=1";
+        database
+            .open()
+            .expect("abrir base")
+            .execute(
+                "INSERT INTO games(app_id, title, header_url, hero_url)
+                 VALUES (1337760, 'Potion Permit', 'https://shared.steamstatic.com/store_item_assets/steam/apps/1337760/header.jpg', ?1)",
+                [fondo],
+            )
+            .expect("insertar juego");
+
+        // Su puesto es el del bitmap que es, no el primero de la escalera.
+        assert_eq!(
+            selected_rank(HERO, Some(fondo)),
+            HERO.ladder()
+                .iter()
+                .position(|rung| rung.file == PAGE_BACKGROUND_FILE)
+                .expect("el fondo tiene su peldaño"),
+        );
+
+        let candidates = candidate_sources(&database, 1_337_760, HERO, Some(fondo))
+            .expect("listar candidatas de hero");
+        let position = |needle: &str| {
+            candidates
+                .iter()
+                .position(|url| url.ends_with(needle))
+                .unwrap_or_else(|| panic!("falta {needle} en {candidates:?}"))
+        };
+        // Las dos versiones a color se intentan antes que el fondo oscurecido.
+        // Sin esto, la ficha de todos los juegos se pintaba con el fondo gris
+        // aunque `library_hero.jpg` existiera y respondiera 200.
+        assert!(
+            candidates[0].ends_with("/apps/1337760/library_hero_2x.jpg"),
+            "{candidates:?}"
+        );
+        assert!(position("library_hero_2x.jpg") < position("library_hero.jpg"));
+        assert!(
+            position("library_hero.jpg")
+                < candidates
+                    .iter()
+                    .position(|url| url == fondo)
+                    .expect("el fondo sigue estando, como último recurso")
+        );
     }
 
     #[test]

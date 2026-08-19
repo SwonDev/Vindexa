@@ -34,6 +34,8 @@ import type {
 import "./stores-panel.css";
 
 const DETECTION_KEY = ["external-stores", "detection"] as const;
+/** Recuentos del arranque: de aquí salen los ámbitos de la barra lateral. */
+const BOOTSTRAP_KEY = ["bootstrap"] as const;
 const ACCOUNTS_KEY = ["external-stores", "accounts"] as const;
 const GAMES_KEY = ["external-stores", "games"] as const;
 
@@ -256,6 +258,11 @@ export function StoresPanel() {
       queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
       queryClient.invalidateQueries({ queryKey: SESSIONS_KEY }),
       queryClient.invalidateQueries({ queryKey: GAMES_KEY }),
+      // El ámbito de cada tienda en la barra lateral sale de los recuentos del
+      // arranque. Sin invalidarlos, sincronizar una tienda no la hacía
+      // aparecer: había que cerrar y volver a abrir la aplicación, y mientras
+      // tanto parecía que la sincronización no había traído nada.
+      queryClient.invalidateQueries({ queryKey: BOOTSTRAP_KEY }),
     ]);
   };
 
@@ -1097,6 +1104,10 @@ function ItchPanel() {
     void queryClient.invalidateQueries({ queryKey: ITCH_SESSION_KEY });
     void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
     void queryClient.invalidateQueries({ queryKey: GAMES_KEY });
+    // Igual que en el panel de Epic y GOG: sin esto, itch.io no aparece en la
+    // barra lateral hasta reiniciar, por mucho que la importación diga que ha
+    // traído juegos.
+    void queryClient.invalidateQueries({ queryKey: BOOTSTRAP_KEY });
   };
 
   const connect = useMutation({

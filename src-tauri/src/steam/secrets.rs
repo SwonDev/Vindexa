@@ -9,22 +9,18 @@ const API_KEY_ACCOUNT: &str = "steam-web-api-key";
 /// testigo lo reparte la sesión y caduca. Revocar una no puede tirar la otra.
 const SESSION_TOKEN_ACCOUNT: &str = "steam-session-token";
 
-fn entry() -> AppResult<keyring::Entry> {
-    keyring::Entry::new(SERVICE, API_KEY_ACCOUNT).map_err(keyring_error)
-}
-
-fn session_entry() -> AppResult<keyring::Entry> {
-    keyring::Entry::new(SERVICE, SESSION_TOKEN_ACCOUNT).map_err(keyring_error)
-}
+// Todo pasa por `crate::keychain`, que en las pruebas guarda en memoria: una
+// prueba no puede pedirle la contraseña del llavero a quien esté delante.
+use crate::keychain;
 
 pub fn save_api_key(value: &str) -> AppResult<()> {
     let value = value.trim();
     validate_api_key(value)?;
-    entry()?.set_password(value).map_err(keyring_error)
+    keychain::set(SERVICE, API_KEY_ACCOUNT, value).map_err(keyring_error)
 }
 
 pub fn load_api_key() -> AppResult<Option<String>> {
-    match entry()?.get_password() {
+    match keychain::get(SERVICE, API_KEY_ACCOUNT) {
         Ok(value) => {
             validate_api_key(&value)?;
             Ok(Some(value))
@@ -39,7 +35,7 @@ pub fn has_api_key() -> AppResult<bool> {
 }
 
 pub fn delete_api_key() -> AppResult<()> {
-    match entry()?.delete_credential() {
+    match keychain::delete(SERVICE, API_KEY_ACCOUNT) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(keyring_error(error)),
     }
@@ -49,7 +45,7 @@ pub fn delete_api_key() -> AppResult<()> {
 pub fn save_session_token(value: &str) -> AppResult<()> {
     let value = value.trim();
     crate::steam::family_session::validate_token(value)?;
-    session_entry()?.set_password(value).map_err(keyring_error)
+    keychain::set(SERVICE, SESSION_TOKEN_ACCOUNT, value).map_err(keyring_error)
 }
 
 /// Recupera el testigo guardado, si lo hay.
@@ -58,7 +54,7 @@ pub fn save_session_token(value: &str) -> AppResult<()> {
 /// error: lo que hay que hacer es volver a iniciar sesión, y una entrada
 /// corrupta no puede dejar la función bloqueada para siempre.
 pub fn load_session_token() -> AppResult<Option<String>> {
-    match session_entry()?.get_password() {
+    match keychain::get(SERVICE, SESSION_TOKEN_ACCOUNT) {
         Ok(value) => Ok(crate::steam::family_session::validate_token(&value)
             .is_ok()
             .then_some(value)),
@@ -77,7 +73,7 @@ pub fn has_session_token() -> AppResult<bool> {
 }
 
 pub fn delete_session_token() -> AppResult<()> {
-    match session_entry()?.delete_credential() {
+    match keychain::delete(SERVICE, SESSION_TOKEN_ACCOUNT) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(keyring_error(error)),
     }

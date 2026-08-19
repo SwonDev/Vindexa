@@ -153,6 +153,53 @@ const EPIC_HOSTS: &[HostRule] = &[HostRule::WithSubdomains("epicgames.com")];
 // una lista exacta es inviable. La regla exige el punto separador.
 const ITCH_HOSTS: &[HostRule] = &[HostRule::WithSubdomains("itch.io")];
 
+/// Proveedores de verificación humana que las tiendas incrustan en su inicio de
+/// sesión.
+///
+/// # Por qué existe esta lista aparte
+///
+/// El motor web entrega **todas** las navegaciones al mismo manejador, también
+/// las de los marcos incrustados: no distingue el documento de la ventana de un
+/// `iframe` dentro de él. El captcha del inicio de sesión vive en uno de esos
+/// marcos, así que pasaba por la lista de la tienda, no coincidía con ella y se
+/// cancelaba. Desde fuera parecía otra cosa: el botón de entrar se quedaba
+/// girando para siempre y la consola decía que el navegador estaba bloqueando
+/// el captcha.
+///
+/// Medido el 2026-08-19 abriendo cada inicio de sesión y anotando los marcos:
+///
+/// | Tienda | Marco que incrusta |
+/// |---|---|
+/// | Epic | `newassets.hcaptcha.com/captcha/v1/…/hcaptcha.html` |
+/// | GOG | `www.recaptcha.net/recaptcha/api2/anchor` y `…/bframe` |
+/// | Steam | ninguno: su verificación es propia |
+/// | itch.io | ninguno |
+///
+/// `gstatic.com` no está aquí a propósito: reCAPTCHA lo usa para descargar sus
+/// guiones e imágenes, y eso es un subrecurso, no una navegación. Quien decide
+/// sobre los subrecursos es el bloqueador de contenido, que ya lo permite.
+///
+/// # Qué superficie abre
+///
+/// Sólo estos dominios, sólo por HTTPS y sólo como destino de navegación, nunca
+/// como página de la ventana: [`crate::browser::policy::evaluate`] los resuelve
+/// con un veredicto propio que deja cargar el marco sin cambiar la dirección
+/// que se enseña en la barra.
+pub const HUMAN_VERIFICATION_HOSTS: &[HostRule] = &[
+    HostRule::WithSubdomains("hcaptcha.com"),
+    HostRule::WithSubdomains("recaptcha.net"),
+];
+
+/// ¿Es esta URL un proveedor de verificación humana?
+pub fn is_human_verification(url: &Url) -> bool {
+    let Some(host) = normalized_host(url) else {
+        return false;
+    };
+    HUMAN_VERIFICATION_HOSTS
+        .iter()
+        .any(|rule| rule.matches(&host))
+}
+
 /// Catálogo cerrado de tiendas. Añadir una entrada es la única forma de ampliar
 /// la superficie remota del navegador integrado.
 pub const STORES: &[StoreProfile] = &[

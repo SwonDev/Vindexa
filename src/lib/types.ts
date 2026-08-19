@@ -370,6 +370,13 @@ export interface GameListRequest {
   earlyAccess?: boolean;
   isFree?: boolean;
   ownershipSource?: "owned" | "family_shared" | "local";
+  /**
+   * Ámbito de una tienda que no es Steam. Devuelve todo lo que esa tienda te ha
+   * vendido, incluido lo que además tienes en Steam: tener un juego en dos
+   * sitios no lo convierte en dos juegos, pero tiene que salir al mirar
+   * cualquiera de los dos.
+   */
+  externalStore?: ExternalStoreId;
   neverPlayed?: boolean;
   minPlaytimeMinutes?: number;
   maxPlaytimeMinutes?: number;

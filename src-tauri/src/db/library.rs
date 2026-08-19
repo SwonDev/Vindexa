@@ -101,8 +101,26 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
     // JOIN` que no aporta nada al resto de las cifras.
     let mut external_store_games = std::collections::BTreeMap::new();
     {
-        let mut statement =
-            connection.prepare("SELECT store, COUNT(*) FROM external_games GROUP BY store")?;
+        // La cifra sale de la misma consulta que el listado al que lleva, con
+        // sus mismas exclusiones. Contarlo por su cuenta ya falló dos veces: la
+        // primera enseñaba juegos que la lista no traía, y la segunda contaba
+        // los archivados —«Epic Games 553» abriendo una pantalla de 395—.
+        //
+        // `DISTINCT` porque una misma obra puede estar listada dos veces en la
+        // tienda —edición base y especial— y apuntar al mismo juego; el listado
+        // devuelve juegos, no filas de catálogo.
+        let mut statement = connection.prepare(
+            "SELECT e.store, COUNT(DISTINCT g.app_id)
+               FROM games g
+               JOIN game_personal p ON p.app_id = g.app_id
+               JOIN external_games e ON e.local_app_id = g.app_id
+              WHERE NOT (
+                    g.ownership_source = 'family_shared'
+                    AND g.family_availability <> 'confirmed'
+              )
+                AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)
+              GROUP BY e.store",
+        )?;
         let mut rows = statement.query([])?;
         while let Some(row) = rows.next()? {
             external_store_games.insert(row.get::<_, String>(0)?, row.get::<_, i64>(1)?);
@@ -434,6 +452,22 @@ pub fn list_games(
         }
         clauses.push("g.ownership_source = ?".to_string());
         values.push(Box::new(ownership_source.to_string()));
+    }
+    if let Some(external_store) = request.external_store.as_deref() {
+        if !matches!(external_store, "epic" | "gog" | "itch") {
+            return Err(AppError::validation(
+                "Esa tienda no está entre las que Vindexa reconoce.",
+            ));
+        }
+        // Se pregunta por el vínculo, no por la columna: un juego que además
+        // está en Steam tiene su fila marcada como de Steam, y aun así lo
+        // vendió esta tienda y aquí tiene que salir.
+        clauses.push(
+            "EXISTS (SELECT 1 FROM external_games e
+                      WHERE e.local_app_id = g.app_id AND e.store = ?)"
+                .to_string(),
+        );
+        values.push(Box::new(external_store.to_string()));
     }
     if let Some(never_played) = request.never_played {
         clauses.push(if never_played {

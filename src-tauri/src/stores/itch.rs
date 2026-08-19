@@ -131,18 +131,16 @@ pub mod secrets {
     const SERVICE: &str = "io.vindexa.desktop";
     const API_KEY_ACCOUNT: &str = "itch-api-key";
 
-    fn entry() -> AppResult<keyring::Entry> {
-        keyring::Entry::new(SERVICE, API_KEY_ACCOUNT).map_err(keyring_error)
-    }
+    use crate::keychain;
 
     pub fn save_api_key(value: &str) -> AppResult<()> {
         let value = value.trim();
         validate_api_key(value)?;
-        entry()?.set_password(value).map_err(keyring_error)
+        keychain::set(SERVICE, API_KEY_ACCOUNT, value).map_err(keyring_error)
     }
 
     pub fn load_api_key() -> AppResult<Option<String>> {
-        match entry()?.get_password() {
+        match keychain::get(SERVICE, API_KEY_ACCOUNT) {
             Ok(value) => {
                 validate_api_key(&value)?;
                 Ok(Some(value))
@@ -157,7 +155,7 @@ pub mod secrets {
     }
 
     pub fn delete_api_key() -> AppResult<()> {
-        match entry()?.delete_credential() {
+        match keychain::delete(SERVICE, API_KEY_ACCOUNT) {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(error) => Err(keyring_error(error)),
         }
@@ -268,8 +266,78 @@ struct WireUser {
 /// lee tal cual llega.
 #[derive(Debug, Deserialize)]
 struct WireOwnedKeysPage {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lista_o_tabla_vacia")]
     owned_keys: Vec<WireOwnedKey>,
+}
+
+/// Lee `owned_keys` acepte itch.io la forma que acepte.
+///
+/// Cuando quedan claves, el campo llega como lista. Cuando no queda ninguna
+/// llega como **objeto vacío**:
+///
+/// ```text
+/// {"owned_keys":{},"page":2,"per_page":50}
+/// ```
+///
+/// No es un capricho del servidor: itch.io corre sobre Lua, donde una tabla
+/// vacía no distingue entre lista y diccionario, y al serializarla sale `{}`.
+/// Comprobado contra la API el 2026-08-19 con una cuenta real: la primera
+/// página devolvió sus claves en una lista y la segunda —la que cierra el
+/// recorrido— devolvió esa tabla vacía.
+///
+/// Antes de esto, la página final rompía el análisis y **la importación entera
+/// se caía después de haber leído bien todas las anteriores**, así que no
+/// llegaba a guardarse ni un juego.
+fn lista_o_tabla_vacia<'de, D>(deserializer: D) -> Result<Vec<WireOwnedKey>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitante;
+
+    impl<'de> serde::de::Visitor<'de> for Visitante {
+        type Value = Vec<WireOwnedKey>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("una lista de claves de descarga, o una tabla")
+        }
+
+        fn visit_seq<A>(self, mut acceso: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut claves = Vec::with_capacity(acceso.size_hint().unwrap_or_default());
+            while let Some(clave) = acceso.next_element()? {
+                claves.push(clave);
+            }
+            Ok(claves)
+        }
+
+        /// Una tabla de Lua con contenido llega indexada por su posición
+        /// (`{"1": …, "2": …}`). El índice no aporta nada que no esté ya en la
+        /// clave, así que se descarta y se conserva la entrada.
+        fn visit_map<A>(self, mut acceso: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::MapAccess<'de>,
+        {
+            let mut claves = Vec::new();
+            while let Some((_, clave)) =
+                acceso.next_entry::<serde::de::IgnoredAny, WireOwnedKey>()?
+            {
+                claves.push(clave);
+            }
+            Ok(claves)
+        }
+
+        /// `null` es «no hay claves», no un fallo de formato.
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(Vec::new())
+        }
+    }
+
+    deserializer.deserialize_any(Visitante)
 }
 
 #[derive(Debug, Deserialize)]
@@ -943,6 +1011,9 @@ fn persist_in_transaction(
         }
     }
 
+    // Lo importado entra en la biblioteca como los juegos de Epic y de GOG: con
+    // su ficha personal, para poder clasificarse, arrastrarse y planificarse.
+    crate::stores::db::link_into_library(transaction)?;
     upsert_account(transaction, Some(&fetch.profile), "success", None)?;
 
     let matched: i64 = transaction.query_row(
@@ -973,7 +1044,11 @@ fn persist_in_transaction(
 /// privada. Cuando el trabajo en paralelo sobre ese módulo termine, conviene
 /// exponerla y llamarla desde aquí.
 fn steam_index(connection: &Connection) -> AppResult<SteamTitleIndex> {
-    let mut statement = connection.prepare("SELECT app_id, title FROM games")?;
+    // Mismo filtro que en `stores::db`: los juegos de otras tiendas viven ya en
+    // `games`, y sin acotar aquí uno de itch.io podría emparejarse consigo
+    // mismo o con su copia de Epic.
+    let mut statement =
+        connection.prepare("SELECT app_id, title FROM games WHERE external_store IS NULL")?;
     let candidates = statement
         .query_map([], |row| {
             Ok(MatchCandidate {
@@ -1171,52 +1246,14 @@ mod tests {
     /// **todavía no** permite la migración 025 en producción. Estas pruebas
     /// documentan el esquema que la importación necesita; mientras no se amplíe
     /// ese `CHECK`, la escritura real fallará aunque el código sea correcto.
-    fn schema(connection: &Connection) {
-        connection
-            .execute_batch(
-                "CREATE TABLE games (
-                    app_id INTEGER PRIMARY KEY,
-                    title TEXT NOT NULL
-                 );
-                 CREATE TABLE external_store_accounts (
-                    store TEXT PRIMARY KEY CHECK (store IN ('epic', 'gog', 'itch')),
-                    display_name TEXT,
-                    detected_root TEXT,
-                    linked INTEGER NOT NULL DEFAULT 0 CHECK (linked IN (0, 1)),
-                    last_scan_at TEXT,
-                    last_scan_status TEXT,
-                    last_scan_error_code TEXT,
-                    last_scan_error_message TEXT,
-                    game_count INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                 );
-                 CREATE TABLE external_games (
-                    store TEXT NOT NULL CHECK (store IN ('epic', 'gog', 'itch')),
-                    external_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    cover_url TEXT,
-                    header_url TEXT,
-                    install_path TEXT,
-                    installed INTEGER NOT NULL DEFAULT 0,
-                    size_on_disk INTEGER,
-                    launch_target TEXT,
-                    drm_state TEXT NOT NULL DEFAULT 'unknown',
-                    matched_app_id INTEGER REFERENCES games(app_id) ON DELETE SET NULL,
-                    match_confidence REAL NOT NULL DEFAULT 0,
-                    match_source TEXT NOT NULL DEFAULT 'automatic',
-                    discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (store, external_id)
-                 );",
-            )
-            .expect("crear esquema de prueba");
-    }
-
-    fn connection() -> Connection {
-        let connection = Connection::open_in_memory().expect("abrir base en memoria");
-        schema(&connection);
-        connection
+    /// El esquema real, aplicando las migraciones.
+    ///
+    /// Antes esta prueba llevaba su propia copia del esquema escrita a mano, y
+    /// cada migración que tocara `games` o `external_games` la dejaba obsoleta
+    /// sin que nadie se enterara hasta que fallaba por «error de base de datos»,
+    /// que no dice nada. Un esquema copiado es un esquema que se desincroniza.
+    fn connection() -> (tempfile::TempDir, Connection) {
+        crate::stores::test_support::migrated_database()
     }
 
     fn profile() -> ItchAccountProfile {
@@ -1270,6 +1307,33 @@ mod tests {
         assert_eq!(error.code, "itch_response");
 
         let error = parse_owned_keys(b"<html>mantenimiento</html>").expect_err("debe fallar");
+        assert_eq!(error.code, "itch_response");
+    }
+
+    #[test]
+    fn la_pagina_que_cierra_el_recorrido_llega_como_tabla_vacia() {
+        // Cuerpo copiado tal cual de la API el 2026-08-19: al agotarse las
+        // claves, itch.io serializa `owned_keys` como objeto, no como lista.
+        // Interpretarlo como fallo tiraba la importación entera en su último
+        // paso, con todas las páginas anteriores ya leídas.
+        let keys = parse_owned_keys(br#"{"owned_keys":{},"page":2,"per_page":50}"#)
+            .expect("una tabla vacía es una página sin claves");
+        assert!(keys.is_empty());
+
+        // `null` tampoco es un fallo de formato.
+        let keys = parse_owned_keys(br#"{"owned_keys":null,"page":2}"#).expect("nulo es vacío");
+        assert!(keys.is_empty());
+
+        // Una tabla con contenido llega indexada por posición; las claves
+        // siguen siendo claves.
+        let keys = parse_owned_keys(
+            br#"{"owned_keys":{"1":{"game":{"id":7,"title":"Uno","classification":"game"}}}}"#,
+        )
+        .expect("tabla indexada");
+        assert_eq!(keys.len(), 1);
+
+        // Y lo que no es ni lista ni tabla sigue siendo un formato inesperado.
+        let error = parse_owned_keys(br#"{"owned_keys":"nada"}"#).expect_err("debe fallar");
         assert_eq!(error.code, "itch_response");
     }
 
@@ -1544,7 +1608,7 @@ mod tests {
 
     #[test]
     fn the_first_import_counts_everything_that_entered() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         let fetch = ItchFetch {
             profile: profile(),
             entries: vec![entry("1", "Primero"), entry("2", "Segundo")],
@@ -1590,7 +1654,7 @@ mod tests {
 
     #[test]
     fn reimporting_neither_duplicates_nor_overwrites_a_manual_decision() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         connection
             .execute(
                 "INSERT INTO games(app_id, title) VALUES (500, 'Otro Juego')",
@@ -1645,7 +1709,7 @@ mod tests {
 
     #[test]
     fn reimporting_keeps_the_cover_when_itch_stops_publishing_one() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         persist_library(&mut connection, &fetch_with(vec![entry("1", "Primero")]))
             .expect("primera importación");
 
@@ -1674,7 +1738,7 @@ mod tests {
 
     #[test]
     fn an_empty_library_leaves_the_account_linked_and_says_zero() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         let report = persist_library(&mut connection, &fetch_with(Vec::new())).expect("importar");
         assert_eq!(report.imported, 0);
         assert_eq!(report.added, 0);
@@ -1693,7 +1757,7 @@ mod tests {
 
     #[test]
     fn a_matching_steam_title_is_proposed_but_never_forced() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         connection
             .execute(
                 "INSERT INTO games(app_id, title) VALUES (77, 'Celeste')",
@@ -1720,7 +1784,7 @@ mod tests {
 
     #[test]
     fn a_failed_import_is_recorded_without_touching_the_library() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         persist_library(&mut connection, &fetch_with(vec![entry("1", "Primero")]))
             .expect("importar");
 
@@ -1750,7 +1814,7 @@ mod tests {
 
     #[test]
     fn the_session_state_says_what_happened_without_naming_the_key() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
 
         // Antes de importar nada: no es un error, es «todavía nada».
         let virgen = read_session_state(&connection, false).expect("estado inicial");
@@ -1784,7 +1848,7 @@ mod tests {
 
     #[test]
     fn an_entry_with_an_impossible_identifier_stops_the_import() {
-        let mut connection = connection();
+        let (_directorio, mut connection) = connection();
         let fetch = fetch_with(vec![ItchLibraryEntry {
             external_id: "../../etc".to_string(),
             ..entry("1", "Primero")

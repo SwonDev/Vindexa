@@ -144,6 +144,14 @@ pub enum NavigationVerdict {
     Bootstrap,
     /// Navegación permitida hacia la tienda indicada.
     Allowed(&'static StoreProfile),
+    /// Destino auxiliar del inicio de sesión: la verificación humana.
+    ///
+    /// Se deja cargar, pero **no es la página de la ventana**. La distinción
+    /// importa: el motor web entrega también las navegaciones de los marcos
+    /// incrustados, y tratar el marco del captcha como si fuera el documento
+    /// principal pondría su dirección en la barra y en el historial de la
+    /// ventana. Ver [`crate::browser::stores::HUMAN_VERIFICATION_HOSTS`].
+    Auxiliary,
     /// Orden interna de la barra; la navegación se cancela siempre.
     Control(ControlCommand),
     /// Navegación rechazada.
@@ -160,7 +168,7 @@ impl NavigationVerdict {
         reason = "atajo legible sobre el veredicto, usado en pruebas"
     )]
     pub fn should_continue(&self) -> bool {
-        matches!(self, Self::Bootstrap | Self::Allowed(_))
+        matches!(self, Self::Bootstrap | Self::Allowed(_) | Self::Auxiliary)
     }
 }
 
@@ -170,7 +178,13 @@ impl NavigationVerdict {
 /// de Steam no puede convertirse en una ventana de GOG sin pasar por
 /// [`ControlCommand::SwitchStore`], que abre una ventana separada.
 pub fn evaluate(store: &'static StoreProfile, url: &Url) -> NavigationVerdict {
-    if url.as_str() == "about:blank" {
+    // Documento vacío. Lo pide la propia ventana al arrancar, y también cada
+    // marco que la página crea sin dirección —el captcha crea varios—, a veces
+    // con un fragmento detrás. No es un destino remoto: no descarga nada y su
+    // origen es opaco, así que lo que se compara es el camino, no la cadena
+    // entera. `about:` sigue cerrado para todo lo demás (`about:config` y
+    // compañía) unas líneas más abajo.
+    if url.scheme() == "about" && matches!(url.path(), "blank" | "srcdoc") {
         return NavigationVerdict::Bootstrap;
     }
 
@@ -198,10 +212,17 @@ pub fn evaluate(store: &'static StoreProfile, url: &Url) -> NavigationVerdict {
     }
 
     if store.allows(url) {
-        NavigationVerdict::Allowed(store)
-    } else {
-        NavigationVerdict::Rejected(RejectionReason::HostNotAllowed)
+        return NavigationVerdict::Allowed(store);
     }
+
+    // El captcha del inicio de sesión vive en un marco de un tercero. Se
+    // comprueba después de la tienda para que un host que estuviera en las dos
+    // listas siguiera contando como página de la tienda.
+    if stores::is_human_verification(url) {
+        return NavigationVerdict::Auxiliary;
+    }
+
+    NavigationVerdict::Rejected(RejectionReason::HostNotAllowed)
 }
 
 /// Resuelve el texto de la barra de direcciones dentro del contexto de `store`.
@@ -323,6 +344,87 @@ mod tests {
         assert!(NavigationVerdict::Allowed(steam()).should_continue());
         assert!(!NavigationVerdict::Control(ControlCommand::Back).should_continue());
         assert!(!NavigationVerdict::Rejected(RejectionReason::HostNotAllowed).should_continue());
+    }
+
+    #[test]
+    fn el_documento_vacio_de_un_marco_no_es_un_destino_prohibido() {
+        // El captcha crea marcos sin dirección; el motor los presenta como
+        // documento vacío, a veces con un fragmento detrás. Rechazarlos deja el
+        // inicio de sesión a medias y encima con un aviso que despista.
+        for raw in ["about:blank", "about:blank#frame=checkbox", "about:srcdoc"] {
+            assert_eq!(
+                evaluate(steam(), &url(raw)),
+                NavigationVerdict::Bootstrap,
+                "{raw} es un documento vacío, no un destino"
+            );
+        }
+
+        // El resto de `about:` sigue cerrado: son páginas internas del motor.
+        for raw in ["about:config", "about:settings", "about:cache"] {
+            assert_eq!(
+                evaluate(steam(), &url(raw)),
+                NavigationVerdict::Rejected(RejectionReason::DangerousScheme),
+                "{raw} no puede abrirse"
+            );
+        }
+    }
+
+    #[test]
+    fn el_marco_del_captcha_carga_sin_convertirse_en_la_pagina_de_la_ventana() {
+        // Direcciones copiadas de los inicios de sesión reales el 2026-08-19.
+        let epic = store_by_id("epic").expect("perfil de Epic");
+        let gog = store_by_id("gog").expect("perfil de GOG");
+        for (tienda, raw) in [
+            (
+                epic,
+                "https://newassets.hcaptcha.com/captcha/v1/1dab630d/static/hcaptcha.html#frame=checkbox-invisible",
+            ),
+            (gog, "https://www.recaptcha.net/recaptcha/api2/anchor?ar=1"),
+            (gog, "https://www.recaptcha.net/recaptcha/api2/bframe?hl=es"),
+        ] {
+            let verdict = evaluate(tienda, &url(raw));
+            assert_eq!(
+                verdict,
+                NavigationVerdict::Auxiliary,
+                "{raw} tiene que poder cargar: sin ella no se puede iniciar sesión"
+            );
+            assert!(verdict.should_continue());
+        }
+
+        // Auxiliar no es lo mismo que permitido: la ventana sigue siendo de la
+        // tienda, y por eso el veredicto es distinto del de una página suya.
+        assert_eq!(
+            evaluate(epic, &url("https://www.epicgames.com/id/login")),
+            NavigationVerdict::Allowed(epic)
+        );
+    }
+
+    #[test]
+    fn la_lista_de_verificacion_no_abre_mas_puerta_que_la_suya() {
+        for raw in [
+            // Un host que sólo termina parecido no hereda el permiso.
+            "https://hcaptcha.com.attacker.tld/",
+            "https://evilhcaptcha.com/",
+            "https://recaptcha.net.attacker.tld/",
+            // Los recursos de reCAPTCHA no navegan: los sirve el bloqueador.
+            "https://www.gstatic.com/recaptcha/releases/x.js",
+            "https://www.google.com/recaptcha/api2/anchor",
+        ] {
+            assert_eq!(
+                evaluate(steam(), &url(raw)),
+                NavigationVerdict::Rejected(RejectionReason::HostNotAllowed),
+                "{raw} no debería poder cargar"
+            );
+        }
+
+        // Y sigue sin poder llegar por un transporte que no sea HTTPS.
+        assert_eq!(
+            evaluate(
+                steam(),
+                &url("http://newassets.hcaptcha.com/captcha/v1/x.html")
+            ),
+            NavigationVerdict::Rejected(RejectionReason::InsecureTransport)
+        );
     }
 
     #[test]

@@ -77,7 +77,6 @@ import {
   toggleViewInStack,
 } from "@/features/library/library-views";
 import { SavedViewsBar } from "@/features/library/SavedViewsBar";
-import { StoreCatalogBrowser } from "@/features/library/StoreCatalogBrowser";
 import {
   gameContextShortcuts,
   type LibraryContextSnapshot,
@@ -258,6 +257,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       // por este camino es lo que les da estados, colecciones, prioridad, notas
       // y ficha: exactamente lo mismo que a los propios.
       ...(scope.kind === "family" ? { ownershipSource: "family_shared" as const } : {}),
+      // Y lo mismo con las demás tiendas: desde la migración 037 sus juegos
+      // viven en la biblioteca con su ficha personal, así que se piden por el
+      // mismo camino y traen consigo estados, colecciones, arrastre, prioridad,
+      // notas y ficha. Antes venían de un listado aparte de sólo lectura.
+      ...(scope.kind === "store" && scope.id ? { externalStore: scope.id as ExternalStoreId } : {}),
       ...(archiveScope === "active" ? {} : { archiveScope }),
       sort,
       ...(sort === "random" ? { sortSeed: randomSeed } : {}),
@@ -270,20 +274,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
     initialPageParam: 0,
     getNextPageParam: (last) =>
       last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
-  });
-  const storeQuery = useInfiniteQuery({
-    queryKey: ["store-catalog", scope.kind === "store" ? scope.id : undefined, debouncedQuery],
-    queryFn: ({ pageParam }) =>
-      api.listExternalGames({
-        ...(scope.kind === "store" && scope.id ? { store: scope.id as ExternalStoreId } : {}),
-        ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
-        limit: 240,
-        offset: pageParam,
-      }),
-    initialPageParam: 0,
-    getNextPageParam: (last) =>
-      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
-    enabled: scope.kind === "store",
   });
   const games = useMemo(
     () => gamesQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -302,12 +292,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       });
   }, [metadataPriorityIds, queryClient, scope.kind]);
   const total = gamesQuery.data?.pages[0]?.total ?? 0;
-  const storeGames = useMemo(
-    () => storeQuery.data?.pages.flatMap((page) => page.items) ?? [],
-    [storeQuery.data],
-  );
-  const storeTotal = storeQuery.data?.pages[0]?.total ?? 0;
-  const visibleTotal = scope.kind === "store" ? storeTotal : total;
+  const visibleTotal = total;
   const activeFilters = Boolean(
     debouncedQuery || activeLibraryFilterCount(filters) || scope.kind !== "all",
   );
@@ -1277,20 +1262,14 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
               ))}
             </fieldset>
           )}
-          {(scope.kind === "store" ? storeQuery.isPending : gamesQuery.isPending) ? (
+          {gamesQuery.isPending ? (
             <LibrarySkeleton />
-          ) : (scope.kind === "store" ? storeQuery.isError : gamesQuery.isError) ? (
+          ) : gamesQuery.isError ? (
             <div className="screen-error">
               <IconRefresh />
               <h2>No se pudieron cargar los juegos</h2>
-              <p>{getErrorMessage(scope.kind === "store" ? storeQuery.error : gamesQuery.error)}</p>
-              <Button
-                onClick={() =>
-                  scope.kind === "store" ? storeQuery.refetch() : gamesQuery.refetch()
-                }
-              >
-                Reintentar
-              </Button>
+              <p>{getErrorMessage(gamesQuery.error)}</p>
+              <Button onClick={() => gamesQuery.refetch()}>Reintentar</Button>
             </div>
           ) : visibleTotal === 0 ? (
             <div className="library-empty">
@@ -1351,20 +1330,6 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
                 </p>
               )}
             </div>
-          ) : scope.kind === "store" ? (
-            <StoreCatalogBrowser
-              store={(scope.id ?? "epic") as ExternalStoreId}
-              storeLabel={scope.label}
-              games={storeGames}
-              view={view}
-              queryKey={debouncedQuery.trim()}
-              hasMore={Boolean(storeQuery.hasNextPage)}
-              loadingMore={storeQuery.isFetchingNextPage}
-              initialScrollOffset={readLibraryScroll(scope)}
-              onScrollOffsetChange={(offset) => writeLibraryScroll(scope, offset)}
-              onLoadMore={() => storeQuery.fetchNextPage()}
-              onOpenMatched={setDetailId}
-            />
           ) : (
             <GameBrowser
               key={`${libraryScopeKey(scope)}:${view}`}

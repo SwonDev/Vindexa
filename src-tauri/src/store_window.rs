@@ -254,6 +254,9 @@ fn decide_navigation<R: Runtime>(
             push_state(app, label);
             true
         }
+        // Un marco de verificación humana carga, pero no es la página de la
+        // ventana: ni entra en el historial ni cambia lo que dice la barra.
+        NavigationVerdict::Auxiliary => true,
         NavigationVerdict::Control(command) => {
             let app = app.clone();
             let label = label.to_string();
@@ -408,10 +411,24 @@ fn apply_zoom<R: Runtime>(
 /// Sin el anfitrión, «ese destino está fuera de las tiendas permitidas» no dice
 /// cuál, y no hay forma de saber qué habría que autorizar. Sólo se enseña el
 /// anfitrión: la ruta y la consulta pueden llevar datos de la sesión.
+/// Explica un rechazo nombrando lo que lo causó.
+///
+/// Un aviso que sólo dice «se ha bloqueado algo» obliga a adivinar, y adivinar
+/// sobre lo que hace una página remota sale caro: un inicio de sesión que no
+/// terminaba se pasó semanas sin diagnosticar porque el aviso no decía qué
+/// destino ni qué esquema se había cancelado.
+///
+/// Se nombra **el esquema o el anfitrión, nunca la dirección completa**: la URL
+/// de un `data:` lleva el documento entero dentro, y la de un retorno de sesión
+/// lleva el código de autorización.
 fn describe_rejection(reason: RejectionReason, url: &Url) -> String {
-    match url.host_str() {
-        Some(host) if matches!(reason, RejectionReason::HostNotAllowed) => {
-            format!("{} Destino: {host}.", reason.message())
+    match reason {
+        RejectionReason::HostNotAllowed => match url.host_str() {
+            Some(host) => format!("{} Destino: {host}.", reason.message()),
+            None => reason.message().to_string(),
+        },
+        RejectionReason::DangerousScheme => {
+            format!("{} Esquema: {}.", reason.message(), url.scheme())
         }
         _ => reason.message().to_string(),
     }

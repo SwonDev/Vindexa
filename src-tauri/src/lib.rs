@@ -4,6 +4,7 @@ mod browser;
 mod commands;
 mod db;
 mod error;
+mod keychain;
 mod models;
 mod steam;
 mod store_window;

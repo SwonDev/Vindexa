@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import dndCss from "@/features/library/library-dnd.css?raw";
 
@@ -11,44 +11,28 @@ describe("espacio reservado para la selección flotante", () => {
 });
 
 /**
- * Un solo listado para los catálogos que no son la biblioteca.
+ * Un solo listado para todo lo que se navega.
  *
- * Los juegos de las tiendas vinculadas no son propiedad de quien usa Vindexa,
- * pero tienen que navegarse igual: cambiar de sección no puede cambiar cómo se
- * mueve uno. Antes eran una lista de texto dentro de Ajustes, sin portadas.
+ * Los juegos de Epic, GOG e itch.io eran una lista aparte de sólo lectura: se
+ * miraban y nada más. Desde la migración 037 viven en la biblioteca con su
+ * ficha personal, así que usan su mismo navegador y traen consigo estados,
+ * colecciones, arrastre, prioridad, notas y ficha. Los del préstamo familiar
+ * hicieron el mismo camino en la 036.
  *
- * Los del préstamo familiar ya no pasan por aquí: viven en la biblioteca y usan
- * su mismo navegador, con estados, colecciones y ficha.
- *
- * Esta prueba vigila que el listado de catálogo siga siendo uno solo y que
- * conserve las tres piezas compartidas con la biblioteca.
+ * Esta prueba vigila que no vuelva a aparecer un segundo listado: dos rejillas
+ * en paralelo se separan a la primera mejora que sólo entra en una de ellas.
  */
-describe("los catálogos usan el mismo listado que la biblioteca", () => {
-  const catalogo = readFileSync("src/features/library/CatalogBrowser.tsx", "utf8");
-  const tienda = readFileSync("src/features/library/StoreCatalogBrowser.tsx", "utf8");
+describe("todo lo que se navega usa el listado de la biblioteca", () => {
+  const pantalla = readFileSync("src/features/library/LibraryScreen.tsx", "utf8");
 
-  it("calcula las columnas con la misma función que la biblioteca", () => {
-    expect(catalogo).toContain("getGridColumns(");
-    // La cuenta antigua no descontaba los huecos entre columnas.
-    expect(catalogo).not.toMatch(/Math\.floor\(\(width - \d+\) \/ \d+\)/);
+  it("el ámbito de una tienda se pide por el mismo camino que el resto", () => {
+    expect(pantalla).toContain("externalStore: scope.id as ExternalStoreId");
   });
 
-  it("pinta el fundido de borde y lo alimenta al desplazar", () => {
-    expect(catalogo).toContain("<LiquidEdge />");
-    expect(catalogo).toContain("applyScrollEdgeFade(");
-    // Sin esta marca el contenedor no recibe la altura del fundido.
-    expect(catalogo).toContain('data-library-surface="true"');
-  });
-
-  it("resuelve las portadas por delante en lugar de al montar cada tarjeta", () => {
-    expect(catalogo).toContain("prefetchArtwork(");
-  });
-
-  it("cada catálogo sólo traduce sus datos, no rehace el listado", () => {
-    // Si un catálogo vuelve a montar su propia rejilla, esto lo detecta antes de
-    // que las dos versiones empiecen a separarse.
-    expect(tienda).toContain("<CatalogBrowser");
-    expect(tienda).not.toContain("useVirtualizer");
+  it("no queda un listado paralelo para los catálogos", () => {
+    expect(pantalla).not.toContain("CatalogBrowser");
+    expect(existsSync("src/features/library/CatalogBrowser.tsx")).toBe(false);
+    expect(existsSync("src/features/library/StoreCatalogBrowser.tsx")).toBe(false);
   });
 });
 

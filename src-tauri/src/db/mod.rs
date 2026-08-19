@@ -2444,6 +2444,51 @@ mod pruebas_del_recuento_de_familia {
     }
 
     #[test]
+    fn la_cifra_de_una_tienda_es_la_que_se_encuentra_al_entrar() {
+        // Ha fallado dos veces por el mismo motivo: contar por un lado y listar
+        // por otro. La primera enseñaba juegos que la lista no traía; la
+        // segunda contaba los archivados, y «Epic Games 553» abría una pantalla
+        // con 395. La cifra se cuenta con las exclusiones del listado o miente.
+        let connection = base();
+        for (app_id, external_id) in [(2_000_000_001_u32, "uno"), (2_000_000_002, "dos")] {
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, ownership_source, external_store)
+                     VALUES (?1, 'Un juego', 'owned', 'gog')",
+                    [app_id],
+                )
+                .expect("insertar juego de la tienda");
+            connection
+                .execute(
+                    "INSERT INTO game_personal(app_id, status_id) VALUES (?1, 'unclassified')",
+                    [app_id],
+                )
+                .expect("insertar ficha personal");
+            connection
+                .execute(
+                    "INSERT INTO external_games(store, external_id, title, local_app_id)
+                     VALUES ('gog', ?1, 'Un juego', ?2)",
+                    rusqlite::params![external_id, app_id],
+                )
+                .expect("vincular");
+        }
+
+        let stats = library::library_stats(&connection).expect("estadísticas");
+        assert_eq!(stats.external_store_games.get("gog"), Some(&2));
+
+        // Archivar uno lo saca del listado, así que también de la cifra.
+        connection
+            .execute("INSERT INTO game_archive(app_id) VALUES (2000000002)", [])
+            .expect("archivar");
+        let stats = library::library_stats(&connection).expect("estadísticas");
+        assert_eq!(
+            stats.external_store_games.get("gog"),
+            Some(&1),
+            "un juego archivado no se enseña, así que tampoco se cuenta"
+        );
+    }
+
+    #[test]
     fn los_prestados_se_cuentan_aparte_de_los_propios() {
         // La cifra tiene que ser la misma que se encuentra al entrar en «Steam
         // Family»: un recuento que no coincide con lo que hay dentro es un
