@@ -158,10 +158,23 @@ export function installWebviewChromeGuards(options: WebviewChromeOptions = {}): 
     teardown.push(() => doc?.removeEventListener(type, handler, listenerOptions));
   }
 
-  // 1. Menú contextual nativo. Se intercepta en captura para que ningún
-  //    componente intermedio pueda dejar pasar el menú de WebKit. Radix abre su
-  //    propio menú en su manejador y no consulta `defaultPrevented`, así que
-  //    adelantarnos no interfiere con `GameContextMenu`.
+  // 1. Menú contextual nativo.
+  //
+  //    Se escucha en **burbuja**, al final del recorrido, y esto es lo que hace
+  //    que la aplicación tenga clic derecho.
+  //
+  //    Estuvo en captura, con un comentario que afirmaba que adelantarse no
+  //    interfería con los menús propios. Era falso: Radix compone sus
+  //    manejadores con `checkForDefaultPrevented`, así que un `preventDefault`
+  //    anterior hace que **no abra su menú**. Con la guarda en captura, el clic
+  //    derecho no funcionaba en ninguna parte de Vindexa —ni en una colección,
+  //    ni en un estado, ni en una tienda, ni en un juego— y nada fallaba al
+  //    compilar.
+  //
+  //    En burbuja, los menús propios ya han abierto y han cancelado el evento
+  //    por su cuenta; aquí sólo se cancela lo que nadie ha reclamado, que es
+  //    justo el caso en el que aparecería el menú de WebKit con «Recargar» e
+  //    «Inspeccionar».
   listen(
     "contextmenu",
     (event) => {
@@ -171,7 +184,7 @@ export function installWebviewChromeGuards(options: WebviewChromeOptions = {}): 
       if (hasTextSelectionAt(mouseEvent.target, doc)) return;
       event.preventDefault();
     },
-    { capture: true },
+    { capture: false },
   );
 
   // 2. Selección de texto por arrastre en superficies no textuales. Se resuelve
