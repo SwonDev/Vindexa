@@ -1502,3 +1502,15 @@ export interface UpcomingRefreshReport {
   /** Cuántos deseados quedan por revisar en pasadas siguientes. */
   pending: number;
 }
+
+/** Un juego y la dirección de su carátula, para completar la caché de arte. */
+export interface ArtworkTarget {
+  appId: number;
+  coverUrl: string;
+}
+
+/** Cuánto ocupa la caché de arte en disco y cuánto se le permite ocupar. */
+export interface ArtCacheUsage {
+  bytes: number;
+  budgetBytes: number;
+}

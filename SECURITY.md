@@ -1,6 +1,7 @@
 # Seguridad de Vindexa
 
-Este documento describe las fronteras, controles y límites del código de Vindexa `0.1.0`.
+Este documento describe las fronteras, controles y límites del código tal y como están **hoy**
+en el repositorio. Se mantiene con el código y no se ata a un número de versión.
 No constituye una auditoría independiente ni una garantía absoluta. Para privacidad y
 tratamiento de datos personales, consulta [PRIVACY.md](./PRIVACY.md).
 

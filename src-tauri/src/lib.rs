@@ -212,6 +212,8 @@ pub fn run() {
             commands::reveal_installation,
             commands::cache_game_art,
             commands::clear_art_cache,
+            commands::list_artwork_targets,
+            commands::get_art_cache_usage,
             commands::maintain_art_cache,
             commands::save_preferences,
             commands::check_for_updates,

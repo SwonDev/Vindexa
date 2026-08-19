@@ -7,6 +7,7 @@ use crate::models::{
 };
 use chrono::NaiveDate;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, Transaction, params, params_from_iter};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -94,6 +95,51 @@ const GAME_SELECT: &str = "
             ORDER BY installation.library_path COLLATE NOCASE ASC
             LIMIT 1
       )";
+
+/// Un juego y la dirección de su carátula, para poder llenar la caché de arte.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtworkTarget {
+    pub app_id: u32,
+    pub cover_url: String,
+}
+
+/// Todas las carátulas que la biblioteca puede llegar a enseñar.
+///
+/// La interfaz ya adelanta las de la página cargada, pero eso sólo cubre lo que
+/// se ha llegado a mirar: en una biblioteca de miles de juegos hace falta
+/// recorrerla entera para que todo el arte acabe en local. Con esta lista, la
+/// aplicación puede ir completándola mientras está ociosa y dejar de depender
+/// de la red para pintar.
+///
+/// Es deliberadamente ligera —dos columnas— porque se pide entera: devolver la
+/// ficha completa de cada juego para esto sería mover megas para usar unos
+/// pocos bytes de cada fila.
+///
+/// No incluye lo archivado ni los préstamos sin confirmar: descargar el arte de
+/// lo que no se va a enseñar gasta disco y red para nada.
+pub fn artwork_targets(connection: &Connection) -> AppResult<Vec<ArtworkTarget>> {
+    let mut statement = connection.prepare(
+        "SELECT g.app_id, g.cover_url
+           FROM games g
+           JOIN game_personal p ON p.app_id = g.app_id
+          WHERE g.cover_url IS NOT NULL
+            AND g.cover_url <> ''
+            AND NOT (
+                g.ownership_source = 'family_shared'
+                AND g.family_availability <> 'confirmed'
+            )
+            AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)
+          ORDER BY g.last_played_at DESC NULLS LAST, g.app_id ASC",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(ArtworkTarget {
+            app_id: row.get(0)?,
+            cover_url: row.get(1)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
 
 pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
     // Los juegos de tiendas externas se cuentan aparte: son otra tabla y otra

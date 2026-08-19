@@ -269,7 +269,7 @@ sha256sum src-tauri/target/release/bundle/appimage/*.AppImage
 sha256sum src-tauri/target/release/bundle/rpm/*.rpm
 ```
 
-Conserva el digest junto a la versión exacta `0.1.0` y no lo reutilices después de
+Conserva el digest junto al número exacto de versión que descargaste y no lo reutilices después de
 recompilar.
 
 ## Desinstalar

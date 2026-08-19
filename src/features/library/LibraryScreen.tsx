@@ -77,6 +77,7 @@ import {
   toggleViewInStack,
 } from "@/features/library/library-views";
 import { SavedViewsBar } from "@/features/library/SavedViewsBar";
+import { useIdleArtworkPrefetch } from "@/features/library/use-idle-artwork-prefetch";
 import {
   gameContextShortcuts,
   type LibraryContextSnapshot,
@@ -271,6 +272,11 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
       limit: 240,
     };
   }, [archiveScope, debouncedQuery, filters, randomSeed, scope, sort]);
+  // Con la biblioteca abierta, el arte que aún no está en local se va
+  // completando en los ratos de reposo: al cabo de un rato deja de hacer falta
+  // la red para desplazarse por ella.
+  useIdleArtworkPrefetch(true);
+
   const gamesQuery = useInfiniteQuery({
     queryKey: ["games", requestBase],
     queryFn: ({ pageParam }) => api.listGames({ ...requestBase, offset: pageParam }),

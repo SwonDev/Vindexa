@@ -16,6 +16,8 @@ import type {
   AppPreferences,
   ArchiveReport,
   ArtCacheMaintenanceReport,
+  ArtCacheUsage,
+  ArtworkTarget,
   BulkUpdateStatusInput,
   CachedArtwork,
   CuratedList,
@@ -87,8 +89,8 @@ import type {
   TasteReport,
   TasteSurface,
   TasteVerdict,
-  UpcomingRelease,
   UpcomingRefreshReport,
+  UpcomingRelease,
   UpdateCheckResult,
   UpdateCuratedItemInput,
   UpdateGameInput,
@@ -215,6 +217,10 @@ export const api = {
     invoke<RichGameMetadata>("get_rich_game_metadata", { appId }),
   drmStateCounts: () => invoke<DrmStateCounts>("get_drm_state_counts"),
   maintainArtCache: () => invoke<ArtCacheMaintenanceReport>("maintain_art_cache"),
+  /** Carátulas que la biblioteca puede llegar a enseñar, para completar la caché. */
+  listArtworkTargets: () => invoke<ArtworkTarget[]>("list_artwork_targets"),
+  /** Cuánto ocupa la caché de arte y cuánto se le permite ocupar. */
+  getArtCacheUsage: () => invoke<ArtCacheUsage>("get_art_cache_usage"),
   listNotificationRules: (appId?: number) =>
     invoke<NotificationRule[]>("list_notification_rules", { appId }),
   saveNotificationRule: (input: SaveNotificationRuleInput) =>

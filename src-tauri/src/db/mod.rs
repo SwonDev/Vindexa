@@ -55,7 +55,7 @@ pub use dlc::{
 pub use family_catalog::{
     FamilyCatalogGame, FamilyCatalogRequest, ImportedFamilyCatalogGame, PagedFamilyCatalogGames,
 };
-pub use library::{ImportedGame, ImportedInstallation, StoreMetadataUpdate};
+pub use library::{ArtworkTarget, ImportedGame, ImportedInstallation, StoreMetadataUpdate};
 pub use library_dnd::{LibraryDropInput, LibraryDropReceipt, LibraryDropResult};
 pub(crate) use metadata_queue::MetadataJob;
 pub use notifications::{
@@ -1272,6 +1272,10 @@ impl Database {
 
     pub fn delete_collection(&self, id: &str) -> AppResult<()> {
         organization::delete_collection(&mut self.open()?, id)
+    }
+
+    pub fn artwork_targets(&self) -> AppResult<Vec<library::ArtworkTarget>> {
+        library::artwork_targets(&self.open()?)
     }
 
     pub fn set_collection_appearance(&self, id: &str, color: &str, icon: &str) -> AppResult<()> {

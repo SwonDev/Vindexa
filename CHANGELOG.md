@@ -8,6 +8,18 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **El arte se completa solo mientras no haces nada.** La rejilla ya adelantaba las carátulas de
+  la página cargada, pero eso sólo cubría lo que se había llegado a mirar: el resto se descargaba
+  al desplazarse hasta él, con retraso, y sin conexión no aparecía. Ahora, con la biblioteca
+  abierta, el arte que falta se va guardando en local en los ratos de reposo del navegador.
+  - **Se para antes de llenar la caché.** No basta con confiar en que el mantenimiento desaloje
+    lo menos usado: si el arte completo ocupa más que el techo configurado, adelantar y desalojar
+    entran en un tira y afloja que gasta red y disco sin dejar nada. Medido sobre una biblioteca
+    real: la caché **bajaba** de tamaño mientras la precarga corría. Se detiene al 85 % del
+    presupuesto, y el margen que queda es para lo que pides al mirar, que siempre va primero.
+  - Si quieres que toda tu biblioteca esté en local, sube el presupuesto de la caché en
+    Ajustes → Datos y copias: con miles de juegos, el arte completo puede pedir bastante más que
+    los 512 MiB de fábrica.
 - **Los próximos lanzamientos ya tienen de dónde salir.** El motor que aprende tus gustos y
   puntúa candidatos existía, y la pantalla que los enseña también, pero nadie rellenaba la tabla
   de candidatos: la sección quedaba vacía por muy bien que funcionara todo lo demás. Ahora salen
@@ -64,6 +76,10 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Corregido
 
+- **La insignia de versión del README no seguía a las publicaciones.** Estaba escrita a mano, así
+  que se quedó anclada a la 0.1.2 mientras el proyecto avanzaba. Ahora la genera GitHub a partir
+  de la última release. Por lo mismo, tres documentos que decían describir «Vindexa 0.1.0» dejan
+  de atarse a un número: se mantienen con el código y describen lo que hay hoy.
 - **La marca DRM-Free de las tiendas no llegaba a la ficha.** Al integrar Epic, GOG e itch.io en
   la biblioteca se quedó por el camino un dato que su catálogo sí tenía: GOG declara que todo lo
   que vende va sin DRM, y aun así 44 de sus juegos figuraban como «sin dato». Ahora ese dato se

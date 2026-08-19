@@ -143,6 +143,44 @@ fn max_cache_bytes() -> u64 {
     MAX_CACHE_BYTES.load(Ordering::Relaxed)
 }
 
+/// Cuánto ocupa la caché de arte y cuánto se le permite ocupar.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheUsage {
+    pub bytes: u64,
+    pub budget_bytes: u64,
+}
+
+/// Mide lo que ocupa la caché en disco.
+///
+/// Hace falta para que llenarla por adelantado sepa cuándo parar. Sin este dato
+/// la precarga descarga sin fin: llega al techo, el mantenimiento desaloja lo
+/// menos usado, y la siguiente tanda vuelve a bajar lo que se acaba de borrar.
+/// Comprobado: con una biblioteca cuyo arte completo ocupa el doble del
+/// presupuesto, la caché **bajaba** de tamaño mientras la precarga corría.
+pub fn usage(cache_root: &Path) -> CacheUsage {
+    let root = cache_root.join("steam-art");
+    let mut bytes = 0_u64;
+    if let Ok(directories) = fs::read_dir(&root) {
+        for directory in directories.filter_map(Result::ok) {
+            let Ok(files) = fs::read_dir(directory.path()) else {
+                continue;
+            };
+            for file in files.filter_map(Result::ok) {
+                if let Ok(metadata) = file.metadata()
+                    && metadata.is_file()
+                {
+                    bytes = bytes.saturating_add(metadata.len());
+                }
+            }
+        }
+    }
+    CacheUsage {
+        bytes,
+        budget_bytes: max_cache_bytes(),
+    }
+}
+
 // --- Modelo de variantes ----------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

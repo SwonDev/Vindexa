@@ -1,6 +1,8 @@
 # Arquitectura de Vindexa
 
-Este documento describe la arquitectura que existe en el repositorio de Vindexa `0.1.0`.
+Este documento describe la arquitectura que existe **hoy** en el repositorio. Se mantiene con
+el código, así que no se ata a un número de versión: si algo aquí no coincide con lo que hay,
+el documento es el que está mal.
 El brief define una visión más amplia; cuando difieren, aquí se documenta el comportamiento
 del código ejecutable.
 
@@ -391,7 +393,7 @@ Consulta [STEAM_SETUP.md](./STEAM_SETUP.md) para los límites.
 8. **Tienda remota aislada.** La continuidad visual no justifica cargar HTML remoto en la
    ventana con IPC; se usa otro WebView limitado.
 
-### Límites de `0.1.0`
+### Límites conocidos
 
 - La sincronización periódica vive en la ventana React: no despierta la aplicación cerrada
   ni funciona como una tarea de sistema en segundo plano.

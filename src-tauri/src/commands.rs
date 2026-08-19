@@ -1860,6 +1860,25 @@ pub async fn reorder_game_videos(
     .await
 }
 
+/// Todas las carátulas que la biblioteca puede llegar a enseñar.
+///
+/// La interfaz adelanta las de la página cargada; con esta lista puede además
+/// ir completando el resto mientras está ociosa, para que la biblioteca deje de
+/// depender de la red al desplazarse. Devuelve dos columnas por juego porque se
+/// pide entera.
+#[tauri::command]
+pub async fn list_artwork_targets(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<crate::db::ArtworkTarget>> {
+    database_read(&state, move |database| database.artwork_targets()).await
+}
+
+/// Cuánto ocupa la caché de arte y cuánto se le permite ocupar.
+#[tauri::command]
+pub async fn get_art_cache_usage(state: State<'_, AppState>) -> AppResult<art_cache::CacheUsage> {
+    Ok(art_cache::usage(&state.cache_dir))
+}
+
 #[tauri::command]
 pub async fn maintain_art_cache(
     state: State<'_, AppState>,
