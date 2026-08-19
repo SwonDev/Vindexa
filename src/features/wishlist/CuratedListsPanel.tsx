@@ -72,7 +72,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { CollectionIcon, collectionIconOptions } from "@/features/collections/CollectionIcon";
+import { CollectionIcon, CollectionIconPicker } from "@/features/collections/CollectionIcon";
 import { GamePicker } from "@/features/wishlist/GamePicker";
 import {
   accentToken,
@@ -879,22 +879,15 @@ function CuratedListEditor({
                 </SelectContent>
               </Select>
             </label>
-            <label htmlFor={`${fieldId}-icon`}>
-              <span>Icono</span>
-              <Select value={icon} onValueChange={setIcon}>
-                <SelectTrigger id={`${fieldId}-icon`} aria-label="Icono de la lista">
-                  <CollectionIcon name={icon} fallback="manual" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {collectionIconOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <option.icon aria-hidden="true" /> {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
+            <div className="collection-icon-field">
+              <span id={`${fieldId}-icon-label`}>Icono</span>
+              <CollectionIconPicker
+                id={`${fieldId}-icon`}
+                label="Icono de la lista"
+                value={icon}
+                onChange={setIcon}
+              />
+            </div>
           </div>
           <div className="curated-editor__switch">
             <span id={`${fieldId}-pinned-label`}>Fijar arriba</span>

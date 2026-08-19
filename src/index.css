@@ -891,6 +891,76 @@ kbd {
   border: 1px solid rgb(0 0 0 / 28%);
   border-radius: 2px;
 }
+/* Elegir color o icono es comparar, no leer: en rejilla se ve la paleta entera
+   de un vistazo y se reconoce la forma que se busca sin recorrer renglones. El
+   nombre viaja en `aria-label` y en `title`, así que no se pierde para quien
+   navega con teclado o con lector de pantalla. */
+.sidebar-picker {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px;
+}
+.sidebar-picker--colors {
+  grid-template-columns: repeat(6, 1fr);
+}
+.sidebar-picker--icons {
+  grid-template-columns: repeat(7, 1fr);
+}
+.sidebar-picker [data-slot="context-menu-item"] {
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px;
+}
+/* En rejilla la negrita no dice nada: la opción activa se marca con un recuadro
+   que se ve igual sea un color o un icono. */
+.sidebar-picker [data-slot="context-menu-item"][data-selected="true"] {
+  box-shadow: inset 0 0 0 1px var(--v-cyan);
+  font-weight: inherit;
+}
+.sidebar-picker .sidebar-swatch {
+  width: 16px;
+  height: 16px;
+}
+/* El resultado de lo que se lanza desde un menú contextual. El menú se cierra
+   al elegir, así que sin esto una sincronización que falla no se ve en ningún
+   sitio. Vive al pie de la barra lateral, pegado a lo que la disparó. */
+.sidebar-feedback {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--v-surface-raised);
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.sidebar-feedback[data-kind="success"] > svg:first-child {
+  color: var(--v-success);
+}
+.sidebar-feedback[data-kind="error"] > svg:first-child {
+  color: var(--v-error);
+}
+.sidebar-feedback[data-kind="pending"] > svg:first-child {
+  color: var(--v-cyan);
+}
+.sidebar-feedback__close {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--v-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sidebar-feedback__close:hover {
+  color: var(--foreground);
+}
 /* La opción activa se reconoce sin depender del color, que aquí es contenido. */
 [data-selected="true"] {
   font-weight: 600;
@@ -3836,4 +3906,52 @@ input[type="search"]::-webkit-search-results-decoration {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+}
+/* Elegir icono es reconocer una forma, no leer una lista: en rejilla se ven las
+   cuarenta y dos a la vez y la elección se ve ya con el color de la colección,
+   que es como va a quedar. */
+.collection-icon-field {
+  display: grid;
+  gap: 6px;
+}
+.collection-icon-field > span {
+  color: var(--v-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 4px;
+  max-height: 152px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--v-surface-raised);
+}
+.icon-picker > button {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--v-muted);
+  cursor: pointer;
+}
+.icon-picker > button:hover {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.icon-picker > button:focus-visible {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: 1px;
+}
+.icon-picker > button[data-selected="true"] {
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+  color: var(--foreground);
 }

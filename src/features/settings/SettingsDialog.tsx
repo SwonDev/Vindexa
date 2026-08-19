@@ -87,24 +87,36 @@ const apiKeySchema = z.object({
 });
 type ApiKeyForm = z.infer<typeof apiKeySchema>;
 
+export type SettingsSection =
+  | "steam"
+  | "stores"
+  | "agents"
+  | "organization"
+  | "appearance"
+  | "shortcuts"
+  | "data"
+  | "privacy"
+  | "about";
+
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bootstrap?: AppBootstrap | undefined;
+  /**
+   * Sección en la que se abre. Quien llega desde un atajo —«Editar estados…»
+   * en el menú de un estado— ya sabe a qué venía: aterrizar en Steam y tener
+   * que buscarla sería devolverle el trabajo.
+   */
+  initialSection?: SettingsSection | undefined;
 }
 
-export function SettingsDialog({ open: dialogOpen, onOpenChange, bootstrap }: SettingsDialogProps) {
-  const [section, setSection] = useState<
-    | "steam"
-    | "stores"
-    | "agents"
-    | "organization"
-    | "appearance"
-    | "shortcuts"
-    | "data"
-    | "privacy"
-    | "about"
-  >("steam");
+export function SettingsDialog({
+  open: dialogOpen,
+  onOpenChange,
+  bootstrap,
+  initialSection,
+}: SettingsDialogProps) {
+  const [section, setSection] = useState<SettingsSection>(initialSection ?? "steam");
   return (
     <Dialog open={dialogOpen} onOpenChange={onOpenChange}>
       <DialogContent className="settings-dialog" showCloseButton>

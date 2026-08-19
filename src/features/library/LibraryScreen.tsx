@@ -120,6 +120,12 @@ interface Props {
   loading: boolean;
   error: unknown;
   onRetry: () => void;
+  /**
+   * Abre los ajustes en una sección concreta. Lo usan los menús rápidos de la
+   * barra lateral para llevar a donde se edita de verdad lo que ellos sólo
+   * pueden retocar.
+   */
+  onOpenSettings?: ((section: "organization") => void) | undefined;
 }
 
 /**
@@ -136,7 +142,7 @@ const dropCollision: CollisionDetection = (args) => {
   return bajoElPuntero.length > 0 ? bajoElPuntero : closestCenter(args);
 };
 
-export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
+export function LibraryScreen({ bootstrap, loading, error, onRetry, onOpenSettings }: Props) {
   const queryClient = useQueryClient();
   const session = useMemo(readLibrarySession, []);
   const [scope, setScope] = useState<LibraryScope>(session.scope);
@@ -1106,6 +1112,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             setCollectionEditorOpen(true);
           }}
           onDeleteCollection={setCollectionToDelete}
+          {...(onOpenSettings ? { onEditStatuses: () => onOpenSettings("organization") } : {})}
         />
         <section className="library-main">
           <LibraryToolbar
@@ -1141,6 +1148,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry }: Props) {
             setCollectionEditorOpen(true);
           }}
           onDeleteCollection={setCollectionToDelete}
+          {...(onOpenSettings ? { onEditStatuses: () => onOpenSettings("organization") } : {})}
         />
         <section className="library-main">
           <div className="screen-error">

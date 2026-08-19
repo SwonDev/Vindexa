@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -17,22 +18,39 @@ const bootstrap = {
       gameCount: 1,
     },
   ],
-  collections: [],
+  collections: [
+    {
+      id: "siempre",
+      name: "A los que siempre volver",
+      description: "",
+      color: "#5CAAC1",
+      icon: "rocket",
+      kind: "manual",
+      matchMode: "all",
+      position: 0,
+      gameCount: 46,
+    },
+  ],
 } as AppBootstrap;
 
 describe("barra lateral de biblioteca", () => {
   it("colapsa Estados con semántica accesible y conserva Steam Family como alcance", async () => {
     const user = userEvent.setup();
     const onScopeChange = vi.fn();
+    // Los menús rápidos de estados, colecciones y tiendas escriben en la base
+    // y refrescan el arranque, así que la barra lateral vive dentro del cliente
+    // de consultas igual que en la aplicación.
     render(
-      <TooltipProvider>
-        <LibrarySidebar
-          bootstrap={bootstrap}
-          scope={{ kind: "all", label: "Todos los juegos" }}
-          onScopeChange={onScopeChange}
-          onCreateCollection={vi.fn()}
-        />
-      </TooltipProvider>,
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <LibrarySidebar
+            bootstrap={bootstrap}
+            scope={{ kind: "all", label: "Todos los juegos" }}
+            onScopeChange={onScopeChange}
+            onCreateCollection={vi.fn()}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
     );
 
     const toggle = screen.getByRole("button", { name: "ESTADOS" });
@@ -54,5 +72,27 @@ describe("barra lateral de biblioteca", () => {
 
     await user.click(screen.getByRole("button", { name: /Steam Family/ }));
     expect(onScopeChange).toHaveBeenCalledWith({ kind: "family", label: "Steam Family" });
+  });
+
+  it("pinta el icono que la colección tiene elegido", () => {
+    // Ha fallado ya una vez: la barra lateral pintaba una carpeta fija y el
+    // icono elegido sólo se veía en la pantalla de colecciones, así que
+    // cambiarlo parecía no hacer nada donde más se mira.
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <LibrarySidebar
+            bootstrap={bootstrap}
+            scope={{ kind: "all", label: "Todos los juegos" }}
+            onScopeChange={vi.fn()}
+            onCreateCollection={vi.fn()}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    const entrada = screen.getByRole("button", { name: "A los que siempre volver" });
+    expect(entrada.querySelector(".tabler-icon-rocket")).not.toBeNull();
+    expect(container.querySelector(".tabler-icon-folder")).toBeNull();
   });
 });

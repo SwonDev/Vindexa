@@ -2,26 +2,33 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  IconAlertTriangle,
   IconBook2,
   IconBuildingStore,
+  IconCheck,
   IconChevronDown,
   IconDeviceGamepad2,
-  IconFolder,
-  IconFolders,
   IconGripVertical,
+  IconLoader2,
   IconPlus,
   IconSquareFilled,
   IconUsersGroup,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatedNumber, PressableSurface } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CollectionIcon } from "@/features/collections/CollectionIcon";
 import {
   readLibrarySectionExpanded,
   writeLibrarySectionExpanded,
 } from "@/features/library/library-session";
-import { CollectionContextMenu, StoreContextMenu } from "@/features/library/SidebarContextMenus";
+import {
+  CollectionContextMenu,
+  type SidebarNotice,
+  StatusContextMenu,
+  StoreContextMenu,
+} from "@/features/library/SidebarContextMenus";
 import type { AppBootstrap } from "@/lib/types";
 import { collectionDropId, collectionOrderDragId, statusDropId } from "./library-dnd";
 
@@ -49,6 +56,8 @@ interface LibrarySidebarProps {
   /** Abre el editor completo de una colección desde su menú rápido. */
   onEditCollection?: ((id: string) => void) | undefined;
   onDeleteCollection?: ((id: string) => void) | undefined;
+  /** Abre el editor de estados desde el menú rápido de uno de ellos. */
+  onEditStatuses?: (() => void) | undefined;
 }
 
 export function LibrarySidebar({
@@ -58,12 +67,21 @@ export function LibrarySidebar({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
+  onEditStatuses,
   draggingGames = false,
   collectionReorderEnabled = false,
 }: LibrarySidebarProps) {
   const [statusesExpanded, setStatusesExpanded] = useState(() =>
     readLibrarySectionExpanded("statuses"),
   );
+  // Un menú contextual se cierra al elegir, así que lo que tarda —sincronizar
+  // una tienda— tiene que contarse aquí fuera o no se cuenta en ningún sitio.
+  const [notice, setNotice] = useState<SidebarNotice | undefined>(undefined);
+  useEffect(() => {
+    if (notice?.kind !== "success") return;
+    const timeout = window.setTimeout(() => setNotice(undefined), 6_000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
   const selected = (kind: LibraryScope["kind"], id?: string) =>
     scope.kind === kind && scope.id === id;
   return (
@@ -100,7 +118,12 @@ export function LibrarySidebar({
             que tiene algo que enseñar. */}
         {EXTERNAL_STORES.map((store) =>
           (bootstrap?.stats.externalStoreGames?.[store.id] ?? 0) > 0 ? (
-            <StoreContextMenu key={store.id} storeId={store.id} storeLabel={store.label}>
+            <StoreContextMenu
+              key={store.id}
+              storeId={store.id}
+              storeLabel={store.label}
+              onNotice={setNotice}
+            >
               <SidebarItem
                 active={scope.kind === "store" && scope.id === store.id}
                 icon={store.icon}
@@ -130,17 +153,18 @@ export function LibrarySidebar({
         </button>
         <div className="sidebar-list" id="library-statuses" hidden={!statusesExpanded}>
           {bootstrap?.statuses.map((status) => (
-            <SidebarItem
-              key={status.id}
-              active={selected("status", status.id)}
-              icon={IconSquareFilled}
-              iconColor={status.color}
-              label={status.name}
-              count={status.gameCount}
-              dropId={statusDropId(status.id)}
-              draggingGames={draggingGames}
-              onClick={() => onScopeChange({ kind: "status", id: status.id, label: status.name })}
-            />
+            <StatusContextMenu key={status.id} status={status} onEdit={onEditStatuses}>
+              <SidebarItem
+                active={selected("status", status.id)}
+                icon={IconSquareFilled}
+                iconColor={status.color}
+                label={status.name}
+                count={status.gameCount}
+                dropId={statusDropId(status.id)}
+                draggingGames={draggingGames}
+                onClick={() => onScopeChange({ kind: "status", id: status.id, label: status.name })}
+              />
+            </StatusContextMenu>
           ))}
         </div>
       </div>
@@ -189,6 +213,35 @@ export function LibrarySidebar({
           </div>
         </SortableContext>
       </div>
+      {notice && (
+        <div
+          className="sidebar-feedback"
+          data-kind={notice.kind}
+          role={notice.kind === "error" ? "alert" : "status"}
+          aria-live={notice.kind === "error" ? "assertive" : "polite"}
+        >
+          {notice.kind === "pending" ? (
+            <IconLoader2 className="is-spinning" aria-hidden="true" />
+          ) : notice.kind === "success" ? (
+            <IconCheck aria-hidden="true" />
+          ) : (
+            <IconAlertTriangle aria-hidden="true" />
+          )}
+          <span>{notice.message}</span>
+          {/* Un error se queda hasta que se cierra: lo que ha fallado no puede
+              desaparecer solo mientras nadie mira. */}
+          {notice.kind !== "pending" && (
+            <button
+              type="button"
+              className="sidebar-feedback__close"
+              aria-label="Descartar aviso"
+              onClick={() => setNotice(undefined)}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
@@ -315,11 +368,14 @@ function CollectionSidebarItem({
             aria-describedby={draggingGames && dropDisabled ? restrictionId : undefined}
             onClick={onClick}
           >
-            {collection.kind === "smart" ? (
-              <IconFolders aria-hidden="true" size={15} style={{ color: collection.color }} />
-            ) : (
-              <IconFolder aria-hidden="true" size={15} style={{ color: collection.color }} />
-            )}
+            {/* El icono sale de la colección, no del tipo: si se elige uno en
+                el menú rápido o en el editor, aquí es donde hay que verlo. */}
+            <CollectionIcon
+              name={collection.icon}
+              fallback={collection.kind === "smart" ? "smart" : "manual"}
+              size={15}
+              style={{ color: collection.color }}
+            />
             <span>{collection.name}</span>
             <data value={collection.gameCount}>{collection.gameCount.toLocaleString("es-ES")}</data>
           </button>

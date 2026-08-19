@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CollectionIcon, collectionIconOptions } from "@/features/collections/CollectionIcon";
+import { CollectionIcon, CollectionIconPicker } from "@/features/collections/CollectionIcon";
 import { formatDate, formatPlaytime } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type {
@@ -636,22 +636,16 @@ export function CollectionEditorDialog({
                 />
               </span>
             </label>
-            <label htmlFor="collection-icon">
-              <span>Icono</span>
-              <Select value={icon} onValueChange={setIcon}>
-                <SelectTrigger id="collection-icon" aria-label="Icono de la colección">
-                  <CollectionIcon name={icon} fallback={kind} />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {collectionIconOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <option.icon aria-hidden="true" /> {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
+            <div className="collection-icon-field">
+              <span id="collection-icon-label">Icono</span>
+              <CollectionIconPicker
+                id="collection-icon"
+                label="Icono de la colección"
+                value={icon}
+                color={color}
+                onChange={setIcon}
+              />
+            </div>
           </div>
         </div>
         {editing ? (

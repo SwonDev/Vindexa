@@ -58,6 +58,9 @@ const SettingsDialog = lazy(() =>
     default: module.SettingsDialog,
   })),
 );
+// El tipo viaja aparte de la carga diferida: sólo describe la sección, no
+// arrastra el diálogo al paquete inicial.
+type SettingsSection = import("@/features/settings/SettingsDialog").SettingsSection;
 const CommandPalette = lazy(() =>
   import("@/features/shell/CommandPalette").then((module) => ({
     default: module.CommandPalette,
@@ -92,6 +95,9 @@ const sections = [
 export function AppShell() {
   const [section, setSection] = useState<AppSection>("library");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // En qué sección se abre. Quien llega desde un atajo de la biblioteca ya sabe
+  // a qué venía; volver a buscarla sería devolverle el trabajo.
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteContext, setPaletteContext] = useState<LibraryContextSnapshot>();
@@ -519,6 +525,10 @@ export function AppShell() {
         loading={bootstrapQuery.isPending}
         error={bootstrapQuery.error}
         onRetry={() => bootstrapQuery.refetch()}
+        onOpenSettings={(target) => {
+          setSettingsSection(target);
+          setSettingsOpen(true);
+        }}
       />
     );
   })();
@@ -748,8 +758,12 @@ export function AppShell() {
           <Suspense fallback={null}>
             <SettingsDialog
               open={settingsOpen}
-              onOpenChange={setSettingsOpen}
+              onOpenChange={(open) => {
+                setSettingsOpen(open);
+                if (!open) setSettingsSection(undefined);
+              }}
               bootstrap={bootstrap}
+              initialSection={settingsSection}
             />
           </Suspense>
         )}
