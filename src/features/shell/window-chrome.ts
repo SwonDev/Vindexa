@@ -1,15 +1,21 @@
 /**
- * Ajuste de la ventana al abrirse.
+ * La ventana: cómo se abre y qué hace el doble clic en la barra.
  *
- * # Por qué el arrastre y el doble clic ya no viven aquí
+ * # Por qué el arrastre no vive aquí
  *
- * Vivieron, y no funcionaban. Resolver el gesto a mano obliga a acertar con el
+ * Vivió, y no funcionaba. Resolver el arrastre a mano obliga a acertar con el
  * orden exacto en que cada sistema entrega los eventos —en macOS, pedir el
  * arrastre al pulsar hace que el segundo clic no llegue nunca— y a mantener esa
  * pieza para siempre. El propio Tauri ya trae ese trabajo hecho y probado en su
- * zona de arrastre, así que la barra lo declara con `data-tauri-drag-region` y
- * este módulo se queda sólo con lo que Tauri no cubre: abrir ocupando el hueco
- * real de la pantalla.
+ * zona de arrastre, así que la barra lo declara con `data-tauri-drag-region`.
+ *
+ * # Por qué el doble clic sí
+ *
+ * Porque lo que hace Tauri por su cuenta no es lo que se pide. En macOS acaba
+ * en el *zoom* del sistema, que lleva la ventana al tamaño que la aplicación
+ * declara como preferido, no al que cabe en la pantalla: medido, 1440×870 sobre
+ * un área útil de 1512×982. Aquí el doble clic hace lo mismo que el arranque
+ * —ocupar el hueco real— y, si ya lo ocupa, devuelve la ventana a como estaba.
  */
 
 /**
@@ -52,20 +58,101 @@ async function currentWindow() {
  * redimensiona, nadie se lo deshace.
  */
 export async function fitWindowToAvailableSpace(): Promise<void> {
-  if (typeof window === "undefined" || typeof window.screen === "undefined") return;
+  const space = availableSpace();
+  if (!space) return;
   const appWindow = await currentWindow();
   if (!appWindow) return;
-  const { availWidth, availHeight } = window.screen;
-  if (!availWidth || !availHeight) return;
-  // `availLeft` y `availTop` no están en todos los motores; su ausencia
-  // significa que el área útil empieza en el origen.
-  const left = (window.screen as Screen & { availLeft?: number }).availLeft ?? 0;
-  const top = (window.screen as Screen & { availTop?: number }).availTop ?? 0;
   try {
     const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
-    await appWindow.setPosition(new LogicalPosition(left, top));
-    await appWindow.setSize(new LogicalSize(availWidth, availHeight));
+    await appWindow.setPosition(new LogicalPosition(space.x, space.y));
+    await appWindow.setSize(new LogicalSize(space.width, space.height));
   } catch {
     // Sin ventana nativa —pruebas, navegador— no hay nada que ajustar.
   }
+}
+
+/** Geometría anterior, para que el segundo doble clic devuelva la ventana. */
+interface Geometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+let restorePoint: Geometry | undefined;
+
+/** Margen al comparar tamaños: el sistema redondea y nunca cuadra al píxel. */
+const FIT_TOLERANCE = 8;
+
+/** El hueco real de la pantalla, o `undefined` si el motor no lo dice. */
+function availableSpace(): Geometry | undefined {
+  if (typeof window === "undefined" || typeof window.screen === "undefined") return undefined;
+  const { availWidth, availHeight } = window.screen;
+  if (!availWidth || !availHeight) return undefined;
+  // `availLeft` y `availTop` no están en todos los motores; su ausencia
+  // significa que el área útil empieza en el origen.
+  const screen = window.screen as Screen & { availLeft?: number; availTop?: number };
+  return {
+    x: screen.availLeft ?? 0,
+    y: screen.availTop ?? 0,
+    width: availWidth,
+    height: availHeight,
+  };
+}
+
+/**
+ * Doble clic en la parte vacía de la barra: ocupa el hueco disponible y, si ya
+ * lo ocupa, devuelve la ventana al tamaño que tenía antes.
+ *
+ * Es el gesto que todo el mundo espera de una barra de título, y hacerlo aquí
+ * es lo único que garantiza que «maximizar» signifique llenar la pantalla útil
+ * en las tres plataformas y no lo que cada sistema entienda por ello.
+ */
+export async function toggleFitWindow(): Promise<void> {
+  const space = availableSpace();
+  if (!space) return;
+  const appWindow = await currentWindow();
+  if (!appWindow) return;
+  try {
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    const factor = await appWindow.scaleFactor();
+    const size = (await appWindow.innerSize()).toLogical(factor);
+    const ocupaElHueco =
+      Math.abs(size.width - space.width) <= FIT_TOLERANCE &&
+      Math.abs(size.height - space.height) <= FIT_TOLERANCE;
+
+    if (ocupaElHueco && restorePoint) {
+      const previous = restorePoint;
+      restorePoint = undefined;
+      await appWindow.setPosition(new LogicalPosition(previous.x, previous.y));
+      await appWindow.setSize(new LogicalSize(previous.width, previous.height));
+      return;
+    }
+    if (!ocupaElHueco) {
+      const position = (await appWindow.outerPosition()).toLogical(factor);
+      restorePoint = {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+      };
+    }
+    await appWindow.setPosition(new LogicalPosition(space.x, space.y));
+    await appWindow.setSize(new LogicalSize(space.width, space.height));
+  } catch {
+    // Sin ventana nativa —pruebas, navegador— el gesto no aplica.
+  }
+}
+
+/**
+ * ¿Este doble clic ocurrió en la parte vacía de la barra?
+ *
+ * Doble clic sobre un botón, un campo o un enlace es otra cosa: quien pulsa dos
+ * veces seguidas en «Sincronizar» no está pidiendo que la ventana cambie de
+ * tamaño.
+ */
+export function isEmptyChromeTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return !target.closest(
+    'button, a, input, textarea, select, [role="button"], [role="tab"], [contenteditable="true"]',
+  );
 }

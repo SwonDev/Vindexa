@@ -37,7 +37,11 @@ import {
   shortcutLabel,
 } from "@/features/shell/shortcuts";
 import { ToastProvider } from "@/features/shell/toasts";
-import { fitWindowToAvailableSpace } from "@/features/shell/window-chrome";
+import {
+  fitWindowToAvailableSpace,
+  isEmptyChromeTarget,
+  toggleFitWindow,
+} from "@/features/shell/window-chrome";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppSection } from "@/lib/types";
@@ -610,7 +614,18 @@ export function AppShell() {
             ventana y que el doble clic la maximice. El script de Tauri excluye
             solo botones, enlaces y campos, que es justo lo que aquí interesa
             que siga siendo pulsable. */}
-          <header className="topbar" data-tauri-drag-region="deep">
+          {/* El doble clic en la parte vacía lo resuelve Vindexa y no el
+              sistema: lo que hace macOS por su cuenta es su *zoom*, que lleva la
+              ventana al tamaño preferido de la aplicación y no al que cabe en la
+              pantalla. Aquí significa lo mismo en las tres plataformas. */}
+          <header
+            className="topbar"
+            data-tauri-drag-region="deep"
+            onDoubleClick={(event) => {
+              if (!isEmptyChromeTarget(event.target)) return;
+              void toggleFitWindow();
+            }}
+          >
             <div className="brand">
               <span className="brand__name">VINDEXA</span>
               <span className="brand__edition">DESKTOP</span>

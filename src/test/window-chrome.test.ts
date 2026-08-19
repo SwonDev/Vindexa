@@ -1,36 +1,48 @@
-import { describe, expect, it, vi } from "vitest";
-import { fitWindowToAvailableSpace } from "@/features/shell/window-chrome";
+import { describe, expect, it } from "vitest";
+import { isEmptyChromeTarget } from "@/features/shell/window-chrome";
 
 /**
- * El arrastre y el doble clic de la barra de título los resuelve el script de
- * arrastre de Tauri —la barra los declara con `data-tauri-drag-region`—, así
- * que lo que queda por comprobar aquí es que la ventana se abre ocupando el
- * hueco real y que fuera del escritorio no intenta hablar con nadie.
+ * Qué cuenta como «parte vacía» de la barra.
+ *
+ * El gesto de la barra de título es doble clic sobre el cromado, no sobre lo
+ * que hay encima. Quien pulsa dos veces seguidas en «Sincronizar» no está
+ * pidiendo que la ventana cambie de tamaño, y confundir las dos cosas convierte
+ * un acierto en un salto de ventana cada vez que alguien insiste en un botón.
  */
-describe("ajuste de la ventana al abrirse", () => {
-  it("no pide nada cuando no hay contenedor de escritorio", async () => {
-    // En las pruebas y en el navegador el módulo de Tauri se importa igual,
-    // pero su puente no existe: pedirle algo dejaría la promesa esperando para
-    // siempre y con ella el arranque de la interfaz.
-    expect("__TAURI_INTERNALS__" in window).toBe(false);
-    await expect(fitWindowToAvailableSpace()).resolves.toBeUndefined();
+describe("doble clic en la barra de la ventana", () => {
+  function element(html: string): Element {
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    return host.firstElementChild as Element;
+  }
+
+  it("el fondo de la barra y sus rótulos sí cuentan", () => {
+    expect(isEmptyChromeTarget(element("<header class='topbar'></header>"))).toBe(true);
+    expect(isEmptyChromeTarget(element("<span>VINDEXA</span>"))).toBe(true);
   });
 
-  it("no falla si la pantalla no publica su espacio disponible", async () => {
-    const original = Object.getOwnPropertyDescriptor(window, "screen");
-    Object.defineProperty(window, "screen", {
-      value: { availWidth: 0, availHeight: 0 },
-      configurable: true,
-    });
-    const bridge = vi.fn();
-    Object.defineProperty(window, "__TAURI_INTERNALS__", {
-      value: { invoke: bridge },
-      configurable: true,
-    });
+  it("lo que se puede pulsar o escribir no cuenta", () => {
+    const casos = [
+      "<button type='button'>Sincronizar</button>",
+      "<a href='#'>Enlace</a>",
+      "<input value='texto' />",
+      "<div role='button'>Pestaña</div>",
+      "<div role='tab'>Biblioteca</div>",
+      "<textarea></textarea>",
+    ];
+    for (const html of casos) {
+      expect(isEmptyChromeTarget(element(html)), html).toBe(false);
+    }
+  });
 
-    await expect(fitWindowToAvailableSpace()).resolves.toBeUndefined();
+  it("un icono dentro de un botón tampoco cuenta", () => {
+    // El objetivo real de un clic suele ser el `svg` de dentro, no el botón:
+    // mirar sólo el elemento pulsado dejaba pasar justo el caso más frecuente.
+    const boton = element("<button type='button'><svg aria-hidden='true'></svg> Ajustes</button>");
+    expect(isEmptyChromeTarget(boton.querySelector("svg"))).toBe(false);
+  });
 
-    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
-    if (original) Object.defineProperty(window, "screen", original);
+  it("sin objetivo no se hace nada", () => {
+    expect(isEmptyChromeTarget(null)).toBe(false);
   });
 });
