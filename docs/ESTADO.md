@@ -68,7 +68,66 @@ SELECT (SELECT COUNT(*) FROM upcoming_releases) AS lanzamientos,
 -- medido: 18 | 534
 ```
 
-## 4. Persistencia del arte
+## 4. Precios de lo que deseas
+
+Se piden a `appdetails` en lotes de cien, con pausa entre lotes, y se repasan
+solos cada seis horas. Cada precio guarda su moneda, su descuento y **cuándo se
+miró**: un importe sin fecha no es un dato utilizable.
+
+El fallo que lo tenía parado no estaba en la tienda: `record_observation` exigía
+que el juego estuviera en `games`, y los deseados importados de Steam viven en
+`catalog_games` mientras no se compren. El primero de ellos devolvía «no está en
+la biblioteca» y el error abortaba la tanda entera.
+
+```sql
+SELECT COUNT(DISTINCT app_id) FROM game_prices;   -- medido: 1105, antes 153
+```
+
+## 5. Ofertas
+
+Dos secciones distintas, y la diferencia importa:
+
+| Dónde | Qué enseña |
+|---|---|
+| Deseados | Lo rebajado **de tu lista**, con tu precio objetivo al lado |
+| Seguimiento · «Ofertas para ti» | Lo rebajado en la tienda que **no** es tuyo, puntuado contra tu modelo de gustos |
+
+Lo segundo sale de `featuredcategories` —sin sesión ni clave— y de una ficha por
+juego para conocer sus géneros. Lo que ya tienes o ya deseas no aparece: lo
+primero no es una oferta y lo segundo ya tiene su sección.
+
+```sql
+SELECT COUNT(*), COUNT(match_score) FROM store_deals;  -- medido: 9 | 9
+```
+
+## 6. Juegos gratis de Epic
+
+`freeGamesPromotions` es público: ni clave ni sesión. Se guarda lo vigente y lo
+anunciado, se cruza con la biblioteca para decir **si ya lo tienes** y se avisa
+una sola vez cuando empieza la promoción.
+
+Vindexa no lo reclama por ti: conducir tu sesión por un flujo de compra es otra
+cosa distinta de avisar. Lo que hace es llevarte a la ficha exacta en el
+navegador integrado, donde ya estás identificado.
+
+## 7. Vista rápida al pasar el ratón
+
+Al detenerse sobre un juego —biblioteca, deseados, ofertas, lanzamientos,
+colecciones, plan y radar— aparece un emergente con sus capturas pasando y lo
+que Vindexa sabe y la tienda no: el estado, lo jugado, el precio, el carril.
+
+Las capturas se piden una vez por juego (medido: 588 bytes para diez) y quedan
+guardadas, también para los mil trescientos deseados que no están en la
+biblioteca. Un juego sin capturas queda marcado como preguntado para no repetir
+la consulta en cada pasada del ratón.
+
+```
+pnpm test src/test/context-menu-coverage.test.tsx
+```
+
+La cobertura se vigila con una prueba: una lista nueva sin vista rápida falla.
+
+## 8. Persistencia del arte
 
 Las imágenes se guardan en disco con su fila en `image_cache`, se completan
 solas en los ratos de reposo y **no tienen techo**: el arte de una biblioteca
@@ -82,7 +141,7 @@ SELECT COUNT(*) FROM image_cache;   -- medido: 2298
 du -sh ~/Library/Caches/io.vindexa.desktop/steam-art   # medido: 635M
 ```
 
-## 5. DRM
+## 9. DRM
 
 Detección en `steam::drm` a partir de lo que publica la tienda, propagación de
 lo que declara GOG, filtro propio en el panel de filtros y marca «Sin DRM» en la
@@ -90,12 +149,25 @@ lista, junto a «Instalado» y «Early Access».
 
 **Nunca sobre la carátula**: una carátula es del juego, no de cómo se distribuye.
 
+Lo que faltaba: la clasificación llegó **después** de que media biblioteca
+estuviera enriquecida, y 1.788 juegos se quedaron sin veredicto con la evidencia
+vacía. Una pasada ligera los completa en segundo plano pidiendo sólo los avisos
+—`filters=basic,categories`, 8.402 bytes en vez de 17.118—.
+
+Y un fallo que sólo se ve contra la tienda de verdad: los avisos llegan en el
+idioma que se pide, y la lista de marcas reconocía dos de cada cuatro cuentas de
+terceros en español. Ahora la señal es que el campo `ext_user_account_notice`
+**exista**, que es lo que significa.
+
+Hay acceso directo en la barra lateral, con su recuento, y una prueba de que esa
+cifra es exactamente lo que sale al pulsarla.
+
 ```sql
 SELECT drm_state, COUNT(*) FROM games WHERE drm_state <> 'unknown' GROUP BY drm_state;
--- medido: drm_free|200 · third_party_drm|3
+-- medido: drm_free|393 · third_party_drm|9, y subiendo
 ```
 
-## 6. Clic derecho
+## 10. Clic derecho
 
 Cancelar el menú nativo de WebKit es una decisión de toda la aplicación, así que
 ofrecer uno propio también lo es. Está en todas las pantallas:
@@ -130,7 +202,7 @@ pnpm test src/test/context-menu-coverage.test.tsx
 La cobertura se vigila con una prueba: si una pantalla nueva no monta menú, o
 una lo pierde, falla.
 
-## 7. La ventana
+## 11. La ventana
 
 Abre ocupando el hueco real de la pantalla —descontando barra de menús y Dock—,
 y el doble clic en la parte vacía de la barra hace lo mismo; repetido, devuelve
@@ -144,7 +216,7 @@ de Tauri, que ya lo hace bien.
 `src/features/shell/window-chrome.ts`, con pruebas de qué cuenta como «parte
 vacía» —un botón o un campo no cuentan—.
 
-## 8. Agentes
+## 12. Agentes
 
 Dos caminos, el mismo puente y las mismas garantías. Está contado entero en
 [`HERMES.md`](HERMES.md).
