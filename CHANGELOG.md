@@ -141,6 +141,31 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   ofertas se puede volver a recoger, el deslizador de progreso de la ficha deja de montarse
   sobre su etiqueta al llegar con el teclado, y la lista de privacidad deja de partir cada
   frase en columnas.
+- **Trescientos dieciocho juegos esperaban a Steam para siempre.** Un juego de Epic, GOG o
+  itch.io no existe en Steam, así que su ficha nunca se pide; su estado se quedaba en «pendiente»
+  de por vida y la pantalla lo leía como trabajo en curso: «Cargando la descripción desde
+  Steam…», con el girador dando vueltas. Ahora dice de qué tienda viene y que lo suyo es local.
+  Lo mismo pasaba con los 1.583 del catálogo de Steam Family que aún no consta que puedas jugar.
+- **Abrir un juego de Epic le pedía a Steam un AppID inventado.** Los juegos de otras tiendas
+  llevan un identificador que se inventó Vindexa. Abrir su ficha se lo pedía a Steam, Steam
+  contestaba que no existe y el juego quedaba marcado «Ficha no publicada» con un botón para
+  reintentarlo cada día: una etiqueta que culpaba a Steam de no publicar algo que nunca fue suyo.
+  Pasaba igual con los logros y con el contenido adicional. `LOCAL_APP_ID_BASE` ya decía en su
+  documentación que ninguna consulta a Steam debe llevar uno de esos identificadores —«fichas,
+  precios, logros, arte»—; sólo el arte lo cumplía.
+- **«Olvidados 12» eran 280.** Las listas del radar traen doce de cada montón y la cabecera decía
+  «12 elementos en esta vista». Con 280 juegos parados de verdad, es el mismo recuento que
+  contestó «20» cuando había 215. Ahora dice «12 de 280», el número se puede recorrer con una
+  tanda más al final de la lista, y las señales de Novedades hacen lo mismo cuando enseñan cuatro
+  de doce.
+- **«336 sin comprobar» eran 62.** El repaso de DRM le pregunta a la ficha de Steam, así que un
+  juego de Epic o de itch.io no entra: no hay a quién preguntarle. La cifra los contaba igual, y
+  la nota prometía una cuenta atrás que se quedaba en 274 para siempre.
+- **La barra de estado prometía completar 317 fichas que nadie iba a pedir.** El recuento de
+  pendientes usaba una condición distinta de la que encola el trabajo.
+- **Los deseados que ya tienes se pueden esconder.** La lista existe para decidir una compra y
+  65 de sus 1.410 entradas son juegos ya comprados; con el orden por descuento ocupaban la
+  cabecera. El interruptor va apagado, y al encenderlo el recuento pasa a «1.345 de 1.410».
 
 ## [0.1.4] · 2026-08-19
 
