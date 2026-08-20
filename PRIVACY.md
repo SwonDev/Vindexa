@@ -124,19 +124,56 @@ pintarlas supondría una petición a Google antes de que nadie haya decidido ver
 
 ### Tiendas externas
 
-La detección de Epic Games Store y GOG lee **solo ficheros locales** que esos clientes ya
-escriben en el disco: sus manifiestos de instalación y la caché de biblioteca que Heroic y
-Legendary guardan tras iniciar sesión. Vindexa no pide credenciales de esas tiendas, no
-guarda tokens y no llama a sus APIs privadas. Los ficheros de sesión de esos clientes
-(`gog_store/auth.json` y `legendaryConfig/legendary/user.json`) **no se abren nunca**: sólo
-se comprueba si existen, para poder distinguir «no has iniciado sesión» de «no tienes el
-cliente». Si el cliente no está instalado, el resultado es un estado explícito de «no
-disponible», no un intento de conexión.
+Hay dos caminos y conviene no confundirlos.
 
-Vindexa no implementa un inicio de sesión propio contra Epic ni contra GOG. Hacerlo
-obligaría a suplantar las credenciales OAuth de sus clientes oficiales, algo que las
-condiciones de uso de Epic no autorizan y que dejaría a Vindexa custodiando un testigo de
-acceso a la cuenta.
+**Sin cuenta, leyendo el disco.** La detección de Epic Games Store, GOG e itch.io lee ficheros
+locales que esos clientes ya escriben: sus manifiestos de instalación y la caché de biblioteca
+que Heroic y Legendary guardan. Los ficheros de sesión de esos clientes
+(`gog_store/auth.json` y `legendaryConfig/legendary/user.json`) **no se abren nunca**: sólo se
+comprueba si existen, para distinguir «no has iniciado sesión» de «no tienes el cliente». Si
+el cliente no está instalado, el resultado es un estado explícito de «no disponible», no un
+intento de conexión. Este camino no hace ninguna petición de red.
+
+**Con cuenta, si tú la vinculas.** Desde **Ajustes → Tiendas** se puede iniciar sesión en Epic
+y en GOG para traer la biblioteca completa, no sólo lo instalado. El inicio de sesión ocurre
+**en la página de la propia tienda**, dentro del navegador integrado: Vindexa nunca ve la
+contraseña ni el doble factor. Lo que recibe al terminar es un código de un solo uso que
+canjea por un testigo de acceso, y **ese testigo se guarda en el llavero del sistema** —en
+`io.vindexa.desktop`, con el nombre de cuenta que la propia pantalla te enseña— y en ningún
+otro sitio: ni en SQLite, ni en un fichero de configuración, ni en la interfaz, ni en un
+mensaje de error. Con él se llaman las APIs de biblioteca de esas tiendas. Al cerrar sesión se
+revoca en la tienda cuando ésta lo permite —Epic sí, GOG no publica un extremo de revocación—,
+se borra del llavero siempre, y Vindexa comprueba después que no ha quedado nada.
+
+itch.io funciona igual salvo por el primer paso: no usa OAuth, sino una clave personal que
+generas tú en su web y pegas en Vindexa. Se verifica contra itch.io antes de guardarla, y se
+guarda también en el llavero.
+
+Vincular una cuenta es **opcional y reversible**. Sin ella, todo lo demás sigue funcionando.
+
+### Precios, rebajas y regalos
+
+Estas cuatro cosas se piden **sin clave y sin sesión**, y conviene saber qué lleva cada una:
+
+| Qué se pregunta | A dónde | Qué viaja de tuyo |
+| --- | --- | --- |
+| Precio de tus deseados | `store.steampowered.com/api/appdetails` (`price_overview`, en lotes de cien) | Los AppID de tu lista de deseados |
+| Marca DRM de tu biblioteca | `store.steampowered.com/api/appdetails` (`basic,categories`) | Los AppID de tus juegos |
+| Capturas de la vista rápida | `store.steampowered.com/api/appdetails` (`screenshots`) | El AppID del juego sobre el que te detienes |
+| Rebajas de Steam | `store.steampowered.com/api/featuredcategories` | Nada tuyo |
+| Rebajas de GOG | `catalog.gog.com/v1/catalog` | Nada tuyo |
+| Regalos de Epic | `store-site-backend-static.ak.epicgames.com/freeGamesPromotions` | Nada tuyo |
+
+Las dos últimas filas de escaparate son consultas idénticas para todo el mundo: no te
+identifican ni dicen qué tienes. Las tres primeras sí dicen **de qué juegos** se está
+preguntando, porque no hay forma de pedir el precio de un juego sin nombrarlo. Ninguna manda
+tu SteamID, tu cuenta ni tu organización personal.
+
+La marca DRM se pregunta juego a juego con pausas deliberadas y se guarda, así que un repaso
+completo ocurre una vez, no en cada arranque. Lo mismo con las capturas: se piden al detenerte
+sobre un juego, una sola vez, y se guarda incluso la respuesta «este juego no publica
+capturas» para no volver a preguntarlo. Y con los precios: cuando la tienda responde que un
+juego no está a la venta, esa respuesta se guarda para no repreguntarla cada seis horas.
 
 ### Modelo de gustos y prioridad
 
@@ -155,9 +192,14 @@ base de datos.
 - No vende ni comparte datos con terceros desde el código actual.
 - No consulta la API de YouTube: el único tráfico hacia Google ocurre al pulsar reproducir un
   vídeo, y siempre contra `youtube-nocookie.com`.
-- No pide credenciales de Epic ni de GOG, ni implementa un inicio de sesión propio contra
-  ellas: solo lee ficheros que esos clientes ya han escrito en el disco.
+- No pide la contraseña de Epic, de GOG ni de itch.io: el inicio de sesión ocurre en la página
+  de la propia tienda y lo que Vindexa recibe es un testigo, que guarda en el llavero del
+  sistema y borra al cerrar sesión.
+- No vincula ninguna cuenta por su cuenta: sin que lo pidas, sólo lee ficheros que esos
+  clientes ya han escrito en el disco.
 - No abre los ficheros de sesión de Heroic ni de Legendary: solo comprueba si existen.
+- No envía tu lista de deseados ni tu biblioteca a ningún agregador de precios de terceros:
+  los precios se piden a la tienda que los publica.
 - No envía fuera del equipo el modelo de gustos ni la puntuación de prioridad.
 - No modifica manifiestos ni archivos internos de Steam.
 - No instala ni elimina un juego por sí sola: solicita la acción al cliente oficial.

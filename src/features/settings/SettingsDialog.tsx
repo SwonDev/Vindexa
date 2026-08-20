@@ -22,6 +22,7 @@ import {
   IconUnlink,
   IconUpload,
   IconUsersGroup,
+  IconWorld,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -1097,6 +1098,38 @@ function PrivacySettings() {
           <IconCheck /> Las sincronizaciones no sobrescriben tu organización personal.
         </li>
       </ul>
+
+      {/* Una página de privacidad que sólo enumera lo que se queda aquí dice
+          media verdad: Vindexa **sí** habla con las tiendas, y para algunas
+          cosas les dice de qué juegos habla. Lo que sale se dice con la misma
+          claridad que lo que se queda. */}
+      <SettingsHeading
+        title="Qué sale de este equipo"
+        description="Vindexa pregunta a las tiendas por datos públicos. Esto es todo lo que viaja."
+      />
+      <ul className="privacy-list" data-tone="outbound">
+        <li>
+          <IconWorld /> <b>Los AppID de tus juegos y deseados</b>, a la tienda pública de Steam,
+          para traer precios, fichas, capturas, publicaciones oficiales y la marca DRM. Van los
+          identificadores, no tu cuenta.
+        </li>
+        <li>
+          <IconWorld /> <b>Nada tuyo</b> a Epic ni a GOG: sus catálogos de regalos y rebajas se
+          piden igual para todo el mundo, sin identificarte.
+        </li>
+        <li>
+          <IconWorld /> <b>Tu SteamID y tu Web API Key</b>, sólo a Steam y sólo si vinculas la
+          cuenta, para traer tiempo jugado y logros.
+        </li>
+        <li>
+          <IconWorld /> <b>Lo que navegues</b> en el navegador integrado, a esa tienda y con la
+          sesión que tú hayas iniciado en ella. Cada tienda tiene su almacén aislado.
+        </li>
+      </ul>
+      <p className="settings-note">
+        El modelo de gustos, las notas, los estados y las colecciones no salen: se calculan y se
+        guardan aquí. Vindexa no tiene servidor propio, ni telemetría, ni cuenta de Vindexa.
+      </p>
     </div>
   );
 }

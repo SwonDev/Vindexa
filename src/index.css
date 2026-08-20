@@ -3146,7 +3146,24 @@ input[type="search"]::-webkit-search-results-decoration {
   color: #adb8bc;
 }
 .privacy-list svg {
+  flex: 0 0 auto;
   color: var(--v-success);
+}
+/* Lo que sale no es una garantía: es un hecho que conviene leer entero. */
+.privacy-list[data-tone="outbound"] li {
+  align-items: flex-start;
+  min-height: 0;
+  padding: 9px 10px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.privacy-list[data-tone="outbound"] svg {
+  margin-top: 2px;
+  color: var(--v-cyan);
+}
+.privacy-list[data-tone="outbound"] b {
+  color: var(--foreground);
+  font-weight: 600;
 }
 .settings-note {
   color: var(--v-muted);

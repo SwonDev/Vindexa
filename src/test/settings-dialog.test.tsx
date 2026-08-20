@@ -556,3 +556,27 @@ describe("ajustes y secretos", () => {
     expect(screen.queryByRole("button", { name: /Ver la versión publicada/ })).toBeNull();
   });
 });
+
+/**
+ * La página de privacidad.
+ *
+ * Enumerar sólo lo que se queda aquí es media verdad: Vindexa pregunta a las
+ * tiendas y para algunas cosas les dice de qué juegos habla. Lo que sale se
+ * dice con la misma claridad que lo que se queda, o la página engaña por
+ * omisión.
+ */
+describe("privacidad", () => {
+  it("dice también qué sale del equipo, no sólo qué se queda", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Privacidad" }));
+
+    expect(await screen.findByText("Privacidad por diseño")).toBeVisible();
+    expect(screen.getByText("Qué sale de este equipo")).toBeVisible();
+    expect(screen.getByText(/Los AppID de tus juegos y deseados/)).toBeVisible();
+    expect(screen.getByText(/sólo a Steam y sólo si vinculas la/)).toBeVisible();
+    expect(screen.getByText(/Nada tuyo/)).toBeVisible();
+    expect(screen.getByText(/ni telemetría, ni cuenta de Vindexa/)).toBeVisible();
+  });
+});
