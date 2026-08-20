@@ -89,6 +89,26 @@ type GamePreviewCardAllProps = GamePreviewCardProps &
  * composición funciona en cualquier orden. Hay una prueba que monta los dos
  * juntos y pulsa de verdad.
  */
+/**
+ * ¿Hay una ficha —o cualquier diálogo— abierta delante?
+ *
+ * La vista rápida existe para decidir si abrir algo. Con algo ya abierto encima
+ * no ayuda a nada: estorba, y encima aparece **sobre** la capa que manda.
+ *
+ * Pasaba sin que nadie lo pidiera: la ficha no cubre la columna de la
+ * biblioteca, así que al abrirse cambia el reparto de la pantalla, el navegador
+ * vuelve a mirar qué hay bajo el puntero —que no se ha movido— y le manda un
+ * `pointerenter` a la misma carátula. Para el emergente eso es indistinguible
+ * de alguien pasando el ratón por encima. Se coló hasta la captura del README.
+ *
+ * Se mira `[role="dialog"][data-state="open"]`, que son atributos públicos de
+ * la librería, no un detalle interno suyo.
+ */
+function hayUnaCapaModalDelante(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.querySelector('[role="dialog"][data-state="open"]') !== null;
+}
+
 export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllProps>(
   function GamePreviewCard(
     {
@@ -105,14 +125,46 @@ export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllP
     ref,
   ) {
     const [open, setOpen] = useState(false);
+    // Cerrar no basta: el emergente tarda en aparecer, y si se pulsa antes de
+    // que le dé tiempo, la cuenta atrás sigue corriendo y termina con la ficha
+    // ya delante. Esta bandera ignora esa apertura tardía hasta que el puntero
+    // salga del disparador y vuelva, que es cuando de verdad se está pidiendo.
+    const suprimido = useRef(false);
     const reducedMotion = useReducedMotion();
+
+    const cerrarPorqueYaSeHaDecidido = () => {
+      suprimido.current = true;
+      setOpen(false);
+    };
+    // Y si la capa modal llega **después**, con la tarjeta ya abierta —desde la
+    // paleta de comandos, o con el teclado desde otro sitio—, la guarda de
+    // apertura no la ha visto pasar. Abrir un diálogo mueve el foco dentro de
+    // él: eso sirve de aviso sin acoplarse a nada interno.
+    useEffect(() => {
+      if (!open) return;
+      const alEnfocar = (event: FocusEvent) => {
+        const destino = event.target;
+        if (destino instanceof Element && destino.closest('[role="dialog"]')) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener("focusin", alEnfocar);
+      return () => document.removeEventListener("focusin", alEnfocar);
+    }, [open]);
+
+    const volverAPermitir = () => {
+      suprimido.current = false;
+    };
 
     return (
       <HoverCardPrimitive.Root
         openDelay={OPEN_DELAY_MS}
         closeDelay={0}
         open={disabled ? false : open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => {
+          if (next && (suprimido.current || hayUnaCapaModalDelante())) return;
+          setOpen(next);
+        }}
       >
         {/* Al pulsar, la vista rápida se va.
             El emergente se cierra cuando el puntero **sale** del disparador, y
@@ -132,12 +184,23 @@ export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllP
           {...rest}
           onPointerDown={(event) => {
             rest.onPointerDown?.(event);
-            setOpen(false);
+            cerrarPorqueYaSeHaDecidido();
           }}
           onClick={(event) => {
             // El teclado no genera `pointerdown`: abrir con Intro también cierra.
             rest.onClick?.(event);
-            setOpen(false);
+            cerrarPorqueYaSeHaDecidido();
+          }}
+          onPointerLeave={(event) => {
+            // Sacar el ratón y volver a entrar sí es pedirlo otra vez.
+            rest.onPointerLeave?.(event);
+            volverAPermitir();
+          }}
+          onBlur={(event) => {
+            // Y lo mismo con el teclado: al irse el foco, la próxima visita
+            // vuelve a poder enseñar la tarjeta.
+            rest.onBlur?.(event);
+            volverAPermitir();
           }}
         >
           {children}

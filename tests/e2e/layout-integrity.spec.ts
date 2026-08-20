@@ -250,3 +250,90 @@ test.describe("los avisos de estado se leen", () => {
     }
   });
 });
+
+/**
+ * La vista rápida no puede quedarse encima de la ficha que acaba de abrirse.
+ *
+ * # El fallo
+ *
+ * Al pulsar una carátula se abre la ficha justo debajo del puntero. La tarjeta
+ * emergente se cierra al salir el ratón del disparador, y ahí el ratón ya no se
+ * mueve: el gesto no llega nunca y la tarjeta se queda flotando sobre el
+ * título del juego. Se coló hasta la captura del README, que es donde se ve
+ * mejor lo que esto significa: la portada del repositorio enseñaba la ficha con
+ * un recuadro encima tapando el nombre.
+ */
+test.describe("capas que se pisan", () => {
+  test("abrir una ficha cierra la vista rápida que había debajo", async ({ app, page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await app.goto();
+    await app.waitForShell();
+
+    // El emergente tarda en aparecer a propósito; se le da su tiempo para que
+    // la prueba compruebe el cierre y no una carrera contra el retardo.
+    const carátula = app.gameButton("Nebula Frontier");
+    await carátula.hover();
+    await page.waitForTimeout(900);
+
+    await carátula.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.waitForTimeout(900);
+
+    // Radix marca el disparador con el estado del emergente, y el contenido
+    // vive en un portal fuera del diálogo: se comprueban los dos.
+    await expect(carátula.locator('[data-state="open"]')).toHaveCount(0);
+    const emergentes = page.locator('[data-radix-popper-content-wrapper]');
+    await expect(emergentes).toHaveCount(0);
+  });
+
+  /**
+   * Y el caso que de verdad se coló: pulsar **sin esperar**.
+   *
+   * El emergente tarda setecientos milisegundos en aparecer. Si se pulsa antes,
+   * el cierre no encuentra nada abierto que cerrar, pero la cuenta atrás sigue
+   * corriendo: termina con la ficha ya delante y abre la tarjeta encima. Por
+   * eso pasaba «muchas veces» y no siempre.
+   */
+  test("y tampoco aparece después, si se pulsó antes de que le diera tiempo", async ({
+    app,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await app.goto();
+    await app.waitForShell();
+
+    const carátula = app.gameButton("Nebula Frontier");
+    await carátula.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    // Más que el retardo de apertura: si va a salir, sale aquí.
+    await page.waitForTimeout(1200);
+
+    await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
+  });
+
+  /**
+   * Y el tercer camino: la tarjeta ya está abierta y la ficha llega de otro
+   * sitio. La guarda de apertura no puede verlo venir, así que el cierre se
+   * apoya en lo único que siempre ocurre al abrir una capa modal: el foco se
+   * mete dentro de ella.
+   */
+  test("una ficha abierta desde el teclado también se lleva la vista rápida", async ({
+    app,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await app.goto();
+    await app.waitForShell();
+
+    await app.gameButton("Nebula Frontier").hover();
+    await expect(page.locator(".game-preview")).toBeVisible();
+
+    // Otra carátula, abierta con el teclado: la que está bajo el ratón no se
+    // toca, y aun así su tarjeta tiene que irse.
+    await app.gameButton("Clockwork Harbor").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    await expect(page.locator(".game-preview")).toHaveCount(0);
+  });
+});

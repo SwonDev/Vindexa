@@ -4,6 +4,33 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
+## [Sin publicar]
+
+### Corregido
+
+- **La vista rápida se quedaba encima de la ficha, y se coló hasta la portada del repositorio.**
+  Al pulsar una carátula, la ficha se abre pero **no cubre la columna de la biblioteca**: cambia
+  el reparto de la pantalla, el navegador vuelve a mirar qué hay bajo el puntero —que no se ha
+  movido— y le manda un `pointerenter` a la misma carátula. Para el emergente eso es
+  indistinguible de alguien pasando el ratón por encima, así que volvía a salir, ya sobre el
+  título del juego. La captura de la ficha que enseña el README lo llevaba puesto. Ahora la
+  regla es la que debía ser desde el principio: **con una capa modal delante, la ayuda para
+  decidir no se enseña**, ni al abrirla ni si la ficha llega después desde el teclado o la
+  paleta. Tres pruebas de extremo a extremo cubren los tres caminos.
+- **Un regalo de Epic que empieza hoy decía «Desde el 20 ago».** Epic cambia el regalo los
+  jueves a media tarde, así que lo anunciado empieza hoy la mitad de las veces y había que
+  mirar el calendario para entenderlo. Hoy y mañana se dicen por su nombre, y con la hora.
+
+### Cambiado
+
+- **El alta de vídeos deja de ocupar la columna sin que nadie la pida.** Cuatro campos y un
+  botón, siempre visibles en el panel de deseados, aunque no hubiera ni un vídeo guardado. Ahora
+  se piden con un botón; el estado vacío ya explicaba para qué sirve.
+- **El tablero de colecciones aparece a partir de la segunda.** Con una sola se comía
+  cuatrocientos píxeles de alto para enseñar una tarjeta con media pantalla en negro al lado, y
+  todo lo que ofrece —elegir, reordenar, editar, borrar— o no aplica con una colección o está
+  también en la cabecera del detalle.
+
 ## [0.1.5] · 2026-08-20
 
 ### Añadido
