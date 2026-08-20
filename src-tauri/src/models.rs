@@ -539,24 +539,25 @@ pub fn is_valid_archive_scope(value: &str) -> bool {
     ARCHIVE_SCOPES.contains(&value)
 }
 
-/// A qué juegos se les puede preguntar por su DRM.
+/// Qué juegos existen en la tienda de Steam.
 ///
-/// La ficha de la tienda de Steam es la única fuente que se consulta, así que
-/// un juego de Epic o de itch.io no entra: no hay a quién preguntarle. GOG no
-/// necesita la pregunta —su catálogo entero es sin DRM y así lo declara— y ya
-/// llega marcado.
+/// Es la pregunta que hay detrás de tres cosas distintas: si se le puede pedir
+/// la ficha, si se le puede preguntar por su DRM y si cuenta como pendiente de
+/// una u otra. Un juego de Epic o de itch.io no está en Steam —su identificador
+/// se lo inventó Vindexa— y GOG llega ya marcado sin DRM, porque su catálogo
+/// entero lo es y así lo declara.
+///
+/// Se escribe una vez porque, cuando eran tres condiciones parecidas, cada una
+/// dejaba fuera cosas distintas: la biblioteca prometía comprobar 274 juegos
+/// que nadie iba a preguntar nunca, y abrir la ficha de un juego de Epic le
+/// pedía a Steam un AppID inventado.
 ///
 /// Vive aquí, junto a `archive_scope_clause`, por lo mismo que aquélla: las
 /// pruebas de integración compilan `db/library.rs` con `models.rs` y sin el
 /// resto de `db`.
 ///
-/// Se escribe una vez porque la usan el repaso que pregunta y el recuento que
-/// dice cuántos faltan. Cuando eran dos condiciones distintas, la biblioteca
-/// prometía comprobar 274 juegos que nadie iba a preguntar nunca, y la nota
-/// «sin comprobar» no podía llegar a cero.
-///
 /// La tabla `games` tiene que estar aliasada como `g`.
-pub const DRM_PREGUNTABLE: &str = "(g.external_store IS NULL OR g.external_store = '')";
+pub const ES_DE_STEAM: &str = "(g.external_store IS NULL OR g.external_store = '')";
 
 /// Cláusula que filtra la consulta de biblioteca según el ámbito. `None`
 /// significa «no filtres», que es exactamente lo que pide `all`.

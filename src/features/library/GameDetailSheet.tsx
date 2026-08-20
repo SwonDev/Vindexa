@@ -864,13 +864,19 @@ export function GameDetailSheet({
                     {genre}
                   </Badge>
                 ))}
-                {detail.metadataStatus === "failed" && (
+                {/* El estado de la ficha habla de Steam, así que sólo dice algo
+                    de un juego que esté en Steam. En uno de Epic marcaba «Ficha
+                    no publicada» —culpando a Steam de no publicar algo que
+                    nunca fue suyo— y ofrecía reintentarlo, que era pedirle otra
+                    vez un AppID inventado. */}
+                {!detail.externalStore && detail.metadataStatus === "failed" && (
                   <Badge variant="destructive">Ficha de Steam sin conexión</Badge>
                 )}
-                {detail.metadataStatus === "unavailable" && (
+                {!detail.externalStore && detail.metadataStatus === "unavailable" && (
                   <Badge variant="outline">Ficha no publicada</Badge>
                 )}
-                {["failed", "unavailable"].includes(detail.metadataStatus) && (
+                {!detail.externalStore &&
+                  ["failed", "unavailable"].includes(detail.metadataStatus) && (
                   <Button
                     size="xs"
                     variant="secondary"

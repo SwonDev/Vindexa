@@ -38,7 +38,7 @@ use tokio::time::sleep;
 
 use crate::db::Database;
 use crate::error::AppResult;
-use crate::models::DRM_PREGUNTABLE;
+use crate::models::ES_DE_STEAM;
 use crate::steam::store_api;
 
 /// Cuántos juegos se repasan por tanda. Con pausa de segundo y medio, una tanda
@@ -167,7 +167,7 @@ fn pending_app_ids(database: &Database, limit: u32) -> AppResult<Vec<u32>> {
     let mut statement = connection.prepare(&format!(
         "SELECT g.app_id
            FROM games g
-          WHERE {DRM_PREGUNTABLE}
+          WHERE {ES_DE_STEAM}
             AND g.drm_state = 'unknown'
             AND g.drm_checked_at IS NULL
           ORDER BY g.app_id ASC
@@ -185,7 +185,7 @@ fn pending_count(database: &Database) -> AppResult<u32> {
         &format!(
             "SELECT COUNT(*)
            FROM games g
-          WHERE {DRM_PREGUNTABLE}
+          WHERE {ES_DE_STEAM}
             AND g.drm_state = 'unknown'
             AND g.drm_checked_at IS NULL"
         ),

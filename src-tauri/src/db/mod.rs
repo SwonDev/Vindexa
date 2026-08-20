@@ -2603,8 +2603,10 @@ mod durability_tests {
     }
 }
 
+/// Cifras que tienen que coincidir con la pantalla a la que llevan, y
+/// preguntas que sólo se hacen a quien puede contestarlas.
 #[cfg(test)]
-mod pruebas_del_recuento_de_familia {
+mod pruebas_de_recuentos_y_origenes {
     use super::{library, migrations, organization, seed_defaults};
     use rusqlite::Connection;
 
@@ -2694,6 +2696,40 @@ mod pruebas_del_recuento_de_familia {
             stats.external_store_games.get("gog"),
             Some(&1),
             "un juego archivado no se enseña, así que tampoco se cuenta"
+        );
+    }
+
+    /// A un AppID inventado no se le pregunta.
+    ///
+    /// Los juegos de otras tiendas llevan un identificador que se inventó
+    /// Vindexa —2.000.000.055 y siguientes—. Abrir su ficha se lo pedía a
+    /// Steam, que contestaba que no existe, y el juego quedaba marcado «Ficha
+    /// no publicada» con un botón para repetirlo cada día.
+    #[test]
+    fn a_un_juego_de_otra_tienda_no_se_le_pide_la_ficha_a_steam() {
+        let connection = base();
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source, external_store)
+                 VALUES (2000000055, 'Un juego de Epic', 'owned', 'epic')",
+                [],
+            )
+            .expect("insertar juego de otra tienda");
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source)
+                 VALUES (620, 'Uno de Steam', 'owned')",
+                [],
+            )
+            .expect("insertar juego de Steam");
+
+        assert!(
+            !library::store_metadata_refresh_due(&connection, 2_000_000_055).expect("consultar"),
+            "no hay ficha que pedir: ese identificador no existe en Steam"
+        );
+        assert!(
+            library::store_metadata_refresh_due(&connection, 620).expect("consultar"),
+            "uno de Steam sin ficha sí toca pedirlo"
         );
     }
 

@@ -1,7 +1,7 @@
 use crate::error::{AppError, AppResult};
 use crate::models::RichGameMetadata;
 use crate::models::{
-    ActivityItem, BulkUpdateStatusInput, DRM_PREGUNTABLE, GameDetail, GameListRequest, GameSession,
+    ActivityItem, BulkUpdateStatusInput, ES_DE_STEAM, GameDetail, GameListRequest, GameSession,
     GameSummary, LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PagedGames,
     UpdateGameInput, archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
 };
@@ -201,7 +201,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     -- la misma biblioteca.
                     COALESCE(SUM(CASE WHEN g.drm_state = 'unknown'
                                        AND g.drm_checked_at IS NULL
-                                       AND {DRM_PREGUNTABLE}
+                                       AND {ES_DE_STEAM}
                                       THEN 1 ELSE 0 END), 0)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
@@ -1032,18 +1032,29 @@ pub fn get_game_detail(connection: &Connection, app_id: u32) -> AppResult<GameDe
     })
 }
 
+/// ¿Toca volver a pedirle la ficha a Steam?
+///
+/// Lo que no está en Steam no se pregunta nunca. Abrir la ficha de un juego de
+/// Epic le pedía a Steam el AppID que Vindexa se había inventado para él
+/// —2.000.000.055—, Steam contestaba que no existe, y el juego quedaba marcado
+/// «Ficha no publicada» con un botón para reintentarlo cada día. Trescientos
+/// dieciocho juegos, una petición inútil cada vez que se abrían y una etiqueta
+/// que culpaba a Steam de no publicar algo que nunca fue suyo.
 pub fn store_metadata_refresh_due(connection: &Connection, app_id: u32) -> AppResult<bool> {
     connection
         .query_row(
-            "SELECT CASE
-                WHEN metadata_fetched_at IS NULL THEN 1
-                WHEN metadata_status = 'success'
-                    THEN datetime(metadata_fetched_at) < datetime('now', '-7 days')
-                WHEN metadata_status = 'unavailable'
-                    THEN datetime(metadata_fetched_at) < datetime('now', '-1 day')
-                ELSE datetime(metadata_fetched_at) < datetime('now', '-2 hours')
+            &format!(
+                "SELECT CASE
+                WHEN NOT {ES_DE_STEAM} THEN 0
+                WHEN g.metadata_fetched_at IS NULL THEN 1
+                WHEN g.metadata_status = 'success'
+                    THEN datetime(g.metadata_fetched_at) < datetime('now', '-7 days')
+                WHEN g.metadata_status = 'unavailable'
+                    THEN datetime(g.metadata_fetched_at) < datetime('now', '-1 day')
+                ELSE datetime(g.metadata_fetched_at) < datetime('now', '-2 hours')
              END
-             FROM games WHERE app_id = ?1",
+             FROM games g WHERE g.app_id = ?1"
+            ),
             [app_id],
             |row| row.get::<_, i64>(0).map(|value| value != 0),
         )

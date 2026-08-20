@@ -253,6 +253,31 @@ describe("estructura de la descripción de la ficha", () => {
   });
 
   /**
+   * Y tampoco se le echa la culpa a Steam.
+   *
+   * Abrir la ficha de un juego de Epic le pedía a Steam el AppID que Vindexa se
+   * había inventado para él. Steam contestaba que no existe, el juego quedaba
+   * marcado «Ficha no publicada» y se ofrecía reintentarlo cada día: una
+   * etiqueta que culpa a Steam de no publicar algo que nunca fue suyo, y un
+   * botón que repite una petición imposible.
+   */
+  it("no marca «ficha no publicada» en un juego que no es de Steam", async () => {
+    const { detailedDescription: _sinDescripcion, ...sinTexto } = enriched;
+    serveDetail({
+      ...sinTexto,
+      shortDescription: "",
+      metadataStatus: "unavailable",
+      externalStore: "epic",
+    });
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    expect(screen.queryByText("Ficha no publicada")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reintentar ficha/ })).toBeNull();
+    expect(screen.getByText(/Este juego viene de Epic Games Store/)).toBeVisible();
+  });
+
+  /**
    * Y mil quinientos ochenta y tres más, por el mismo motivo.
    *
    * El catálogo de Steam Family tampoco se pregunta a Steam mientras no conste
