@@ -6,6 +6,56 @@ import { expect, test } from "./support/fixtures";
  * presente en el árbol. Un contenedor mal repartido deja el listado montado y
  * accesible por el DOM mientras la pantalla está en blanco.
  */
+/**
+ * Un panel lateral no puede quedar debajo de la lista.
+ *
+ * # El fallo
+ *
+ * La barra de la lista de deseados era una rejilla de columnas automáticas
+ * —carriles, búsqueda, «ocultar los que ya tienes» y orden— y su ancho mínimo
+ * llegó a 921 px dentro de una columna de 786. Como `.wishlist-list` no es un
+ * contenedor con desplazamiento, el sobrante no se recorta: se **pinta encima**
+ * del editor. En pantalla eso eran los precios cortados por la mitad y las
+ * etiquetas del panel partidas —«é esperas de este juego», «ídeos guardados»—.
+ *
+ * Nada fallaba: el DOM estaba entero y las pruebas de unidad, en verde.
+ */
+test.describe("paneles que conviven", () => {
+  test("el editor de deseados no queda tapado por la lista", async ({ app, page }) => {
+    await page.setViewportSize({ width: 1180, height: 800 });
+    await app.goto();
+    await app.waitForShell();
+    await app.navigate("Deseados");
+    await page.getByRole("radio", { name: "Lista" }).first().click();
+    await page.locator(".wishlist-list__row").first().click();
+    await expect(page.locator(".wishlist-split__editor")).toBeVisible();
+
+    const medidas = await page.evaluate(() => {
+      const lista = document.querySelector<HTMLElement>(".wishlist-list");
+      const editor = document.querySelector<HTMLElement>(".wishlist-split__editor");
+      if (!lista || !editor) return null;
+      return {
+        listaDerecha: lista.getBoundingClientRect().right,
+        listaAncho: lista.getBoundingClientRect().width,
+        listaContenido: lista.scrollWidth,
+        editorIzquierda: editor.getBoundingClientRect().left,
+      };
+    });
+    expect(medidas).not.toBeNull();
+    if (!medidas) return;
+
+    expect(
+      medidas.listaDerecha,
+      "la lista se mete debajo del editor: su barra no cabe en la columna",
+    ).toBeLessThanOrEqual(medidas.editorIzquierda + 1);
+    expect(
+      medidas.listaContenido,
+      "algo dentro de la lista es más ancho que la lista",
+    ).toBeLessThanOrEqual(Math.ceil(medidas.listaAncho) + 1);
+    await app.expectNoHorizontalOverflow();
+  });
+});
+
 test.describe("integridad de la maquetación", () => {
   test("el listado empieza justo debajo de la barra y cabe en la ventana", async ({
     app,

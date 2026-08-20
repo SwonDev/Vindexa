@@ -1592,13 +1592,23 @@
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
+  /* Sin esto, un hijo más ancho que la columna hace crecer la propia lista: en
+     una rejilla, `min-width` vale `auto` y el elemento no puede encoger por
+     debajo de su contenido. */
+  min-width: 0;
   border: 1px solid var(--border);
   background: var(--card);
 }
 
+/* La barra se dobla en vez de empujar la lista fuera de su columna.
+   Con rejilla de columnas automáticas —carriles, búsqueda, «ocultar los que ya
+   tienes» y orden— el ancho mínimo del conjunto era 921 px dentro de una
+   columna de 786: la lista se salía por la derecha y se pintaba **encima** del
+   editor, cortando los precios por la mitad y dejando las etiquetas del panel
+   partidas. Medido a 1.180 px de ventana. */
 .wishlist-list__toolbar {
-  display: grid;
-  grid-template-columns: auto minmax(160px, 1fr) auto auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
@@ -1637,6 +1647,10 @@
 }
 
 .wishlist-list__search {
+  /* Se lleva el espacio sobrante y cede el suyo antes que nadie: es lo único
+     de la barra que sigue siendo usable a cualquier ancho. */
+  flex: 1 1 180px;
+  min-width: 0;
   position: relative;
   display: flex;
   gap: 6px;
