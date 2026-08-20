@@ -50,6 +50,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **Los regalos de Epic también tienen vista rápida.** Guardaban su imagen desde el principio y
   no se pintaba en ninguna parte: ahora, al pasar el ratón, se enseña con lo que Vindexa sabe
   —si ya lo tienes, cuánto queda y de qué va—.
+- **La prioridad calculada por fin calcula y ordena.** El motor existe desde la migración 024
+  —determinista, explicable, con sus señales y su prueba de que la suma cuadra— y sólo corría si
+  alguien abría una ficha y pulsaba «Recalcular la biblioteca». En una instalación real llevaba
+  los 3.877 juegos con la puntuación a cero, el panel «Por qué está aquí» diciendo «todavía no se
+  ha calculado» en todas las fichas, y la frase «la puntuación que ordena este juego en tu
+  biblioteca» era falsa: no se leía en ninguna consulta. Ahora se recalcula solo al arrancar y
+  cada doce horas —las señales dependen del reloj—, y hay un orden **Prioridad calculada** en la
+  biblioteca, que es lo que la ficha decía que hacía.
 - **La compatibilidad con Steam Deck deja de estar vacía.** La columna existe desde la primera
   migración, tiene índice, viaja en la ficha, se puede filtrar y hasta sirve para una regla de
   colección inteligente. Nunca la escribió nadie: vacía en los 3.877 juegos, la ficha decía «Sin
