@@ -535,6 +535,10 @@ impl Database {
         library::store_metadata_refresh_due(&self.open()?, app_id)
     }
 
+    pub fn is_steam_game(&self, app_id: u32) -> AppResult<bool> {
+        library::is_steam_game(&self.open()?, app_id)
+    }
+
     pub fn achievements_refresh_due(&self, app_id: u32) -> AppResult<bool> {
         library::achievements_refresh_due(&self.open()?, app_id)
     }

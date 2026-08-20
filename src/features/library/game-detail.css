@@ -1112,6 +1112,19 @@ button.detail-media__item:focus-visible img {
   line-height: 1.45;
 }
 
+/* Por qué aquí no hay nada que consultar: el juego no es de Steam. Se lee como
+   una explicación, no como un fallo. */
+.dlc-panel__foreign {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .dlc-panel__failure {
   display: flex;
   align-items: center;

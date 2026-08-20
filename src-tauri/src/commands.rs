@@ -2102,6 +2102,20 @@ pub async fn refresh_game_dlc(
     let _maintenance = state.maintenance.read().await;
     let database = state.database.clone();
 
+    // El catálogo de contenido adicional se le pide a Steam. Un juego de otra
+    // tienda lleva un identificador que se inventó Vindexa, así que preguntar
+    // por él es una petición imposible con una respuesta engañosa.
+    let de_steam = blocking({
+        let database = database.clone();
+        move || database.is_steam_game(app_id)
+    })
+    .await?;
+    if !de_steam {
+        return Err(AppError::validation(
+            "Este juego no está en Steam: su contenido adicional se consulta en la tienda donde lo compraste.",
+        ));
+    }
+
     let evidence = blocking(move || Ok(steam::dlc::scan_installed_dlc(app_id))).await?;
     let catalog = steam::dlc::fetch_catalog(app_id)
         .await

@@ -736,11 +736,15 @@ export function GameDetailSheet({
                     typeof detail.achievementsTotal === "number"
                       ? `${detail.achievementsUnlocked}/${detail.achievementsTotal}`
                       : "Sin datos",
-                  note: detail.achievementsFetchedAt
-                    ? `Act. ${formatRelativeDate(detail.achievementsFetchedAt)}`
-                    : undefined,
+                  note: detail.externalStore
+                    ? "Los logros los publica Steam"
+                    : detail.achievementsFetchedAt
+                      ? `Act. ${formatRelativeDate(detail.achievementsFetchedAt)}`
+                      : undefined,
+                  // Pedir los logros de un juego de Epic era pedírselos a Steam
+                  // por un identificador que no existe allí.
                   action:
-                    detail.achievementsStatus !== "success" ? (
+                    !detail.externalStore && detail.achievementsStatus !== "success" ? (
                       <Button
                         size="xs"
                         variant="ghost"
@@ -877,20 +881,20 @@ export function GameDetailSheet({
                 )}
                 {!detail.externalStore &&
                   ["failed", "unavailable"].includes(detail.metadataStatus) && (
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    disabled={metadataMutation.isPending}
-                    onClick={() => metadataMutation.mutate({ gameId: detail.appId, force: true })}
-                  >
-                    {metadataMutation.isPending ? (
-                      <IconLoader2 className="is-spinning" />
-                    ) : (
-                      <IconRefresh />
-                    )}
-                    Reintentar ficha
-                  </Button>
-                )}
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      disabled={metadataMutation.isPending}
+                      onClick={() => metadataMutation.mutate({ gameId: detail.appId, force: true })}
+                    >
+                      {metadataMutation.isPending ? (
+                        <IconLoader2 className="is-spinning" />
+                      ) : (
+                        <IconRefresh />
+                      )}
+                      Reintentar ficha
+                    </Button>
+                  )}
               </div>
             </motion.section>
             {specs.length > 0 && (
@@ -1066,6 +1070,7 @@ export function GameDetailSheet({
                   key={`dlc-${detail.appId}`}
                   appId={detail.appId}
                   title={detail.title}
+                  externalStore={detail.externalStore ?? undefined}
                 />
               </TabsContent>
               <TabsContent value="videos">

@@ -1132,18 +1132,40 @@ pub fn save_store_metadata(
     Ok(())
 }
 
+/// ¿Toca volver a pedirle los logros a Steam?
+///
+/// Los logros los publica Steam para sus juegos. Uno de Epic o de itch.io no
+/// tiene ninguno que preguntar allí, y su identificador ni siquiera existe.
 pub fn achievements_refresh_due(connection: &Connection, app_id: u32) -> AppResult<bool> {
     connection
         .query_row(
-            "SELECT CASE
-                WHEN achievements_fetched_at IS NULL THEN 1
-                WHEN achievements_status = 'success'
-                    THEN datetime(achievements_fetched_at) < datetime('now', '-6 hours')
-                WHEN achievements_status = 'unavailable'
-                    THEN datetime(achievements_fetched_at) < datetime('now', '-1 day')
-                ELSE datetime(achievements_fetched_at) < datetime('now', '-30 minutes')
+            &format!(
+                "SELECT CASE
+                WHEN NOT {ES_DE_STEAM} THEN 0
+                WHEN g.achievements_fetched_at IS NULL THEN 1
+                WHEN g.achievements_status = 'success'
+                    THEN datetime(g.achievements_fetched_at) < datetime('now', '-6 hours')
+                WHEN g.achievements_status = 'unavailable'
+                    THEN datetime(g.achievements_fetched_at) < datetime('now', '-1 day')
+                ELSE datetime(g.achievements_fetched_at) < datetime('now', '-30 minutes')
              END
-             FROM games WHERE app_id = ?1",
+             FROM games g WHERE g.app_id = ?1"
+            ),
+            [app_id],
+            |row| row.get::<_, i64>(0).map(|value| value != 0),
+        )
+        .optional()?
+        .ok_or_else(|| AppError::not_found("El juego ya no está en la biblioteca."))
+}
+
+/// ¿Este juego existe en la tienda de Steam?
+///
+/// Lo usan las órdenes que hablan con Steam para no pedirle nada por un
+/// identificador que se inventó Vindexa.
+pub fn is_steam_game(connection: &Connection, app_id: u32) -> AppResult<bool> {
+    connection
+        .query_row(
+            &format!("SELECT {ES_DE_STEAM} FROM games g WHERE g.app_id = ?1"),
             [app_id],
             |row| row.get::<_, i64>(0).map(|value| value != 0),
         )

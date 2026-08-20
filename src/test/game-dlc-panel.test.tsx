@@ -126,13 +126,13 @@ const report: DlcRefreshReport = {
   summary: openSummary,
 };
 
-function renderPanel() {
+function renderPanel(externalStore?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <GameDlcPanel appId={620} title="Portal 2" />
+      <GameDlcPanel appId={620} title="Portal 2" {...(externalStore ? { externalStore } : {})} />
     </QueryClientProvider>,
   );
 }
@@ -143,6 +143,28 @@ function rowOf(title: string): HTMLElement {
   if (!row) throw new Error(`No se encontró la fila del DLC «${title}».`);
   return row;
 }
+
+/**
+ * El catálogo de contenido adicional lo publica Steam.
+ *
+ * En un juego de Epic, «Actualizar desde la tienda» le pedía a Steam el AppID
+ * que Vindexa se había inventado para él. La orden ahora lo rechaza, así que el
+ * botón no puede quedarse ofreciendo algo que va a fallar.
+ */
+describe("contenido adicional de un juego que no es de Steam", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedApi.listGameDlc.mockResolvedValue([]);
+    mockedApi.dlcSummary.mockResolvedValue(openSummary);
+  });
+
+  it("explica por qué no se puede consultar y no ofrece consultarlo", async () => {
+    renderPanel("epic");
+
+    expect(await screen.findByText(/Este juego es de Epic Games Store/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Actualizar desde la tienda/ })).toBeDisabled();
+  });
+});
 
 describe("gestión del contenido adicional", () => {
   beforeEach(() => {

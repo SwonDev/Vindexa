@@ -19,6 +19,7 @@ import {
 } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { formatDate, initials } from "@/lib/format";
+import { storeLabel } from "@/lib/stores";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { DlcEvidenceGap, DlcFilter, DlcRefreshReport, DlcSummary, GameDlc } from "@/lib/types";
 
@@ -85,6 +86,15 @@ type DlcFlagChange =
 interface Props {
   appId: number;
   title: string;
+  /**
+   * De qué tienda es, cuando no es de Steam.
+   *
+   * El catálogo de contenido adicional se le pide a Steam, así que en un juego
+   * de Epic o de itch.io el botón pedía un identificador que Vindexa se había
+   * inventado. Sin este dato el panel no puede saberlo y ofrece una consulta
+   * imposible.
+   */
+  externalStore?: string | undefined;
 }
 
 /**
@@ -102,7 +112,7 @@ interface Props {
  *    moneda, la cifra se presenta como «al menos» y se dice cuántos quedan
  *    fuera de la suma.
  */
-export function GameDlcPanel({ appId, title }: Props) {
+export function GameDlcPanel({ appId, title, externalStore }: Props) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<DlcFilter>("visible");
   const [report, setReport] = useState<DlcRefreshReport>();
@@ -162,7 +172,7 @@ export function GameDlcPanel({ appId, title }: Props) {
         <Button
           size="xs"
           variant="secondary"
-          disabled={refreshMutation.isPending}
+          disabled={refreshMutation.isPending || Boolean(externalStore)}
           onClick={() => refreshMutation.mutate()}
         >
           {refreshMutation.isPending ? <IconLoader2 className="is-spinning" /> : <IconRefresh />}
@@ -170,6 +180,13 @@ export function GameDlcPanel({ appId, title }: Props) {
         </Button>
       </header>
 
+      {externalStore ? (
+        <p className="dlc-panel__foreign" role="status">
+          El catálogo de contenido adicional lo publica Steam. Este juego es de{" "}
+          {storeLabel(externalStore)}: lo que tengas suyo se consulta en su propia tienda. Lo que
+          marques aquí a mano se guarda igual.
+        </p>
+      ) : null}
       {summary ? <DlcCounters summary={summary} /> : null}
       {summary ? <PendingValue summary={summary} /> : null}
 
