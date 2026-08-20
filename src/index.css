@@ -3165,6 +3165,11 @@ input[type="search"]::-webkit-search-results-decoration {
   color: var(--foreground);
   font-weight: 600;
 }
+/* La frase entera es un solo elemento: si cada trozo fuese hijo directo, el
+   `flex` del contenedor los repartiría en columnas y el texto se apilaría. */
+.privacy-list[data-tone="outbound"] li > span {
+  min-width: 0;
+}
 .settings-note {
   color: var(--v-muted);
   font-size: 10px;

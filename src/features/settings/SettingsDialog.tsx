@@ -1107,23 +1107,38 @@ function PrivacySettings() {
         title="Qué sale de este equipo"
         description="Vindexa pregunta a las tiendas por datos públicos. Esto es todo lo que viaja."
       />
+      {/* El texto va dentro de un solo `span`: con las frases sueltas, el `flex`
+          del contenedor convertía cada trozo en una columna y el «los AppID de
+          tus juegos» se apilaba en vertical al lado del resto. */}
       <ul className="privacy-list" data-tone="outbound">
         <li>
-          <IconWorld /> <b>Los AppID de tus juegos y deseados</b>, a la tienda pública de Steam,
-          para traer precios, fichas, capturas, publicaciones oficiales y la marca DRM. Van los
-          identificadores, no tu cuenta.
+          <IconWorld />
+          <span>
+            <b>Los AppID de tus juegos y deseados</b>, a la tienda pública de Steam, para traer
+            precios, fichas, capturas, publicaciones oficiales y la marca DRM. Van los
+            identificadores, no tu cuenta.
+          </span>
         </li>
         <li>
-          <IconWorld /> <b>Nada tuyo</b> a Epic ni a GOG: sus catálogos de regalos y rebajas se
-          piden igual para todo el mundo, sin identificarte.
+          <IconWorld />
+          <span>
+            <b>Nada tuyo</b> a Epic ni a GOG: sus catálogos de regalos y rebajas se piden igual para
+            todo el mundo, sin identificarte.
+          </span>
         </li>
         <li>
-          <IconWorld /> <b>Tu SteamID y tu Web API Key</b>, sólo a Steam y sólo si vinculas la
-          cuenta, para traer tiempo jugado y logros.
+          <IconWorld />
+          <span>
+            <b>Tu SteamID y tu Web API Key</b>, sólo a Steam y sólo si vinculas la cuenta, para
+            traer tiempo jugado y logros.
+          </span>
         </li>
         <li>
-          <IconWorld /> <b>Lo que navegues</b> en el navegador integrado, a esa tienda y con la
-          sesión que tú hayas iniciado en ella. Cada tienda tiene su almacén aislado.
+          <IconWorld />
+          <span>
+            <b>Lo que navegues</b> en el navegador integrado, a esa tienda y con la sesión que tú
+            hayas iniciado en ella. Cada tienda tiene su almacén aislado.
+          </span>
         </li>
       </ul>
       <p className="settings-note">

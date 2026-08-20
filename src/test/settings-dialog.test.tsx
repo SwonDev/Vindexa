@@ -579,4 +579,35 @@ describe("privacidad", () => {
     expect(screen.getByText(/Nada tuyo/)).toBeVisible();
     expect(screen.getByText(/ni telemetría, ni cuenta de Vindexa/)).toBeVisible();
   });
+
+  /**
+   * La frase entera tiene que ser **un** elemento.
+   *
+   * El contenedor es `flex`. Con los trozos sueltos como hijos directos, cada
+   * uno se convertía en una columna: el «Los AppID de tus juegos y deseados» se
+   * apilaba en vertical en una columna estrecha y el resto de la frase empezaba
+   * a su lado. Se leía a saltos, y ninguna prueba de texto lo veía.
+   */
+  it("cada punto es un icono y una frase, no cuatro columnas", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Privacidad" }));
+    await screen.findByText("Qué sale de este equipo");
+
+    // El diálogo vive en un portal, así que se busca en el documento entero.
+    const puntos = document.querySelectorAll('.privacy-list[data-tone="outbound"] li');
+    expect(puntos).toHaveLength(4);
+    for (const punto of puntos) {
+      const hijos = Array.from(punto.children);
+      expect(hijos).toHaveLength(2);
+      expect(hijos[0]?.tagName.toLowerCase()).toBe("svg");
+      expect(hijos[1]?.tagName.toLowerCase()).toBe("span");
+      // Y no queda texto suelto fuera de la frase.
+      const sueltos = Array.from(punto.childNodes).filter(
+        (nodo) => nodo.nodeType === Node.TEXT_NODE && nodo.textContent?.trim(),
+      );
+      expect(sueltos).toHaveLength(0);
+    }
+  });
 });
