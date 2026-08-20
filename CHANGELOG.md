@@ -83,6 +83,11 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   imagen se pedía y el navegador la bloqueaba en silencio, dejando el hueco con las iniciales
   —que es justo lo que se enseña cuando **no hay** carátula—. Ahora se declara, y una dirección
   de un anfitrión que la ventana no va a pintar ya no se guarda.
+- **El subrayado de la pestaña activa del planificador flotaba por debajo.** El estilo estaba
+  escrito contra un atributo que Radix no pone, así que no pintaba nada y mandaba la utilidad de
+  la librería, que dibuja la marca cinco píxeles por debajo del disparador: blanca y separada de
+  la pestaña que marcaba. Ahora es cian y va pegada al borde, y una prueba recorre las hojas de
+  estilo para que ninguna vuelva a vestir un componente de Radix por un estado que no emite.
 - «Sin coincidencia medida» aparecía sobre ofertas que **sí** se habían medido y daban cero; ya
   dice lo que ocurre, que es que no hay señales en común.
 - La vista rápida ya no corta la razón de la coincidencia a media palabra, la lista larga de

@@ -39,11 +39,16 @@
   font-size: 11px;
 }
 
-.planner-toolbar [data-slot="tabs-trigger"][data-active] {
+/* Radix marca la pestaña activa con `data-state="active"`, no con
+   `data-active`. Escrito contra el atributo que no existe, esto no pintaba
+   nada: mandaba la utilidad de la librería, que dibuja el subrayado cinco
+   píxeles **por debajo** del disparador. Quedaba flotando dentro del contenido,
+   blanco y separado de la pestaña que marcaba. */
+.planner-toolbar [data-slot="tabs-trigger"][data-state="active"] {
   color: #edf1f2;
 }
 
-.planner-toolbar [data-slot="tabs-trigger"][data-active]::after {
+.planner-toolbar [data-slot="tabs-trigger"][data-state="active"]::after {
   bottom: 0;
   height: 2px;
   background: #5caac1;
