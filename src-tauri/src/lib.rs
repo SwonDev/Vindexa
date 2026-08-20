@@ -315,10 +315,11 @@ pub fn run() {
                 });
             }
 
-            // Los regalos de Epic. Rotan los jueves y caducan: preguntarlo
-            // una vez al día basta, y así el aviso llega el mismo día en que
-            // empieza la promoción en vez de cuando a alguien se le ocurra
-            // abrir la tienda.
+            // Los regalos de Epic. Rotan los jueves a las 15:00 UTC y caducan,
+            // así que se pregunta cada seis horas: el aviso llega el mismo día
+            // en que empieza la promoción —y como mucho seis horas después de
+            // que empiece— en vez de cuando a alguien se le ocurra abrir la
+            // tienda.
             {
                 let database = database.clone();
                 tauri::async_runtime::spawn(async move {
