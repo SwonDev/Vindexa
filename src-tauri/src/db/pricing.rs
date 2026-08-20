@@ -930,13 +930,23 @@ pub fn stale_wishlist_app_ids(
                  SELECT app_id FROM catalog_wishlist_entries) w
           WHERE (seen IS NULL OR seen < ?1)
             AND (asked IS NULL OR asked < ?2)
+            -- Un deseado de otra tienda lleva un identificador que se inventó
+            -- Vindexa: preguntarle su precio a Steam es una petición imposible
+            -- que además lo dejaría marcado «no a la venta».
+            AND w.app_id < ?4
           ORDER BY seen IS NOT NULL ASC, seen ASC, w.app_id ASC
           LIMIT ?3",
     )?;
     let ids = statement
-        .query_map(params![cutoff, absence_cutoff, limit], |row| {
-            row.get::<_, u32>(0)
-        })?
+        .query_map(
+            params![
+                cutoff,
+                absence_cutoff,
+                limit,
+                crate::models::LOCAL_APP_ID_BASE
+            ],
+            |row| row.get::<_, u32>(0),
+        )?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ids)
 }
@@ -1483,6 +1493,29 @@ mod tests {
         let ya_a_la_venta = despues.iter().find(|e| e.app_id == 10).expect("está");
         assert!(!ya_a_la_venta.upcoming);
         assert_eq!(ya_a_la_venta.absence, None);
+    }
+
+    /// A un juego de otra tienda no se le pregunta el precio a Steam.
+    ///
+    /// Se puede añadir a deseados cualquier juego de la biblioteca, incluidos
+    /// los de Epic, GOG o itch.io. Su identificador se lo inventó Vindexa, así
+    /// que preguntarle su precio a Steam es una petición imposible que además
+    /// lo dejaría marcado «no a la venta» cada día.
+    #[test]
+    fn un_deseado_de_otra_tienda_no_entra_en_la_cola_de_precios() {
+        let connection = database();
+        catalog_wish(&connection, 10, "Uno de Steam");
+        catalog_wish(
+            &connection,
+            crate::models::LOCAL_APP_ID_BASE + 5,
+            "Uno de Epic",
+        );
+
+        assert_eq!(
+            stale_wishlist_app_ids(&connection, at(1, 12), 0).expect("cola"),
+            vec![10],
+            "el de la tienda ajena no se le pregunta a Steam"
+        );
     }
 
     #[test]
