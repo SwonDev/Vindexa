@@ -87,7 +87,15 @@ function persist(): void {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        state: sessionState,
+        // La búsqueda no se guarda entre arranques.
+        //
+        // El ámbito, el orden y los filtros son «dónde estaba»: se recuperan.
+        // Un texto en el buscador es un gesto, no un sitio, y sobrevivía al
+        // cierre: se abría la aplicación con «halo» escrito de hace días y la
+        // biblioteca enseñaba dos juegos de dos mil doscientos noventa y
+        // cuatro. Dentro de la misma sesión sí se conserva, porque ahí sí es
+        // volver a lo que estabas haciendo.
+        state: { ...sessionState, query: "" },
         scroll: Object.fromEntries(scrollOffsets),
         expanded: Object.fromEntries(expandedSections),
       }),

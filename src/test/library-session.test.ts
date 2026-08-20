@@ -90,12 +90,17 @@ describe("sesión de biblioteca", () => {
 
     expect(fresh.readLibrarySession()).toMatchObject({
       scope: { kind: "status", id: "playing", label: "Jugando" },
-      query: "aventura",
       sort: "lastPlayed",
       grouping: "none",
       view: "compact",
       filters: { tracking: true },
     });
+    // La búsqueda no vuelve. El ámbito y los filtros son «dónde estaba»; un
+    // texto en el buscador es un gesto, y sobrevivía al cierre: se abría la
+    // aplicación con lo buscado hace días y la biblioteca enseñaba dos juegos
+    // de dos mil doscientos noventa y cuatro, sin más explicación que una
+    // palabra en un campo.
+    expect(fresh.readLibrarySession().query).toBe("");
     expect(fresh.readLibraryScroll(scope)).toBe(480);
     expect(fresh.readLibrarySectionExpanded("collections")).toBe(false);
     fresh.resetLibrarySessionForTests();
