@@ -114,7 +114,32 @@ export const GamePreviewCard = forwardRef<HTMLAnchorElement, GamePreviewCardAllP
         open={disabled ? false : open}
         onOpenChange={setOpen}
       >
-        <HoverCardPrimitive.Trigger asChild ref={ref} {...rest}>
+        {/* Al pulsar, la vista rápida se va.
+            El emergente se cierra cuando el puntero **sale** del disparador, y
+            si lo que aparece encima es la ficha del juego, el puntero no se ha
+            movido: el navegador no vuelve a mirar qué hay debajo hasta el
+            siguiente movimiento, así que no llega ningún `pointerleave` y la
+            tarjeta se queda flotando sobre la ficha recién abierta hasta que
+            alguien mueve el ratón.
+
+            Un clic siempre significa que quien mira ya ha decidido, así que la
+            ayuda para decidir sobra. Se compone con lo que traiga el padre en
+            vez de sustituirlo: aquí es donde vive el manejador que abre la
+            ficha, y pisarlo dejaría la fila sin abrir nada. */}
+        <HoverCardPrimitive.Trigger
+          asChild
+          ref={ref}
+          {...rest}
+          onPointerDown={(event) => {
+            rest.onPointerDown?.(event);
+            setOpen(false);
+          }}
+          onClick={(event) => {
+            // El teclado no genera `pointerdown`: abrir con Intro también cierra.
+            rest.onClick?.(event);
+            setOpen(false);
+          }}
+        >
           {children}
         </HoverCardPrimitive.Trigger>
         <HoverCardPrimitive.Portal>
