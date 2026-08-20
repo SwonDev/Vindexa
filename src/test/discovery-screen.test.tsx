@@ -177,6 +177,7 @@ describe("seguimiento y descubrimiento", () => {
   });
 
   it("expone publicaciones y relaciones con su procedencia verificable", async () => {
+    const user = userEvent.setup();
     renderScreen();
 
     expect(await screen.findByRole("heading", { name: "Qué jugar ahora" })).toBeVisible();
@@ -184,6 +185,9 @@ describe("seguimiento y descubrimiento", () => {
     expect(screen.getByRole("tab", { name: /Recordatorios/ })).toBeVisible();
     expect(screen.getByRole("tab", { name: /Olvidados/ })).toBeVisible();
     expect(screen.getByRole("tab", { name: /Casi terminados/ })).toBeVisible();
+
+    // Las novedades viven en su grupo de la columna de señales.
+    await user.click(await screen.findByRole("tab", { name: "Novedades" }));
     expect(await screen.findByText("Cambios de Early Access")).toBeVisible();
     expect(screen.getByText("Publicaciones oficiales recientes")).toBeVisible();
     expect(screen.getByText("Gameplay patch")).toBeVisible();
@@ -191,7 +195,11 @@ describe("seguimiento y descubrimiento", () => {
     expect(screen.getByText("Lanzamientos relacionados")).toBeVisible();
     expect(screen.getByText("Viajero II")).toBeVisible();
     expect(screen.getByText(/Mismo desarrollador · forge one/i)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Recomendaciones descartadas" })).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Avisos" }));
+    expect(
+      await screen.findByRole("heading", { name: "Recomendaciones descartadas" }),
+    ).toBeVisible();
   });
 
   it("crea un recordatorio persistente desde un juego olvidado", async () => {
@@ -237,6 +245,7 @@ describe("seguimiento y descubrimiento", () => {
     mockedApi.refreshDiscoveryNews.mockRejectedValue(new Error("Steam no respondió a tiempo"));
     renderScreen();
 
+    await user.click(await screen.findByRole("tab", { name: "Novedades" }));
     expect(await screen.findByText("Steam no respondió a tiempo")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(mockedApi.refreshDiscoveryNews).toHaveBeenCalledTimes(2));
@@ -254,6 +263,8 @@ describe("seguimiento y descubrimiento", () => {
     });
     const first = renderScreen();
 
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Novedades" }));
     expect(
       await screen.findByText(
         "Sigue al menos un juego para consultar su feed sin usar tu Web API Key.",
@@ -273,6 +284,7 @@ describe("seguimiento y descubrimiento", () => {
     mockedApi.refreshDiscoveryNews.mockImplementationOnce(() => new Promise(() => {}));
     renderScreen();
 
+    await user.click(await screen.findByRole("tab", { name: "Novedades" }));
     const loading = await screen.findByText("Contrastando el feed oficial…");
     expect(loading).toHaveAttribute("role", "status");
   });

@@ -59,6 +59,7 @@ const HOJAS: Record<string, Hoja> = {
       "reminder-list",
       "rules-panel",
       "signal-",
+      "signals-",
       "store-deals",
       "skeleton-",
       "taste-report",

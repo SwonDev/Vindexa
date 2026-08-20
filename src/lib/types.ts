@@ -1480,6 +1480,26 @@ export interface GamePreview {
  * `matchScore` a `null` es «aún no se ha podido puntuar» —faltan sus géneros—,
  * no «no te interesa». Cero sería una afirmación que nadie ha comprobado.
  */
+/** Qué dejó una tanda del radar de ofertas. */
+export interface DealRadarReport {
+  /** Ofertas que devolvieron las tiendas. */
+  received: number;
+  /** Ofertas nuevas para Vindexa. */
+  discovered: number;
+  /** Descartadas por ser ya tuyas o estar ya en deseados. */
+  alreadyKnown: number;
+  /** Fichas pedidas para conocer sus rasgos. */
+  described: number;
+  /** Ofertas puntuadas contra el modelo de gustos. */
+  scored: number;
+  /**
+   * Tiendas a las que no se pudo preguntar.
+   *
+   * Sin esta lista, una tienda caída se ve igual que una tienda sin rebajas.
+   */
+  unavailable: string[];
+}
+
 export interface DealCandidate {
   /** `steam` o `gog`. Los dos catálogos no comparten numeración. */
   store: string;

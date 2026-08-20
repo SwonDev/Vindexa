@@ -36,6 +36,7 @@ import type {
   DatabaseDiagnostics,
   DatabaseRecoverySnapshot,
   DealCandidate,
+  DealRadarReport,
   DiscoverySnapshot,
   DlcFilter,
   DlcRefreshReport,
@@ -188,6 +189,8 @@ export const api = {
   gamePreview: (appId: number) => invoke<GamePreview>("game_preview", { appId }),
   /** Rebajas que aún no son tuyas, ordenadas por afinidad con tu historial. */
   storeDeals: (limit?: number) => invoke<DealCandidate[]>("store_deals", { limit }),
+  /** Vuelve a preguntar a Steam y a GOG por sus rebajas, sin esperar al reloj. */
+  refreshStoreDeals: () => invoke<DealRadarReport>("refresh_store_deals"),
   dismissStoreDeal: (store: string, externalId: string) =>
     invoke<void>("dismiss_store_deal", { store, externalId }),
   /**

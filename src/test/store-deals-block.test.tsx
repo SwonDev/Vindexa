@@ -14,6 +14,7 @@ vi.mock("@/components/common/Artwork", () => ({
 vi.mock("@/lib/tauri", () => ({
   api: {
     storeDeals: vi.fn(),
+    refreshStoreDeals: vi.fn(),
     dismissStoreDeal: vi.fn(),
     openStoreDeal: vi.fn(),
     saveWishlistEntry: vi.fn(),
@@ -76,6 +77,14 @@ function renderBlock() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedApi.refreshStoreDeals.mockResolvedValue({
+    received: 32,
+    discovered: 4,
+    alreadyKnown: 28,
+    described: 8,
+    scored: 32,
+    unavailable: [],
+  });
   mockedApi.dismissStoreDeal.mockResolvedValue(undefined);
   mockedApi.openStoreDeal.mockResolvedValue(undefined);
   mockedApi.saveWishlistEntry.mockResolvedValue(undefined);
@@ -215,6 +224,48 @@ describe("ofertas para ti", () => {
     });
     await user.click(await screen.findByRole("menuitem", { name: "No me interesa" }));
     await waitFor(() => expect(mockedApi.dismissStoreDeal).toHaveBeenCalledWith("steam", "10"));
+  });
+
+  it("actualizar dice lo que trajo y, sobre todo, lo que faltó", async () => {
+    // Una tienda caída deja una lista corta con pinta de completa. Peor que no
+    // traer nada es traer la mitad sin decirlo.
+    const user = userEvent.setup();
+    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.refreshStoreDeals.mockResolvedValue({
+      received: 24,
+      discovered: 3,
+      alreadyKnown: 21,
+      described: 0,
+      scored: 24,
+      unavailable: ["gog"],
+    });
+    renderBlock();
+
+    await user.click(await screen.findByRole("button", { name: /Actualizar/ }));
+    await waitFor(() => expect(mockedApi.refreshStoreDeals).toHaveBeenCalledTimes(1));
+    const aviso = await screen.findByRole("status");
+    expect(aviso).toHaveTextContent("24 rebajas leídas");
+    expect(aviso).toHaveTextContent("sin respuesta: GOG");
+  });
+
+  it("la lista se despliega y se vuelve a recoger", async () => {
+    const user = userEvent.setup();
+    mockedApi.storeDeals.mockResolvedValue(
+      Array.from({ length: 9 }, (_, indice) =>
+        deal({ appId: 10 + indice, title: `Juego ${indice}` }),
+      ),
+    );
+    renderBlock();
+
+    // Seis a la vista de nueve.
+    expect(await screen.findByRole("button", { name: /Ver las 9/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Juego 8/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Ver las 9/ }));
+    expect(screen.getByRole("button", { name: /Juego 8/ })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /Ver sólo 6/ }));
+    expect(screen.queryByRole("button", { name: /Juego 8/ })).toBeNull();
   });
 
   it("sin ofertas el bloque no ocupa sitio", async () => {

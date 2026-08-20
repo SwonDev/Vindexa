@@ -1,4 +1,11 @@
-import { IconExternalLink, IconHeartPlus, IconLoader2, IconTag, IconX } from "@tabler/icons-react";
+import {
+  IconExternalLink,
+  IconHeartPlus,
+  IconLoader2,
+  IconRefresh,
+  IconTag,
+  IconX,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
@@ -50,6 +57,7 @@ export function StoreDealsBlock() {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string>();
+  const [report, setReport] = useState<string>();
 
   const deals = useQuery({
     queryKey: ["store-deals"],
@@ -91,6 +99,29 @@ export function StoreDealsBlock() {
     onError: (cause) => setError(getErrorMessage(cause)),
   });
 
+  const refresh = useMutation({
+    mutationFn: () => api.refreshStoreDeals(),
+    onSuccess: (report) => {
+      void queryClient.invalidateQueries({ queryKey: ["store-deals"] });
+      // Lo que faltó se dice: una tienda caída deja una lista corta con pinta
+      // de completa, y eso es peor que no traer nada.
+      const partes = [
+        `${report.received} rebajas leídas`,
+        `${report.discovered} nuevas`,
+        `${report.alreadyKnown} ya tuyas o en deseados`,
+      ];
+      if (report.unavailable.length > 0) {
+        partes.push(`sin respuesta: ${report.unavailable.map(storeName).join(", ")}`);
+      }
+      setError(undefined);
+      setReport(`${partes.join(" · ")}.`);
+    },
+    onError: (cause) => {
+      setReport(undefined);
+      setError(getErrorMessage(cause));
+    },
+  });
+
   const items = deals.data ?? [];
   // Sin ofertas el bloque no ocupa sitio: un recuadro vacío en una columna larga
   // es ruido, no información.
@@ -114,6 +145,21 @@ export function StoreDealsBlock() {
             {interesantes === 1 ? "1 encaja contigo" : `${interesantes} encajan contigo`}
           </span>
         )}
+        {/* Las tiendas se repasan solas cada seis horas. El botón está para
+            cuando no se quiere esperar: una rebaja que se acaba no espera. */}
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={refresh.isPending}
+          onClick={() => refresh.mutate()}
+        >
+          {refresh.isPending ? (
+            <IconLoader2 className="is-spinning" aria-hidden="true" size={13} />
+          ) : (
+            <IconRefresh aria-hidden="true" size={13} />
+          )}
+          {refresh.isPending ? "Preguntando…" : "Actualizar"}
+        </Button>
       </header>
 
       {deals.isPending ? (
@@ -139,10 +185,18 @@ export function StoreDealsBlock() {
         </ul>
       )}
 
-      {ocultas > 0 && (
-        <Button variant="ghost" size="xs" onClick={() => setExpanded(true)}>
-          Ver las {items.length}
+      {/* Se despliega y se recoge: dejar sólo la ida obliga a cambiar de
+          pestaña para volver a una lista corta. */}
+      {(ocultas > 0 || expanded) && (
+        <Button variant="ghost" size="xs" onClick={() => setExpanded((abierto) => !abierto)}>
+          {expanded ? `Ver sólo ${VISIBLE}` : `Ver las ${items.length}`}
         </Button>
+      )}
+
+      {report && !error && (
+        <p className="store-deals__note" role="status">
+          {report}
+        </p>
       )}
 
       {error && (

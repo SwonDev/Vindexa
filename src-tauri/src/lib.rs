@@ -478,6 +478,7 @@ pub fn run() {
             commands::store_deals,
             commands::dismiss_store_deal,
             commands::open_store_deal,
+            commands::refresh_store_deals,
             commands::epic_free_games,
             commands::dismiss_epic_free_game,
             commands::open_epic_free_game,

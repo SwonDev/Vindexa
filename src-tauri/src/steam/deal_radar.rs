@@ -192,6 +192,17 @@ fn acumular(report: &mut DealRadarReport, sync: &crate::db::deals::DealSyncRepor
     report.already_known = report.already_known.saturating_add(sync.already_known);
 }
 
+/// Corre ahora, lo pida el reloj o no.
+///
+/// Es lo que hay detrás del botón de la pantalla: una rebaja que se acaba no
+/// espera seis horas, y tras un cambio en cómo se leen las ofertas hace falta
+/// poder volver a preguntarlo sin reiniciar.
+pub async fn refresh_now(database: &Database) -> AppResult<DealRadarReport> {
+    let report = run(database).await?;
+    mark_done(database)?;
+    Ok(report)
+}
+
 /// Corre si toca.
 pub async fn run_if_due(database: &Database) -> AppResult<Option<DealRadarReport>> {
     if !is_due(database)? {

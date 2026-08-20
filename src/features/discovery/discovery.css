@@ -520,18 +520,80 @@
 
 /* Columna de señales ------------------------------------------------------- */
 
+/* La columna ya no se desplaza entera: la navegación se queda arriba y lo que
+   se desplaza es el panel del grupo elegido. Eran nueve bloques seguidos y lo
+   que caduca hoy quedaba a la misma altura que el histórico. */
 .discovery-signals {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+}
+
+.signals-nav {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  background: var(--v-surface-raised);
+}
+
+.signals-nav__item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--v-muted);
+  background: transparent;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.signals-nav__item svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+}
+
+.signals-nav__item > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signals-nav__item:hover:not([aria-selected="true"]) {
+  color: var(--foreground);
+}
+
+.signals-nav__item[aria-selected="true"] {
+  border-bottom-color: var(--v-cyan);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.signals-nav__item:focus-visible {
+  outline: 2px solid var(--v-cyan);
+  outline-offset: -3px;
+}
+
+.discovery-signals__panel {
   display: grid;
   align-content: start;
   min-width: 0;
   min-height: 0;
   overflow: hidden auto;
-  border-left: 1px solid var(--border);
-  background: var(--background);
   scrollbar-gutter: stable;
 }
 
-.discovery-signals:focus-visible {
+.discovery-signals__panel:focus-visible {
   outline-offset: -2px;
 }
 
@@ -1587,7 +1649,7 @@
 
 .store-deals__head {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   min-height: 44px;

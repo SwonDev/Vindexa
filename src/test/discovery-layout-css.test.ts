@@ -28,7 +28,15 @@ describe("geometría de la pantalla de seguimiento", () => {
   });
 
   it("acota cada contenedor intermedio hasta la zona desplazable", () => {
-    for (const selector of [".discovery-body", ".discovery-main", ".radar-panel"]) {
+    // `.discovery-signals` entró en esta lista cuando dejó de desplazarse ella
+    // misma: ahora sostiene su navegación arriba y deja que se desplace sólo el
+    // panel del grupo elegido.
+    for (const selector of [
+      ".discovery-body",
+      ".discovery-main",
+      ".radar-panel",
+      ".discovery-signals",
+    ]) {
       const body = ruleBody(discoveryCss, selector);
       expect(body, `${selector} debe poder encogerse`).toMatch(/min-height:\s*0/);
       expect(body, `${selector} no debe desplazarse por su cuenta`).toMatch(/overflow:\s*hidden/);
@@ -36,7 +44,7 @@ describe("geometría de la pantalla de seguimiento", () => {
   });
 
   it("declara zonas de desplazamiento propias y hermanas, nunca anidadas", () => {
-    for (const selector of [".radar-scroll", ".discovery-signals", ".discovery-rail"]) {
+    for (const selector of [".radar-scroll", ".discovery-signals__panel", ".discovery-rail"]) {
       const body = ruleBody(discoveryCss, selector);
       expect(body, `${selector} debe desplazarse en vertical`).toMatch(/overflow:\s*hidden\s+auto/);
       expect(body, `${selector} debe poder encogerse`).toMatch(/min-height:\s*0/);

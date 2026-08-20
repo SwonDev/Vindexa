@@ -1309,6 +1309,20 @@ pub async fn store_deals(
     blocking(move || database.store_deals(limit)).await
 }
 
+/// Vuelve a preguntar a las tiendas por sus rebajas, ahora.
+///
+/// La tanda automática va cada seis horas, que es el ritmo al que cambian las
+/// rebajas. Este botón existe para cuando no se quiere esperar: devuelve lo que
+/// encontró y **qué tienda no respondió**, en vez de dejar una lista corta con
+/// pinta de completa.
+#[tauri::command]
+pub async fn refresh_store_deals(
+    state: State<'_, AppState>,
+) -> AppResult<steam::deal_radar::DealRadarReport> {
+    let database = state.database.clone();
+    steam::deal_radar::refresh_now(&database).await
+}
+
 /// Lleva a la ficha de la oferta en el navegador integrado de su tienda.
 ///
 /// La dirección **no** llega desde la interfaz: se lee de la base con la pareja

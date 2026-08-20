@@ -7,9 +7,11 @@ import {
   IconClock,
   IconDeviceGamepad2,
   IconEye,
+  IconGift,
   IconHistory,
   IconLoader2,
   IconMoodSmile,
+  IconNews,
   IconRefresh,
   IconRestore,
   IconSparkles,
@@ -142,6 +144,9 @@ export function DiscoveryScreen({
   const [duration, setDuration] = useState("60");
   const [mood, setMood] = useState("any");
   const [radarView, setRadarView] = useState<RadarView>("tracking");
+  // La columna de señales abre por lo que caduca: un regalo de Epic dura una
+  // semana y una rebaja unos días, mientras que el histórico sigue ahí mañana.
+  const [signalGroup, setSignalGroup] = useState<SignalGroup>("opportunities");
   const [announcement, setAnnouncement] = useState("");
   const [openGameId, setOpenGameId] = useState<number>();
   /* Las mismas acciones que en la biblioteca: desde seguimiento no se podía
@@ -413,51 +418,74 @@ export function DiscoveryScreen({
           </section>
         </div>
 
-        <aside
-          className="discovery-signals"
-          aria-label="Señales verificables, próximos lanzamientos y avisos programados"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: zona desplazable; sin foco propio el teclado no puede recorrerla (WCAG 2.1.1)
-          tabIndex={0}
-        >
-          {/* Primero lo que llega y lo que has pedido que te avisen: la columna
-              abre con la respuesta, no con el historial. Ambos bloques van
-              juntos a propósito —una fecha que te interesa se convierte en un
-              aviso sin salir de aquí. */}
-          {/* Lo que caduca va primero: un regalo de Epic dura una semana y no
-              vuelve, mientras que un lanzamiento previsto sigue ahí mañana. */}
-          <EpicFreeBlock />
-          <StoreDealsBlock />
-          <UpcomingReleasesBlock />
-          <NotificationRulesPanel />
-          <PublicationsBlock
-            items={discovery.data?.officialPublications ?? []}
-            trackedGames={discovery.data?.capabilities.trackedNewsGames ?? 0}
-            refresh={newsRefresh}
-            loading={discovery.isPending}
-          />
-          <RelatedReleasesBlock
-            items={discovery.data?.relatedReleases ?? []}
-            loading={discovery.isPending}
-          />
-          <UpcomingBlock items={discovery.data?.upcoming ?? []} loading={discovery.isPending} />
-          <EarlyAccessBlock
-            available={discovery.data?.capabilities.earlyAccessHistoryAvailable ?? false}
-            observations={discovery.data?.capabilities.metadataObservations ?? 0}
-            events={discovery.data?.events ?? []}
-            loading={discovery.isPending}
-          />
-          <DismissedBlock
-            items={discovery.data?.dismissedRecommendations ?? []}
-            loading={discovery.isPending}
-            restoring={restore.isPending}
-            onRestore={(id) => restore.mutate(id)}
-          />
-          {discovery.isError && (
-            <RecoverableError
-              message={getErrorMessage(discovery.error)}
-              onRetry={() => void discovery.refetch()}
-            />
-          )}
+        <aside className="discovery-signals" aria-label="Señales, novedades y avisos">
+          {/* Tres grupos en vez de nueve bloques seguidos. El reparto sigue lo
+              que se hace con cada cosa: actuar ahora, enterarse, o administrar
+              lo que ya decidiste. */}
+          <SignalsNav group={signalGroup} onSelect={setSignalGroup} />
+          <div
+            id="signals-panel"
+            className="discovery-signals__panel"
+            role="tabpanel"
+            aria-labelledby={`signals-tab-${signalGroup}`}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: zona desplazable; sin foco propio el teclado no puede recorrerla (WCAG 2.1.1)
+            tabIndex={0}
+          >
+            {signalGroup === "opportunities" && (
+              <>
+                {/* Lo que caduca va primero: un regalo de Epic dura una semana y
+                    no vuelve, mientras que un lanzamiento previsto sigue ahí
+                    mañana. */}
+                <EpicFreeBlock />
+                <StoreDealsBlock />
+                <UpcomingReleasesBlock />
+              </>
+            )}
+
+            {signalGroup === "news" && (
+              <>
+                <PublicationsBlock
+                  items={discovery.data?.officialPublications ?? []}
+                  trackedGames={discovery.data?.capabilities.trackedNewsGames ?? 0}
+                  refresh={newsRefresh}
+                  loading={discovery.isPending}
+                />
+                <RelatedReleasesBlock
+                  items={discovery.data?.relatedReleases ?? []}
+                  loading={discovery.isPending}
+                />
+                <UpcomingBlock
+                  items={discovery.data?.upcoming ?? []}
+                  loading={discovery.isPending}
+                />
+                <EarlyAccessBlock
+                  available={discovery.data?.capabilities.earlyAccessHistoryAvailable ?? false}
+                  observations={discovery.data?.capabilities.metadataObservations ?? 0}
+                  events={discovery.data?.events ?? []}
+                  loading={discovery.isPending}
+                />
+              </>
+            )}
+
+            {signalGroup === "alerts" && (
+              <>
+                <NotificationRulesPanel />
+                <DismissedBlock
+                  items={discovery.data?.dismissedRecommendations ?? []}
+                  loading={discovery.isPending}
+                  restoring={restore.isPending}
+                  onRestore={(id) => restore.mutate(id)}
+                />
+              </>
+            )}
+
+            {discovery.isError && (
+              <RecoverableError
+                message={getErrorMessage(discovery.error)}
+                onRetry={() => void discovery.refetch()}
+              />
+            )}
+          </div>
         </aside>
       </div>
       {openGameId !== undefined && bootstrap ? (
@@ -475,6 +503,109 @@ export function DiscoveryScreen({
         </Suspense>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Los tres grupos de la columna de señales.
+ *
+ * # Por qué se agrupan
+ *
+ * Eran nueve bloques apilados en una sola columna con desplazamiento. Cada uno
+ * por separado está bien; los nueve juntos son un muro, y lo que llega hoy
+ * —un regalo que caduca el jueves, una rebaja del 90 %— quedaba a la misma
+ * altura visual que el histórico de descartados.
+ *
+ * El reparto sigue lo que se hace con cada cosa: actuar ahora, enterarse, o
+ * administrar lo que ya decidiste. Ninguna pestaña se queda vacía: cada bloque
+ * trae su propio estado de «aquí no hay nada» y lo explica.
+ */
+type SignalGroup = "opportunities" | "news" | "alerts";
+
+const signalGroups = [
+  {
+    id: "opportunities",
+    label: "Oportunidades",
+    icon: IconGift,
+    description: "Lo que caduca: regalos, rebajas y lanzamientos que encajan contigo.",
+  },
+  {
+    id: "news",
+    label: "Novedades",
+    icon: IconNews,
+    description: "Lo que se mueve en los juegos que ya tienes o sigues.",
+  },
+  {
+    id: "alerts",
+    label: "Avisos",
+    icon: IconBell,
+    description: "Lo que has programado que te avise y lo que descartaste.",
+  },
+] as const satisfies readonly {
+  id: SignalGroup;
+  label: string;
+  icon: IconType;
+  description: string;
+}[];
+
+function SignalsNav({
+  group,
+  onSelect,
+}: {
+  group: SignalGroup;
+  onSelect: (next: SignalGroup) => void;
+}) {
+  const tabs = useRef(new Map<SignalGroup, HTMLButtonElement>());
+  const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = signalGroups.findIndex((item) => item.id === group);
+    let nextIndex = index;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      nextIndex = (index + 1) % signalGroups.length;
+    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      nextIndex = (index - 1 + signalGroups.length) % signalGroups.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = signalGroups.length - 1;
+    } else {
+      return;
+    }
+    const next = signalGroups[nextIndex];
+    if (!next) return;
+    event.preventDefault();
+    onSelect(next.id);
+    tabs.current.get(next.id)?.focus();
+  };
+  return (
+    <div
+      className="signals-nav"
+      role="tablist"
+      aria-orientation="horizontal"
+      aria-label="Señales"
+      onKeyDown={move}
+    >
+      {signalGroups.map(({ id, label, icon: GroupIcon, description }) => (
+        <button
+          key={id}
+          id={`signals-tab-${id}`}
+          ref={(node) => {
+            if (node) tabs.current.set(id, node);
+            else tabs.current.delete(id);
+          }}
+          type="button"
+          role="tab"
+          className="signals-nav__item"
+          aria-selected={group === id}
+          aria-controls="signals-panel"
+          tabIndex={group === id ? 0 : -1}
+          title={description}
+          onClick={() => onSelect(id)}
+        >
+          <GroupIcon aria-hidden="true" />
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
