@@ -77,6 +77,11 @@ pub struct AchievementsPassReport {
     pub failed: u32,
     /// Cuántos quedan después de esta tanda.
     pub pending: u32,
+    /// No se preguntó nada porque la clave todavía no está cargada.
+    ///
+    /// No es un fallo ni un «no había trabajo»: es una pasada que se apaga sola
+    /// y tiene que poder decirse, en vez de parecer que no hay nada que hacer.
+    pub waiting_for_key: bool,
 }
 
 /// Pregunta por una tanda de juegos sin logros conocidos.
@@ -89,13 +94,28 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<AchievementsPassR
         return Ok(report);
     };
 
+    // Y sin la clave **ya cargada**, esto no se hace.
+    //
+    // Leerla del llavero puede abrir un diálogo de contraseña del sistema, y
+    // una tarea de fondo no tiene derecho a eso: aparece sola, en mitad de otra
+    // cosa, y si no hay nadie delante se queda esperando o se deniega. Pasó
+    // exactamente así. Se espera a que un acto explícito —verificar la clave,
+    // sincronizar— la cargue; entonces la siguiente ronda la encuentra
+    // recordada y sigue sin preguntar nada a nadie.
+    let Some(api_key) = crate::steam::secrets::cached_api_key() else {
+        report.waiting_for_key = true;
+        return Ok(report);
+    };
+
     let candidatos = database.achievements_pending(limit)?;
     for (indice, app_id) in candidatos.iter().enumerate() {
         if indice > 0 {
             sleep(REQUEST_INTERVAL).await;
         }
         report.checked = report.checked.saturating_add(1);
-        match achievements::fetch_saved(&account.steam_id, *app_id).await {
+        // Con la clave en la mano: `fetch_saved` volvería al llavero en cada
+        // juego, y eso es justo lo que no puede pasar aquí.
+        match achievements::fetch(&api_key, &account.steam_id, *app_id).await {
             Ok(AchievementOutcome::Found(summary)) => {
                 // Devuelve la ficha entera porque la orden que lo llama la
                 // enseña; aquí sólo interesa si se guardó.
@@ -141,7 +161,11 @@ pub async fn run_if_due(database: &Database) -> AppResult<Option<AchievementsPas
         return Ok(None);
     }
     let report = run(database, 0).await?;
-    mark_done(database)?;
+    // Una pasada que no llegó a preguntar nada no gasta el turno: si la clave
+    // aparece dentro de un minuto, la siguiente ronda empieza de verdad.
+    if !report.waiting_for_key {
+        mark_done(database)?;
+    }
     Ok(Some(report))
 }
 
@@ -239,6 +263,81 @@ mod tests {
             .expect("consultar")
             .collect::<Result<Vec<_>, _>>()
             .expect("filas")
+    }
+
+    /// Una tarea de fondo no abre diálogos de contraseña.
+    ///
+    /// Leer la clave del llavero puede abrir uno del sistema. Quien pulsa
+    /// «verificar» está delante y puede contestarlo; una pasada que arranca
+    /// sola a los seis minutos, no: aparece en mitad de otra cosa y, si no hay
+    /// nadie, se queda esperando o se deniega. Pasó tal cual.
+    ///
+    /// Esta prueba lee el módulo para comprobar que la pasada usa la clave ya
+    /// recordada y **no** la que iría al llavero.
+    #[test]
+    fn la_pasada_no_va_al_llavero_ella_sola() {
+        // Sólo el módulo, sin sus pruebas: aquí abajo se nombra a las dos
+        // funciones a propósito y la comprobación se encontraría a sí misma.
+        let completo = include_str!("achievements_pass.rs");
+        let fuente = completo
+            .split("#[cfg(test)]")
+            .next()
+            .expect("el módulo antes de sus pruebas");
+        assert!(
+            fuente.contains("secrets::cached_api_key()"),
+            "la pasada tiene que usar la clave ya recordada"
+        );
+        // Se mira el código, no los comentarios: aquí abajo se nombra a
+        // `fetch_saved` a propósito para explicar por qué no se usa.
+        let llamadas: Vec<&str> = fuente
+            .lines()
+            .map(str::trim)
+            .filter(|linea| !linea.starts_with("//") && !linea.starts_with("///"))
+            .filter(|linea| linea.contains("fetch_saved("))
+            .collect();
+        assert!(
+            llamadas.is_empty(),
+            "`fetch_saved` vuelve al llavero en cada juego: {llamadas:?}"
+        );
+        // Y `cached_api_key` no puede acabar consultando el llavero por su
+        // cuenta: si un día lo hiciera, esta prueba deja de tener sentido.
+        let secretos = include_str!("secrets.rs");
+        let cuerpo = secretos
+            .split("pub fn cached_api_key")
+            .nth(1)
+            .expect("la función existe")
+            .split("pub fn load_api_key")
+            .next()
+            .expect("hasta la siguiente función");
+        assert!(
+            !cuerpo.contains("keychain::"),
+            "`cached_api_key` no puede tocar el llavero"
+        );
+    }
+
+    /// Sonda contra una copia de la base real, a mano.
+    ///
+    /// No toca la base de nadie: se le pasa la ruta de una copia por
+    /// `VINDEXA_BASE_DE_PRUEBA`, y sin esa variable no hace nada.
+    #[test]
+    #[ignore = "necesita una copia de una base real en VINDEXA_BASE_DE_PRUEBA"]
+    fn cuantos_quedan_en_una_base_de_verdad() {
+        let Ok(ruta) = std::env::var("VINDEXA_BASE_DE_PRUEBA") else {
+            return;
+        };
+        let database = crate::db::Database::new(std::path::PathBuf::from(ruta));
+        let pendientes = database
+            .achievements_pending_count()
+            .expect("contar pendientes");
+        let cola = database.achievements_pending(5).expect("cola");
+        let cuenta = database.get_steam_account().expect("cuenta");
+        eprintln!(
+            "pendientes={pendientes} · cola={cola:?} · cuenta={}",
+            cuenta.map_or("(ninguna)".to_string(), |c| format!(
+                "vinculada, id de {} caracteres",
+                c.steam_id.len()
+            ))
+        );
     }
 
     /// Los códigos con los que se corta la tanda tienen que existir.

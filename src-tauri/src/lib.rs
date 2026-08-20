@@ -292,6 +292,10 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_secs(360)).await;
                     loop {
                         match steam::achievements_pass::run_if_due(&database).await {
+                            Ok(Some(report)) if report.waiting_for_key => eprintln!(
+                                "Vindexa: los logros esperan a que se cargue la clave de Steam; quedan {} juegos por preguntar.",
+                                report.pending
+                            ),
                             Ok(Some(report)) => {
                                 eprintln!(
                                     "Vindexa: logros repasados ({} preguntados, {} con recuento, {} sin logros, {} pendientes).",

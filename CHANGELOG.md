@@ -8,6 +8,13 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ### Añadido
 
+- **Ninguna tarea de fondo vuelve a pedir la contraseña del llavero.** Leer la clave de Steam
+  puede abrir un diálogo del sistema. Quien pulsa «verificar» está delante y puede contestarlo;
+  una pasada que arranca sola a los seis minutos, no: el diálogo aparece en mitad de otra cosa y,
+  si no hay nadie, se queda esperando o se deniega —y entonces la función se apaga sin que nadie
+  se entere—. Las pasadas usan ahora sólo la clave **ya cargada** por un acto explícito; mientras
+  no la haya, se abstienen y lo dicen en vez de parecer que no tenían trabajo.
+
 - **Los logros conseguidos dejan de estar vacíos.** `achievements_total` estaba puesto en 1.655
   juegos de una instalación real y `achievements_unlocked` **en ninguno**, con la clave de Steam
   configurada desde hacía días: la ficha decía «Logros · Sin datos» en todas y ofrecía un botón

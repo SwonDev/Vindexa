@@ -51,6 +51,25 @@ pub fn save_api_key(value: &str) -> AppResult<()> {
     result
 }
 
+/// La clave **sólo si ya está recordada**, sin tocar el llavero.
+///
+/// La diferencia con [`load_api_key`] es quién puede provocar un diálogo del
+/// sistema. Un acto explícito —verificar la clave, sincronizar— tiene derecho a
+/// pedir la contraseña: quien lo pulsó está delante. Una tarea de fondo no: el
+/// diálogo aparece solo, en mitad de otra cosa, y si no hay nadie se queda ahí
+/// esperando o se deniega. Pasó tal cual, y quien usa esto lo describió mejor
+/// que ningún registro: «volvió a pedir las contraseñas y yo no estaba».
+///
+/// Devuelve `None` cuando no hay nada recordado —ni la clave ni una negativa—,
+/// que es la señal de «todavía no toca preguntar por esto».
+pub fn cached_api_key() -> Option<String> {
+    CACHED_API_KEY
+        .read()
+        .ok()
+        .and_then(|cache| cache.clone())
+        .flatten()
+}
+
 pub fn load_api_key() -> AppResult<Option<String>> {
     if let Ok(cache) = CACHED_API_KEY.read()
         && let Some(recordado) = cache.as_ref()
