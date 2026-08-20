@@ -7,7 +7,7 @@ import { type ExtraFilters, LibraryToolbar } from "@/features/library/LibraryToo
 import type { LibraryFilterOptions } from "@/features/library/library-filters";
 import type { GameSort, LibraryView } from "@/lib/types";
 
-function ToolbarHarness() {
+function ToolbarHarness({ note }: { note?: { text: string; detail: string } } = {}) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<GameSort>("manual");
   const [view, setView] = useState<LibraryView>("grid");
@@ -18,6 +18,7 @@ function ToolbarHarness() {
       <LibraryToolbar
         title="Todos los juegos"
         total={2_450}
+        {...(note ? { note } : {})}
         query={query}
         onQueryChange={setQuery}
         sort={sort}
@@ -183,5 +184,33 @@ describe("barra de herramientas de biblioteca", () => {
 
     await user.click(screen.getByRole("option", { name: "Lanzamiento más reciente" }));
     expect(sort).toHaveTextContent("Lanzamiento más reciente");
+  });
+
+  /**
+   * Una cifra que parece un total y es un avance.
+   *
+   * «Sin DRM 604» se lee como «tienes 604 juegos sin DRM». En realidad son los
+   * comprobados hasta ahora: el repaso pregunta a la tienda por tandas y una
+   * biblioteca grande tarda horas. La nota va en la misma línea que el número.
+   */
+  it("acompaña la cifra con lo que la matiza, sin taparla", async () => {
+    render(
+      <ToolbarHarness
+        note={{ text: "2.806 sin comprobar", detail: "Vindexa pregunta por tandas." }}
+      />,
+    );
+
+    const nota = screen.getByText("2.806 sin comprobar");
+    expect(nota).toBeVisible();
+    expect(nota).toHaveAttribute("title", "Vindexa pregunta por tandas.");
+    // Y la cifra principal sigue estando: la nota acompaña, no sustituye.
+    expect(
+      screen.getByText("2450", { selector: "[data-slot='animated-number-value']" }),
+    ).toBeVisible();
+  });
+
+  it("sin nada que matizar no escribe nada", () => {
+    render(<ToolbarHarness />);
+    expect(document.querySelector(".library-title__note")).toBeNull();
   });
 });

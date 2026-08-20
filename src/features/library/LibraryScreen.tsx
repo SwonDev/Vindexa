@@ -311,6 +311,19 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry, onOpenSettin
   }, [metadataPriorityIds, queryClient, scope.kind]);
   const total = gamesQuery.data?.pages[0]?.total ?? 0;
   const visibleTotal = total;
+  // «Sin DRM 604» parece el total y es un avance: el repaso pregunta a la
+  // tienda por tandas y una biblioteca grande tarda horas. Mientras queden
+  // juegos por preguntar se dice cuántos, y la nota desaparece sola cuando ya
+  // no queda ninguno.
+  const drmPending = bootstrap?.stats.drmPendingGames ?? 0;
+  const drmNote =
+    scope.kind === "drmFree" && drmPending > 0
+      ? {
+          text: `${drmPending.toLocaleString("es-ES")} sin comprobar`,
+          detail:
+            "Vindexa pregunta a la tienda por el DRM de cada juego en tandas espaciadas, así que esta lista todavía está creciendo. Lo que no se ha comprobado no aparece aquí: «sin comprobar» no es «lleva DRM».",
+        }
+      : undefined;
   const activeFilters = Boolean(
     debouncedQuery || activeLibraryFilterCount(filters) || scope.kind !== "all",
   );
@@ -1204,6 +1217,7 @@ export function LibraryScreen({ bootstrap, loading, error, onRetry, onOpenSettin
           <LibraryToolbar
             title={scope.label}
             total={visibleTotal}
+            {...(drmNote ? { note: drmNote } : {})}
             query={query}
             onQueryChange={setQuery}
             sort={sort}

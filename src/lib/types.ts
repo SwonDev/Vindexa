@@ -138,6 +138,13 @@ export interface LibraryStats {
    */
   drmFreeGames: number;
   /**
+   * Juegos a los que todavía no se ha preguntado por su DRM.
+   *
+   * El repaso va por tandas y tarda horas en una biblioteca grande. Sin esta
+   * cifra al lado, «Sin DRM 604» se lee como el total cuando es un avance.
+   */
+  drmPendingGames: number;
+  /**
    * Juegos archivados. No están sumados en `totalGames`: el total tiene que
    * coincidir con lo que se ve. Esta cifra existe para que el archivado nunca
    * sea un agujero negro y la interfaz pueda ofrecer verlos.

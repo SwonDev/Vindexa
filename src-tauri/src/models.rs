@@ -138,6 +138,11 @@ pub struct LibraryStats {
     /// Es el recuento del acceso directo de la barra lateral. No incluye lo que
     /// aún no se ha comprobado: `unknown` es «no se sabe», no «lleva DRM».
     pub drm_free_games: i64,
+    /// Juegos a los que todavía no se ha preguntado por su DRM.
+    ///
+    /// El repaso va por tandas y tarda horas en una biblioteca grande. Sin esta
+    /// cifra al lado, «Sin DRM 604» se lee como el total cuando es un avance.
+    pub drm_pending_games: i64,
     /// Juegos visibles en el catálogo de Steam Family.
     ///
     /// No se suman a `total_games`, porque catálogo visible no es licencia y

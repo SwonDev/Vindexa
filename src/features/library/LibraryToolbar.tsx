@@ -35,6 +35,14 @@ interface LibraryToolbarProps {
   mode?: "library" | "family";
   title: string;
   total?: number;
+  /**
+   * Lo que matiza la cifra de al lado, cuando hace falta.
+   *
+   * «Sin DRM 604» se lee como el total, y es un avance: el repaso pregunta por
+   * tandas y tarda horas. La nota lo dice en la misma línea en la que está el
+   * número que se podría malinterpretar.
+   */
+  note?: { text: string; detail: string } | undefined;
   query: string;
   onQueryChange: (value: string) => void;
   sort: GameSort;
@@ -127,6 +135,11 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
             </span>
           )}
         </div>
+        {props.note && (
+          <span className="library-title__note" title={props.note.detail}>
+            {props.note.text}
+          </span>
+        )}
         <label className="search-field" htmlFor="library-search">
           <IconSearch aria-hidden="true" size={16} />
           <Input

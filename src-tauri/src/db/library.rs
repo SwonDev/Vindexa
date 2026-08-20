@@ -192,7 +192,15 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     -- acceso directo de la barra lateral, así que se cuenta con
                     -- las mismas exclusiones que el resto: si no coincide con lo
                     -- que sale al pulsarlo, sobra.
-                    COALESCE(SUM(CASE WHEN g.drm_state = 'drm_free' THEN 1 ELSE 0 END), 0)
+                    COALESCE(SUM(CASE WHEN g.drm_state = 'drm_free' THEN 1 ELSE 0 END), 0),
+                    -- Y cuántos quedan por preguntar. Sin esta cifra, «Sin DRM
+                    -- 604» parece el total y es un avance: el repaso va por
+                    -- tandas y tarda horas. Se cuenta con las mismas
+                    -- exclusiones que la de al lado para que las dos hablen de
+                    -- la misma biblioteca.
+                    COALESCE(SUM(CASE WHEN g.drm_state = 'unknown'
+                                       AND g.drm_checked_at IS NULL
+                                      THEN 1 ELSE 0 END), 0)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
@@ -211,6 +219,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     archived_games: row.get(6)?,
                     family_catalog_games: row.get(7)?,
                     drm_free_games: row.get(8)?,
+                    drm_pending_games: row.get(9)?,
                     external_store_games: external_store_games.clone(),
                 })
             },

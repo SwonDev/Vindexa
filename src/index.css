@@ -1088,6 +1088,16 @@ kbd {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
+/* Lo que matiza la cifra. No compite con ella: la acompaña. */
+.library-title__note {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--v-status-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .search-field {
   position: relative;
   display: flex;
@@ -2387,6 +2397,12 @@ input[type="search"]::-webkit-search-results-decoration {
 .detail-form [data-slot="select-trigger"] {
   border-color: var(--border);
   background: #191f26;
+}
+/* El pulgar mide dieciséis píxeles y su anillo de foco cuatro más: sin un
+   respiro, se sube encima de la etiqueta al enfocarlo con el teclado. */
+.slider-field {
+  display: grid;
+  gap: 6px;
 }
 .slider-field > span {
   display: flex;
