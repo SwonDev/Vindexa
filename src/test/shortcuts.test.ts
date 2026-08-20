@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_LOCAL_SHORTCUTS,
@@ -16,6 +17,7 @@ import {
   requiresLibrarySurface,
   resolveShortcutEvent,
   resolveShortcuts,
+  SHORTCUT_ACTIONS,
   SHORTCUT_CATALOGUE,
   sectionShortcut,
   shortcutLabel,
@@ -192,6 +194,42 @@ describe("catálogo de acciones", () => {
     expect(actions.every((action) => action in defaults)).toBe(true);
     const combinations = Object.values(defaults);
     expect(new Set(combinations).size).toBe(combinations.length);
+  });
+
+  /**
+   * Y en la otra dirección, que es la que falló.
+   *
+   * `wishlist` tenía combinación de fábrica y **no** estaba en el catálogo, así
+   * que nadie escuchaba ⌘5: la tecla estaba ocupada por un enlace que no
+   * llevaba a ninguna parte. Una acción con atajo y sin entrada en el catálogo
+   * es una tecla muerta que además bloquea esa combinación para las demás.
+   */
+  it("no deja ninguna combinación de fábrica sin quien la escuche", () => {
+    const catalogadas = new Set(SHORTCUT_CATALOGUE.map((entry) => entry.action));
+    for (const action of Object.keys({ ...DEFAULT_SHORTCUTS, ...DEFAULT_LOCAL_SHORTCUTS })) {
+      expect(catalogadas.has(action as (typeof SHORTCUT_CATALOGUE)[number]["action"])).toBe(true);
+    }
+  });
+
+  /**
+   * Los campos del frente y los de Rust tienen que ser los mismos.
+   *
+   * El fallo de ⌘5 nació de un desajuste entre los dos lados: Rust guardaba un
+   * campo que el frente no declaraba, y el comentario que lo explicaba se había
+   * quedado viejo. Un comentario no lo puede sostener; esto sí, porque lee la
+   * `struct` de verdad.
+   */
+  it("declara los mismos atajos de navegación que la struct de Rust", () => {
+    const fuente = readFileSync("src-tauri/src/models.rs", "utf8");
+    const bloque = fuente.match(/pub struct ShortcutBindings \{([\s\S]*?)\n\}/)?.[1];
+    expect(bloque, "no se encontró la struct en models.rs").toBeTruthy();
+    const campos = [...(bloque ?? "").matchAll(/^\s{4}pub ([a-z_]+): String,/gm)].map(
+      (match) => match[1] as string,
+    );
+    const enCamello = campos.map((campo) =>
+      campo.replace(/_([a-z])/g, (_, letra: string) => letra.toUpperCase()),
+    );
+    expect(enCamello.sort()).toEqual([...SHORTCUT_ACTIONS].sort());
   });
 
   it("liga las acciones frecuentes a teclas alcanzables", () => {
