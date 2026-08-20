@@ -2417,10 +2417,10 @@ pub fn upcoming_to_revisit(
     connection: &Connection,
     now: DateTime<Utc>,
     limit: u32,
-) -> AppResult<Vec<u32>> {
+) -> AppResult<Vec<(u32, String)>> {
     let hoy = now.format("%Y-%m-%d").to_string();
     let mut statement = connection.prepare(
-        "SELECT u.app_id,
+        "SELECT u.app_id, u.title,
                 (u.release_date_is_exact = 1
                  AND u.release_date IS NOT NULL
                  AND u.release_date < ?1) AS vencido
@@ -2433,7 +2433,7 @@ pub fn upcoming_to_revisit(
           LIMIT ?2",
     )?;
     let ids = statement
-        .query_map(params![hoy, limit], |row| row.get::<_, u32>(0))?
+        .query_map(params![hoy, limit], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ids)
 }
@@ -3303,7 +3303,11 @@ mod tests {
         .expect("importar");
 
         // Con todo recién refrescado, sólo entra el de fecha pasada.
-        let a_revisar = upcoming_to_revisit(&connection, ahora, 10).expect("revisar");
+        let a_revisar: Vec<u32> = upcoming_to_revisit(&connection, ahora, 10)
+            .expect("revisar")
+            .into_iter()
+            .map(|(app_id, _)| app_id)
+            .collect();
         assert_eq!(a_revisar.first(), Some(&10), "el vencido va primero: {a_revisar:?}");
 
         // Y detrás, por antigüedad de la última pregunta a la tienda. Los ya
@@ -3314,7 +3318,11 @@ mod tests {
                  INSERT INTO upcoming_checks(app_id, checked_at) VALUES (20, '2026-01-01T00:00:00.000Z');",
             )
             .expect("marcar preguntas");
-        let despues = upcoming_to_revisit(&connection, ahora, 10).expect("revisar");
+        let despues: Vec<u32> = upcoming_to_revisit(&connection, ahora, 10)
+            .expect("revisar")
+            .into_iter()
+            .map(|(app_id, _)| app_id)
+            .collect();
         assert_eq!(despues[0], 10, "el vencido sigue primero: {despues:?}");
         assert_eq!(despues[1], 20, "y luego el que hace más que no se pregunta");
         assert_eq!(despues[2], 30);

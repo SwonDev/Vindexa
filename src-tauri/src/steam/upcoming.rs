@@ -468,7 +468,7 @@ pub async fn revisit_candidates(database: &Database) -> AppResult<RevisitReport>
     let mut vigentes: Vec<ImportedUpcomingRelease> = Vec::new();
     let mut preguntados: Vec<(u32, String)> = Vec::new();
 
-    for (indice, app_id) in candidatos.iter().enumerate() {
+    for (indice, (app_id, titulo)) in candidatos.iter().enumerate() {
         if indice > 0 {
             sleep(BETWEEN_REQUESTS).await;
         }
@@ -486,14 +486,11 @@ pub async fn revisit_candidates(database: &Database) -> AppResult<RevisitReport>
                     .label
                     .as_deref()
                     .and_then(store_api::exact_release_day);
-                // El título se conserva: la ficha no lo devuelve en este
-                // paquete y el que ya está guardado es el bueno.
-                let Some(titulo) = titulo_guardado(database, *app_id)? else {
-                    continue;
-                };
                 vigentes.push(ImportedUpcomingRelease {
                     app_id: *app_id,
-                    title: titulo,
+                    // El título se conserva: la ficha no lo devuelve en este
+                    // paquete y el que ya está guardado es el bueno.
+                    title: titulo.clone(),
                     capsule_url: metadata.capsule_url.clone(),
                     header_url: metadata.header_url.clone(),
                     release_date: dia.clone().or_else(|| bundle.release.label.clone()),
@@ -522,18 +519,6 @@ pub async fn revisit_candidates(database: &Database) -> AppResult<RevisitReport>
     }
     mark_checked(database, &preguntados)?;
     Ok(report)
-}
-
-/// El título con el que ya está guardado un candidato.
-fn titulo_guardado(database: &Database, app_id: u32) -> AppResult<Option<String>> {
-    let connection = database.open()?;
-    Ok(connection
-        .query_row(
-            "SELECT title FROM upcoming_releases WHERE app_id = ?1",
-            [app_id],
-            |row| row.get(0),
-        )
-        .optional()?)
 }
 
 /// Cada cuánto se repasa la lista de deseados por su cuenta./// Cada cuánto se repasa la lista de deseados por su cuenta.
