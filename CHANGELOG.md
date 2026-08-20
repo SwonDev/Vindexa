@@ -68,6 +68,12 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   respuesta ahora se guarda, se cuenta aparte —«no pone a la venta» frente a «sin consultar»—,
   cada fila dice cuál de las dos cosas le pasa, y deja de repreguntarse cada seis horas por algo
   que no va a cambiar hoy.
+- **El repaso de DRM se atascaba en los juegos retirados.** Cuando la tienda contesta que un
+  juego ya no existe, eso no se apuntaba en ninguna parte, así que seguía en la cola. Y como la
+  cola va por AppID ascendente y los juegos viejos son justo los que más se retiran, cada tanda
+  gastaba su cabecera preguntando una y otra vez por los mismos juegos que ya no están, cada diez
+  minutos. Ahora se apunta **que se preguntó** —el estado sigue siendo «no se sabe», porque no se
+  sabe— y la cola avanza.
 - **«Sin DRM 604» parecía un total y era un avance.** El repaso pregunta a la tienda juego a
   juego y una biblioteca grande tarda horas. Mientras queden por comprobar, la cabecera dice
   cuántos y aclara que «sin comprobar» no es «lleva DRM».

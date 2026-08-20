@@ -102,9 +102,27 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<DrmPassReport> {
                     Err(_) => report.failed = report.failed.saturating_add(1),
                 }
             }
-            // La tienda contestó sin datos: el juego ya no está publicado. No es
-            // un fallo de red y no tiene sentido reintentarlo pronto.
-            Ok(None) => report.still_unknown = report.still_unknown.saturating_add(1),
+            // La tienda contestó sin datos: el juego ya no está publicado.
+            //
+            // No es un fallo de red y no tiene sentido reintentarlo, así que se
+            // deja constancia de **que se preguntó**: el estado sigue siendo
+            // «no se sabe» —porque no se sabe—, pero la fecha de comprobación
+            // lo saca de la cola.
+            //
+            // Sin esto se quedaba dentro para siempre. Y como la cola va por
+            // AppID ascendente y los juegos viejos son justo los que más se
+            // retiran, cada tanda gastaba su cabecera preguntando una y otra
+            // vez por los mismos juegos que ya no existen.
+            Ok(None) => {
+                let sin_señal = crate::db::rich_metadata::DrmAssessment {
+                    state: crate::db::rich_metadata::DrmState::Unknown,
+                    evidence: Vec::new(),
+                };
+                match database.save_drm_assessment(*app_id, &sin_señal) {
+                    Ok(()) => report.still_unknown = report.still_unknown.saturating_add(1),
+                    Err(_) => report.failed = report.failed.saturating_add(1),
+                }
+            }
             Err(failure) => {
                 report.failed = report.failed.saturating_add(1);
                 if let Some(delay) = failure.retry_after {
@@ -309,5 +327,49 @@ mod tests {
         assert_eq!(report.checked, 0);
         assert_eq!(report.classified, 0);
         assert_eq!(report.pending, 0);
+    }
+
+
+    /// Un juego que ya no está en la tienda tiene que salir de la cola.
+    ///
+    /// La cola va por AppID ascendente y los juegos viejos son justo los que
+    /// más se retiran: sin marcar que se preguntó, cada tanda gastaba su
+    /// cabecera volviendo a preguntar por los mismos juegos que ya no existen,
+    /// cada diez minutos, para siempre.
+    #[test]
+    fn preguntar_por_un_juego_retirado_cuenta_como_preguntado() {
+        let mut connection = database();
+        juego(&connection, 2430, None, "unknown", false);
+        assert_eq!(
+            pendientes(&connection),
+            vec![2430],
+            "empieza en la cola"
+        );
+
+        // Es lo que hace la pasada cuando la tienda contesta sin datos: guarda
+        // «no se sabe» —porque no se sabe— y con ello la fecha de comprobación.
+        crate::db::rich_metadata::save(
+            &mut connection,
+            2430,
+            &crate::db::rich_metadata::RichMetadataUpdate {
+                drm: Some(crate::db::rich_metadata::DrmAssessment {
+                    state: crate::db::rich_metadata::DrmState::Unknown,
+                    evidence: Vec::new(),
+                }),
+                ..crate::db::rich_metadata::RichMetadataUpdate::default()
+            },
+        )
+        .expect("guardar");
+
+        assert!(
+            pendientes(&connection).is_empty(),
+            "preguntado y sin respuesta sale de la cola"
+        );
+        let estado: String = connection
+            .query_row("SELECT drm_state FROM games WHERE app_id = 2430", [], |row| {
+                row.get(0)
+            })
+            .expect("leer estado");
+        assert_eq!(estado, "unknown", "sigue sin saberse, que es la verdad");
     }
 }
