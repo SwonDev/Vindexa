@@ -2242,6 +2242,44 @@ fn las_sesiones_tambien_dicen_cuantas_hay() {
     assert_eq!(data["truncated"], serde_json::json!(true), "{data}");
 }
 
+#[test]
+fn los_avisos_tambien_dicen_cuantos_hay() {
+    // Cien era el tope de la consulta. Con ciento veinte avisos pendientes, la
+    // respuesta traía cien y quien la lee cuenta cien: la misma trampa que en la
+    // biblioteca y en las sesiones, en la tercera lista.
+    let mut fixture = fixture();
+    add_game(&fixture.connection, 5150, "Un juego");
+    for i in 0..120 {
+        fixture
+            .connection
+            .execute(
+                "INSERT INTO game_reminders(id, app_id, due_at, note)
+                 VALUES (?1, 5150, ?2, '')",
+                rusqlite::params![format!("r{i}"), format!("2026-09-01T{:02}:00:00Z", i % 24)],
+            )
+            .expect("insertar aviso");
+    }
+    let token = issue_client(&mut fixture.connection, "Agente", &["biblioteca:leer"]);
+
+    let outcome = bridge::dispatch(
+        &mut fixture.connection,
+        &fixture.limiter,
+        &AgentRequest {
+            token,
+            utterance: String::new(),
+            intent: AgentIntent::Query { query: AgentQuery::Reminders },
+        },
+    )
+    .expect("consultar");
+
+    let AgentOutcome::Answer { data, .. } = outcome else {
+        panic!("una consulta contesta con datos: {outcome:?}");
+    };
+    assert_eq!(data["shown"], serde_json::json!(100), "{data}");
+    assert_eq!(data["matched"], serde_json::json!(120), "{data}");
+    assert_eq!(data["truncated"], serde_json::json!(true), "{data}");
+}
+
 /// Rehacer un enlace cuyo registro local se perdió.
 ///
 /// # El fallo

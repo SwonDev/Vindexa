@@ -1264,6 +1264,17 @@ pub fn answer(connection: &Connection, query: &AgentQuery) -> AppResult<Value> {
             Ok(json!({ "columns": columns }))
         }
         AgentQuery::Reminders => {
+            // Cien es el tope, no cuántos hay. Se cuenta antes de recortar por lo
+            // mismo que en la biblioteca: quien lee la respuesta cuenta lo que le
+            // llega y da esa cifra por buena.
+            let matched: i64 = connection.query_row(
+                "SELECT COUNT(*)
+                   FROM game_reminders r
+                   JOIN games g ON g.app_id = r.app_id
+                  WHERE r.completed_at IS NULL",
+                [],
+                |row| row.get(0),
+            )?;
             let mut statement = connection.prepare(
                 "SELECT r.id, r.app_id, g.title, r.due_at, r.note
                    FROM game_reminders r
@@ -1281,7 +1292,14 @@ pub fn answer(connection: &Connection, query: &AgentQuery) -> AppResult<Value> {
                     "note": row.get::<_, String>(4)?,
                 }))
             })?;
-            Ok(json!({ "reminders": rows.collect::<Result<Vec<_>, _>>()? }))
+            let reminders = rows.collect::<Result<Vec<_>, _>>()?;
+            let shown = reminders.len();
+            Ok(json!({
+                "reminders": reminders,
+                "matched": matched,
+                "shown": shown,
+                "truncated": (shown as i64) < matched,
+            }))
         }
         AgentQuery::Sessions { game, limit } => {
             let app_id = required_app_id(game)?;
