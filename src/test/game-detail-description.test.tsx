@@ -261,6 +261,36 @@ describe("estructura de la descripción de la ficha", () => {
    * etiqueta que culpa a Steam de no publicar algo que nunca fue suyo, y un
    * botón que repite una petición imposible.
    */
+  /**
+   * Una celda que sólo puede decir «Sin datos» ocupa una columna para nada.
+   *
+   * Los logros y la valoración de Steam Deck los publica Steam. En un juego de
+   * Epic no hay ni dato ni manera de conseguirlo, y «En disco» no significa
+   * nada en uno que no está instalado: tres de las seis celdas del resumen no
+   * decían nada. Es la misma regla que ya sigue la vista rápida de los regalos
+   * de Epic.
+   */
+  it("el resumen no enseña celdas que sólo pueden decir «Sin datos»", async () => {
+    serveDetail({
+      ...enriched,
+      externalStore: "epic",
+      installed: false,
+      achievementsStatus: "pending",
+      steamDeckStatus: "unknown",
+    });
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const resumen = document.querySelector(".detail-metrics") as HTMLElement;
+    expect(resumen).toBeTruthy();
+    expect(within(resumen).queryByText("Logros")).toBeNull();
+    expect(within(resumen).queryByText("Steam Deck")).toBeNull();
+    expect(within(resumen).queryByText("En disco")).toBeNull();
+    // Lo que sí se sabe sigue estando.
+    expect(within(resumen).getByText("Tiempo de juego")).toBeVisible();
+    expect(within(resumen).getByText("Última sesión")).toBeVisible();
+  });
+
   it("no marca «ficha no publicada» en un juego que no es de Steam", async () => {
     const { detailedDescription: _sinDescripcion, ...sinTexto } = enriched;
     serveDetail({

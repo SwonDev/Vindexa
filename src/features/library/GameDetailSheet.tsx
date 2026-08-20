@@ -710,6 +710,13 @@ export function GameDetailSheet({
             <MetricStrip
               className="detail-metrics"
               label="Resumen de la partida"
+              /* Una celda que sólo puede decir «Sin datos» y no ofrece nada que
+                 hacer al respecto ocupa una columna para no decir nada. Los
+                 logros y la valoración de Steam Deck los publica Steam, así que
+                 en un juego de otra tienda no hay ni dato ni manera de
+                 conseguirlo; «En disco» no significa nada en uno que no está
+                 instalado. Es la misma regla que ya sigue la vista rápida de los
+                 regalos de Epic: sólo lo que se sabe. */
               items={[
                 {
                   id: "playtime",
@@ -726,47 +733,55 @@ export function GameDetailSheet({
                   label: "Última sesión",
                   value: formatDate(detail.lastPlayedAt),
                 },
-                {
-                  id: "achievements",
-                  label: "Logros",
-                  icon: <IconRosetteDiscountCheck size={13} />,
-                  value:
-                    detail.achievementsStatus === "success" &&
-                    typeof detail.achievementsUnlocked === "number" &&
-                    typeof detail.achievementsTotal === "number"
-                      ? `${detail.achievementsUnlocked}/${detail.achievementsTotal}`
-                      : "Sin datos",
-                  note: detail.externalStore
-                    ? "Los logros los publica Steam"
-                    : detail.achievementsFetchedAt
-                      ? `Act. ${formatRelativeDate(detail.achievementsFetchedAt)}`
-                      : undefined,
-                  // Pedir los logros de un juego de Epic era pedírselos a Steam
-                  // por un identificador que no existe allí.
-                  action:
-                    !detail.externalStore && detail.achievementsStatus !== "success" ? (
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={achievementMutation.isPending}
-                        onClick={() => achievementMutation.mutate(detail.appId)}
-                      >
-                        {achievementMutation.isPending ? (
-                          <IconLoader2 className="is-spinning" />
-                        ) : (
-                          <IconRefresh />
-                        )}
-                        {achievementMutation.isPending ? "Actualizando…" : "Actualizar logros"}
-                      </Button>
-                    ) : undefined,
-                },
-                {
-                  id: "steam-deck",
-                  label: "Steam Deck",
-                  icon: <IconDeviceGamepad2 size={13} />,
-                  value: formatSteamDeckStatus(detail.steamDeckStatus) ?? "Sin datos",
-                },
-                { id: "size", label: "En disco", value: formatBytes(detail.sizeOnDisk) },
+                ...(detail.externalStore
+                  ? []
+                  : [
+                      {
+                        id: "achievements",
+                        label: "Logros",
+                        icon: <IconRosetteDiscountCheck size={13} />,
+                        value:
+                          detail.achievementsStatus === "success" &&
+                          typeof detail.achievementsUnlocked === "number" &&
+                          typeof detail.achievementsTotal === "number"
+                            ? `${detail.achievementsUnlocked}/${detail.achievementsTotal}`
+                            : "Sin datos",
+                        note: detail.achievementsFetchedAt
+                          ? `Act. ${formatRelativeDate(detail.achievementsFetchedAt)}`
+                          : undefined,
+                        action:
+                          detail.achievementsStatus !== "success" ? (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              disabled={achievementMutation.isPending}
+                              onClick={() => achievementMutation.mutate(detail.appId)}
+                            >
+                              {achievementMutation.isPending ? (
+                                <IconLoader2 className="is-spinning" />
+                              ) : (
+                                <IconRefresh />
+                              )}
+                              {achievementMutation.isPending
+                                ? "Actualizando…"
+                                : "Actualizar logros"}
+                            </Button>
+                          ) : undefined,
+                      },
+                    ]),
+                ...(detail.externalStore
+                  ? []
+                  : [
+                      {
+                        id: "steam-deck",
+                        label: "Steam Deck",
+                        icon: <IconDeviceGamepad2 size={13} />,
+                        value: formatSteamDeckStatus(detail.steamDeckStatus) ?? "Sin datos",
+                      },
+                    ]),
+                ...(detail.installed
+                  ? [{ id: "size", label: "En disco", value: formatBytes(detail.sizeOnDisk) }]
+                  : []),
               ]}
             />
             {achievementError && (
