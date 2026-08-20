@@ -4,6 +4,20 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
+## [Sin publicar]
+
+### Añadido
+
+- **Los logros conseguidos dejan de estar vacíos.** `achievements_total` estaba puesto en 1.655
+  juegos de una instalación real y `achievements_unlocked` **en ninguno**, con la clave de Steam
+  configurada desde hacía días: la ficha decía «Logros · Sin datos» en todas y ofrecía un botón
+  para traerlos, uno por juego, mil seiscientas cincuenta y cinco veces. Es el tercer sitio con
+  el mismo patrón —la función entera escrita y sin nadie que la ejecutara—, después de la
+  compatibilidad con Steam Deck y de la prioridad calculada. Ahora una pasada de fondo los
+  pregunta por tandas, empezando por los juegos que sí tienen logros publicados, y respeta los
+  mismos plazos que la ficha: seis horas si trajo recuento, un día si la cuenta no tiene logros
+  ahí, media hora si falló.
+
 ## [0.1.6] · 2026-08-20
 
 ### Corregido

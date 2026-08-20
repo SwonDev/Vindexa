@@ -1,4 +1,5 @@
 pub mod achievements;
+pub mod achievements_pass;
 pub mod actions;
 pub mod deal_radar;
 pub mod deals;

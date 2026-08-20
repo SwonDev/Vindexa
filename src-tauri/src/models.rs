@@ -569,6 +569,21 @@ pub const ES_DE_STEAM: &str = "(g.external_store IS NULL OR g.external_store = '
 /// orden y la ficha otro—.
 ///
 /// Las tablas tienen que estar aliasadas como `g` y `p`.
+/// Cuándo toca volver a pedirle a Steam los logros de un juego.
+///
+/// Los mismos plazos que usa la ficha al abrirse —seis horas si la última
+/// respuesta trajo recuento, un día si dijo que no hay logros para esta cuenta,
+/// media hora si falló—, escritos una sola vez para que la pasada de fondo y la
+/// ficha no puedan discrepar sobre qué está al día.
+pub const ACHIEVEMENTS_DUE_SQL: &str = "(CASE
+        WHEN g.achievements_fetched_at IS NULL THEN 1
+        WHEN g.achievements_status = 'success'
+            THEN datetime(g.achievements_fetched_at) < datetime('now', '-6 hours')
+        WHEN g.achievements_status = 'unavailable'
+            THEN datetime(g.achievements_fetched_at) < datetime('now', '-1 day')
+        ELSE datetime(g.achievements_fetched_at) < datetime('now', '-30 minutes')
+     END)";
+
 pub const PRIORITY_EFFECTIVE_SQL: &str = "(CASE WHEN p.priority_locked = 1 THEN p.priority * 20.0 ELSE COALESCE(p.priority_score, 0) END)";
 
 /// Cláusula que filtra la consulta de biblioteca según el ámbito. `None`

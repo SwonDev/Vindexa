@@ -24,10 +24,10 @@ pub mod wishlist;
 
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
-    ES_DE_STEAM, GameDetail, GameListRequest, LibraryFilterOptions, MetadataEnrichmentStatus,
-    MovePlannerItemInput, PagedGameSessions, PagedGames, PlannerColumn, PlannerOverview,
-    PlannerSettings, Recommendation, RecommendationRequest, SaveCollectionInput,
+    ACHIEVEMENTS_DUE_SQL, AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary,
+    DatabaseDiagnostics, ES_DE_STEAM, GameDetail, GameListRequest, LibraryFilterOptions,
+    MetadataEnrichmentStatus, MovePlannerItemInput, PagedGameSessions, PagedGames, PlannerColumn,
+    PlannerOverview, PlannerSettings, Recommendation, RecommendationRequest, SaveCollectionInput,
     SavePlannerItemInput, SmartRule, StatusDefinition, SteamConfiguration, SyncRun,
     UpdateGameInput,
 };
@@ -1187,6 +1187,47 @@ impl Database {
         let total: i64 = connection.query_row(
             &format!(
                 "SELECT COUNT(*) FROM games g WHERE {ES_DE_STEAM} AND g.steam_deck_status IS NULL"
+            ),
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(total.max(0) as u32)
+    }
+
+    /// Juegos a los que aún no se les han pedido los logros conseguidos.
+    ///
+    /// Los que sí tienen logros publicados primero —`achievements_total > 0`,
+    /// que es lo que la tienda ya contó al enriquecer la ficha—, porque son los
+    /// únicos donde el recuento va a decir algo. Detrás, los que no se sabe.
+    ///
+    /// Un juego que ya contestó no vuelve a la cola hasta que caduque su
+    /// respuesta, con los mismos plazos que usa la ficha: seis horas si trajo
+    /// recuento, un día si dijo que no hay, media hora si falló.
+    pub fn achievements_pending(&self, limit: u32) -> AppResult<Vec<u32>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(&format!(
+            "SELECT g.app_id
+               FROM games g
+              WHERE {ES_DE_STEAM}
+                AND {ACHIEVEMENTS_DUE_SQL}
+              ORDER BY (COALESCE(g.achievements_total, 0) > 0) DESC,
+                       COALESCE(g.achievements_fetched_at, '') ASC,
+                       g.app_id ASC
+              LIMIT ?1"
+        ))?;
+        let ids = statement
+            .query_map([limit], |row| row.get::<_, u32>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Cuántos quedan por preguntar.
+    pub fn achievements_pending_count(&self) -> AppResult<u32> {
+        let connection = self.open()?;
+        let total: i64 = connection.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM games g
+                  WHERE {ES_DE_STEAM} AND {ACHIEVEMENTS_DUE_SQL}"
             ),
             [],
             |row| row.get(0),

@@ -276,6 +276,42 @@ pub fn run() {
                 });
             }
 
+            // Los logros conseguidos que faltan por preguntar.
+            //
+            // `achievements_total` estaba puesto en 1.655 juegos de una
+            // instalación real y `achievements_unlocked` en ninguno, con la
+            // clave de Steam configurada desde hacía días: la ficha decía
+            // «Logros · Sin datos» en todas y ofrecía traerlos de uno en uno,
+            // mil seiscientas cincuenta y cinco veces. Es el tercer sitio con
+            // el mismo patrón, después de Steam Deck y de la prioridad.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Seis minutos: detrás del DRM y de Steam Deck, para no
+                    // solapar tres pasadas sobre la misma cuenta al arrancar.
+                    tokio::time::sleep(std::time::Duration::from_secs(360)).await;
+                    loop {
+                        match steam::achievements_pass::run_if_due(&database).await {
+                            Ok(Some(report)) => {
+                                eprintln!(
+                                    "Vindexa: logros repasados ({} preguntados, {} con recuento, {} sin logros, {} pendientes).",
+                                    report.checked,
+                                    report.resolved,
+                                    report.unavailable,
+                                    report.pending
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudieron repasar los logros: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;
+                    }
+                });
+            }
+
             // La prioridad de la biblioteca.
             //
             // El motor existe desde la migración 024 y sólo corría si alguien
