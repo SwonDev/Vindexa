@@ -164,8 +164,51 @@ cifra es exactamente lo que sale al pulsarla.
 
 ```sql
 SELECT drm_state, COUNT(*) FROM games WHERE drm_state <> 'unknown' GROUP BY drm_state;
--- medido: drm_free|393 · third_party_drm|9, y subiendo
+-- medido el 20/08/2026, con la pasada ya terminada:
+--   drm_free|3421 · third_party_drm|120
+-- y 336 sin veredicto, de los cuales 274 son de Epic e itch.io: no existen en
+-- Steam, así que no hay a quién preguntarles. La cifra de «sin comprobar» de la
+-- biblioteca cuenta sólo los 62 que sí se pueden preguntar.
 ```
+
+## 9 bis. Compatibilidad con Steam Deck
+
+La columna `steam_deck_status` existía desde la primera migración —con índice,
+en la ficha, en el filtro y disponible como regla de colección inteligente— y
+**nunca la escribió nadie**: vacía en los 3.877 juegos. La ficha decía «Sin
+datos» en todas y el filtro se ofrecía apagado con una nota que decía que Steam
+no publica el dato «mediante una API Web documentada».
+
+La nota era cierta y estaba incompleta. No hay API documentada, pero sí un
+informe público —el mismo que la tienda pinta en la página de cada juego— que no
+pide clave ni sesión:
+
+```
+https://store.steampowered.com/saleaction/ajaxgetdeckappcompatibilityreport?nAppID=620
+→ {"success":1,"results":{"appid":620,"resolved_category":3, …}}
+```
+
+Las categorías son 3 verificado, 2 jugable, 1 no compatible y 0 sin valorar. Un
+AppID que no existe devuelve `results: []` —un array, no un objeto—, y una
+categoría que no estuviera en esa lista no se traduce a la que más se le
+parezca: se deja sin dato y el juego vuelve a la cola.
+
+`steam::deck_pass` pregunta por tandas de doscientos con segundo y medio de
+pausa, como la del DRM, y no toca lo que no está en Steam. Se comprueba contra
+la tienda de verdad con una prueba que se ejecuta a mano:
+
+```
+cargo test --manifest-path src-tauri/Cargo.toml -- --ignored contra_la_tienda_de_verdad_el_informe
+```
+
+```sql
+SELECT steam_deck_status, COUNT(*) FROM games
+ WHERE steam_deck_status IS NOT NULL GROUP BY steam_deck_status;
+-- medido a los cinco minutos de abrir la aplicación: playable|22 · verified|6
+```
+
+«Steam no lo ha valorado» es una respuesta —se preguntó—; «Sin datos» significa
+que a ese juego todavía no le ha tocado.
 
 ## 10. Clic derecho
 
