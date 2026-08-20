@@ -224,7 +224,13 @@ describe("próximos lanzamientos puntuados", () => {
 
 describe("traducción de la coincidencia y de la fecha", () => {
   it("acota la puntuación al rango real y nombra la banda", () => {
-    expect(describeMatch(0)).toMatchObject({ percent: 0, level: "none" });
+    // Cero está medido: el modelo miró y no encontró nada en común. Que no se
+    // haya podido puntuar es otro estado distinto, y se enseña sin nota.
+    expect(describeMatch(0)).toMatchObject({
+      percent: 0,
+      level: "none",
+      band: "Sin señales en común",
+    });
     expect(describeMatch(0.18)).toMatchObject({ percent: 18, level: "low" });
     expect(describeMatch(0.45)).toMatchObject({ percent: 45, level: "medium" });
     expect(describeMatch(0.9)).toMatchObject({ percent: 90, level: "high" });

@@ -58,7 +58,10 @@ interface MatchCopy {
 export function describeMatch(score: number): MatchCopy {
   const bounded = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
   const percent = Math.round(bounded * 100);
-  if (percent === 0) return { percent, band: "Sin coincidencia medida", level: "none" };
+  // Cero **sí** está medido: significa que el modelo no encontró ninguna señal
+  // compartida. «Sin coincidencia medida» decía lo contrario —que no se había
+  // mirado—, y eso ya lo dice la ausencia de puntuación, que es otro estado.
+  if (percent === 0) return { percent, band: "Sin señales en común", level: "none" };
   if (bounded >= 0.6) return { percent, band: "Coincidencia alta", level: "high" };
   if (bounded >= 0.3) return { percent, band: "Coincidencia media", level: "medium" };
   return { percent, band: "Coincidencia baja", level: "low" };
