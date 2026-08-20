@@ -209,7 +209,7 @@ function previewFacts(offer: EpicFreeOffer): { label: string; value: string }[] 
  */
 function describeWindow(offer: EpicFreeOffer): string {
   if (offer.state === "upcoming") {
-    return offer.startsAt ? `Desde el ${formatDay(offer.startsAt)}` : "Anunciado";
+    return offer.startsAt ? describeStart(offer.startsAt) : "Anunciado";
   }
   if (offer.hoursLeft == null) {
     return "Gratis ahora";
@@ -221,6 +221,40 @@ function describeWindow(offer: EpicFreeOffer): string {
     return `Quedan ${offer.hoursLeft} h`;
   }
   return "Acaba en menos de una hora";
+}
+
+/**
+ * Cuándo empieza, dicho como se piensa en «me da tiempo».
+ *
+ * Epic cambia el regalo los jueves a media tarde, así que la mitad de las veces
+ * lo anunciado empieza **hoy**. «Desde el 20 ago» un 20 de agosto obliga a
+ * mirar el calendario para entender que faltan horas, no días. Hoy y mañana se
+ * dicen por su nombre y con la hora; más allá basta la fecha, porque a esa
+ * distancia la hora no cambia ninguna decisión.
+ */
+function describeStart(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Anunciado";
+  const dias = diasDeCalendario(date, new Date());
+  if (dias <= 0) return `Hoy a las ${formatHour(date)}`;
+  if (dias === 1) return `Mañana a las ${formatHour(date)}`;
+  return `Desde el ${formatDay(iso)}`;
+}
+
+/**
+ * Días de calendario entre dos momentos.
+ *
+ * No es la diferencia en horas partida por veinticuatro: a las once de la noche
+ * eso diría «hoy» de algo que empieza mañana a las dos.
+ */
+function diasDeCalendario(objetivo: Date, ahora: Date): number {
+  const a = new Date(objetivo.getFullYear(), objetivo.getMonth(), objetivo.getDate());
+  const b = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  return Math.round((a.getTime() - b.getTime()) / 86_400_000);
+}
+
+function formatHour(date: Date): string {
+  return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDay(iso: string): string {

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EpicFreeBlock } from "@/features/discovery/EpicFreeBlock";
 import { api } from "@/lib/tauri";
 import type { EpicFreeOffer } from "@/lib/types";
@@ -46,6 +46,22 @@ function renderBlock() {
     </QueryClientProvider>,
   );
 }
+
+/**
+ * Fija el reloj para esta prueba.
+ *
+ * «Hoy» y «mañana» son relativos por definición: sin fijar el reloj, la misma
+ * prueba pasa hoy y falla el jueves que viene. `shouldAdvanceTime` deja que
+ * las esperas de la interfaz sigan corriendo.
+ */
+function conElRelojEn(iso: string) {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(iso));
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -106,6 +122,7 @@ describe("gratis en Epic", () => {
   });
 
   it("lo anunciado se enseña con su fecha, después de lo vigente", async () => {
+    conElRelojEn("2026-08-18T09:00:00Z");
     mockedApi.epicFreeGames.mockResolvedValue([
       offer({
         offerId: "of-2",
@@ -122,6 +139,46 @@ describe("gratis en Epic", () => {
     expect(filas[0]).toHaveTextContent("Caravan SandWitch");
     expect(filas[1]).toHaveTextContent("Ghostrunner 2");
     expect(within(filas[1] as HTMLElement).getByText(/Desde el/)).toBeVisible();
+  });
+
+  /**
+   * Epic cambia el regalo los jueves a media tarde, así que lo anunciado
+   * empieza **hoy** la mitad de las veces. «Desde el 20 ago» un 20 de agosto
+   * obliga a mirar el calendario para entender que faltan horas, no días.
+   */
+  it("lo que empieza hoy lo dice, y a qué hora", async () => {
+    conElRelojEn("2026-08-20T08:00:00Z");
+    mockedApi.epicFreeGames.mockResolvedValue([
+      offer({
+        offerId: "of-3",
+        title: "Cardpocalypse",
+        state: "upcoming",
+        startsAt: "2026-08-20T15:00:00Z",
+        hoursLeft: null,
+      }),
+    ]);
+    renderBlock();
+
+    const fila = (await screen.findAllByRole("listitem"))[0] as HTMLElement;
+    expect(within(fila).getByText(/^Hoy a las \d{2}:\d{2}$/)).toBeVisible();
+    expect(within(fila).queryByText(/Desde el/)).toBeNull();
+  });
+
+  it("y lo de mañana se dice mañana, no «desde el 21»", async () => {
+    conElRelojEn("2026-08-20T22:00:00Z");
+    mockedApi.epicFreeGames.mockResolvedValue([
+      offer({
+        offerId: "of-4",
+        title: "Paquete de Mago Épico",
+        state: "upcoming",
+        startsAt: "2026-08-21T15:00:00Z",
+        hoursLeft: null,
+      }),
+    ]);
+    renderBlock();
+
+    const fila = (await screen.findAllByRole("listitem"))[0] as HTMLElement;
+    expect(within(fila).getByText(/^Mañana a las \d{2}:\d{2}$/)).toBeVisible();
   });
 
   it("lo descartado no ocupa sitio", async () => {

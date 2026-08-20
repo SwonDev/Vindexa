@@ -423,7 +423,12 @@ export function CollectionsScreen({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
           >
-            <div className="collections-board">
+            {/* Con una sola colección el tablero no decide nada: no hay entre
+                qué elegir ni qué reordenar, y editar y borrar están además en
+                la cabecera del detalle. Lo que sí hacía era comerse cuatrocientos
+                píxeles de alto y dejar media pantalla en negro a la derecha de
+                una única tarjeta. */}
+            <div className="collections-board" hidden={collections.length < 2}>
               <SortableContext
                 items={collections.map((collection) => collectionOrderDragId(collection.id))}
                 strategy={rectSortingStrategy}

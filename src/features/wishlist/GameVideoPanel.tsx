@@ -7,6 +7,7 @@ import {
   IconPlus,
   IconTrash,
   IconVideo,
+  IconX,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
@@ -67,6 +68,10 @@ export function GameVideoPanel({
   const queryClient = useQueryClient();
   const formId = useId();
   const [filter, setFilter] = useState<KindFilter>("all");
+  // El formulario ocupaba cuatro campos y un botón en la columna estrecha del
+  // panel, siempre, aunque nunca se hubiera guardado un vídeo. Se pide cuando
+  // se va a usar; el estado vacío de abajo ya explica para qué sirve.
+  const [formOpen, setFormOpen] = useState(false);
   const [source, setSource] = useState("");
   const [kind, setKind] = useState<VideoKind>("gameplay");
   const [videoTitle, setVideoTitle] = useState("");
@@ -162,53 +167,74 @@ export function GameVideoPanel({
             onValueChange={setFilter}
           />
         )}
+        <Button
+          className="video-panel__toggle"
+          size="xs"
+          variant={formOpen ? "ghost" : "outline"}
+          type="button"
+          aria-expanded={formOpen}
+          aria-controls={`${formId}-form`}
+          onClick={() => setFormOpen((abierto) => !abierto)}
+        >
+          {formOpen ? (
+            <>
+              <IconX aria-hidden="true" /> Cancelar
+            </>
+          ) : (
+            <>
+              <IconPlus aria-hidden="true" /> Añadir vídeo
+            </>
+          )}
+        </Button>
       </header>
 
-      <form className="video-form" onSubmit={submit}>
-        <label className="video-form__field video-form__field--wide" htmlFor={`${formId}-source`}>
-          <span>URL o identificador</span>
-          <Input
-            id={`${formId}-source`}
-            value={source}
-            placeholder="https://www.youtube.com/watch?v=…"
-            onChange={(event) => setSource(event.currentTarget.value)}
-          />
-        </label>
-        <label className="video-form__field" htmlFor={`${formId}-kind`}>
-          <span>Tipo</span>
-          <Select value={kind} onValueChange={(value) => setKind(value as VideoKind)}>
-            <SelectTrigger id={`${formId}-kind`} aria-label="Tipo de vídeo">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {VIDEO_KINDS.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="video-form__field" htmlFor={`${formId}-title`}>
-          <span>Título (opcional)</span>
-          <Input
-            id={`${formId}-title`}
-            value={videoTitle}
-            onChange={(event) => setVideoTitle(event.currentTarget.value)}
-          />
-        </label>
-        <label className="video-form__field" htmlFor={`${formId}-channel`}>
-          <span>Canal (opcional)</span>
-          <Input
-            id={`${formId}-channel`}
-            value={channel}
-            onChange={(event) => setChannel(event.currentTarget.value)}
-          />
-        </label>
-        <Button type="submit" size="sm" disabled={add.isPending}>
-          {add.isPending ? <IconLoader2 className="is-spinning" /> : <IconPlus />} Guardar vídeo
-        </Button>
-      </form>
+      {formOpen && (
+        <form className="video-form" id={`${formId}-form`} onSubmit={submit}>
+          <label className="video-form__field video-form__field--wide" htmlFor={`${formId}-source`}>
+            <span>URL o identificador</span>
+            <Input
+              id={`${formId}-source`}
+              value={source}
+              placeholder="https://www.youtube.com/watch?v=…"
+              onChange={(event) => setSource(event.currentTarget.value)}
+            />
+          </label>
+          <label className="video-form__field" htmlFor={`${formId}-kind`}>
+            <span>Tipo</span>
+            <Select value={kind} onValueChange={(value) => setKind(value as VideoKind)}>
+              <SelectTrigger id={`${formId}-kind`} aria-label="Tipo de vídeo">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VIDEO_KINDS.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label className="video-form__field" htmlFor={`${formId}-title`}>
+            <span>Título (opcional)</span>
+            <Input
+              id={`${formId}-title`}
+              value={videoTitle}
+              onChange={(event) => setVideoTitle(event.currentTarget.value)}
+            />
+          </label>
+          <label className="video-form__field" htmlFor={`${formId}-channel`}>
+            <span>Canal (opcional)</span>
+            <Input
+              id={`${formId}-channel`}
+              value={channel}
+              onChange={(event) => setChannel(event.currentTarget.value)}
+            />
+          </label>
+          <Button type="submit" size="sm" disabled={add.isPending}>
+            {add.isPending ? <IconLoader2 className="is-spinning" /> : <IconPlus />} Guardar vídeo
+          </Button>
+        </form>
+      )}
 
       {message ? (
         <p

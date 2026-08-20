@@ -221,6 +221,30 @@ describe("pantalla de colecciones", () => {
     );
   });
 
+  /**
+   * Un tablero para elegir entre una sola cosa no es un tablero.
+   *
+   * Ocupaba cuatrocientos píxeles de alto para enseñar una tarjeta con media
+   * pantalla en negro al lado, y todo lo que ofrecía —elegir, reordenar,
+   * editar, borrar— o no aplicaba con una sola colección o estaba también en
+   * la cabecera del detalle.
+   */
+  it("con una sola colección el tablero no ocupa la pantalla", async () => {
+    const { container } = renderScreen(makeBootstrap([favourites]));
+    await screen.findAllByText(/Favoritos/);
+
+    const tablero = container.querySelector(".collections-board");
+    expect(tablero).not.toBeNull();
+    expect(tablero).not.toBeVisible();
+  });
+
+  it("con dos o más, el tablero vuelve: ahí sí hay entre qué elegir", async () => {
+    const { container } = renderScreen(makeBootstrap([favourites, halfTold]));
+    await screen.findAllByText(/Favoritos/);
+
+    expect(container.querySelector(".collections-board")).toBeVisible();
+  });
+
   it("el clic derecho sobre una colección ofrece editarla, borrarla y cambiarle el aspecto", async () => {
     // Editar una colección desde aquí era ir a buscar el lápiz del pie de la
     // tarjeta. El gesto que todo el mundo prueba primero es el clic derecho.

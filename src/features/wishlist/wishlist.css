@@ -549,6 +549,13 @@
   gap: 8px;
 }
 
+/* El botón que pide el formulario cierra la fila por la derecha; con el filtro
+   por medio, `margin-inline-start: auto` lo mantiene pegado al borde sin
+   depender de cuántos hermanos haya. */
+.video-panel__toggle {
+  margin-inline-start: auto;
+}
+
 .video-panel__title {
   display: flex;
   align-items: center;

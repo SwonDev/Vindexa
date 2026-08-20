@@ -68,6 +68,17 @@ function renderPanel() {
   );
 }
 
+/**
+ * Despliega el formulario de alta.
+ *
+ * Sus cuatro campos ocupaban la columna del panel siempre, aunque no hubiera
+ * ni un vídeo guardado. Ahora se piden, así que las pruebas que escriben en
+ * ellos tienen que abrirlo primero, igual que quien lo usa.
+ */
+async function abrirFormulario(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /Añadir vídeo/ }));
+}
+
 describe("vídeos por juego · alta y validación", () => {
   beforeEach(() => {
     mockedApi.listGameVideos.mockResolvedValue([]);
@@ -76,10 +87,32 @@ describe("vídeos por juego · alta y validación", () => {
     mockedApi.reorderGameVideos.mockResolvedValue(undefined);
   });
 
+  it("no ocupa la columna con un formulario que nadie ha pedido", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByText(/Todavía no hay ningún vídeo/);
+
+    // Cuatro campos y un botón en una columna estrecha, para algo que se usa
+    // una vez cada muchos juegos: de entrada no están.
+    expect(screen.queryByLabelText("URL o identificador")).toBeNull();
+    expect(screen.queryByLabelText("Título (opcional)")).toBeNull();
+
+    const abrir = screen.getByRole("button", { name: /Añadir vídeo/ });
+    expect(abrir).toHaveAttribute("aria-expanded", "false");
+    await user.click(abrir);
+
+    expect(screen.getByLabelText("URL o identificador")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Cancelar/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("manda al backend la URL tal cual: el identificador lo extrae y valida Rust", async () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByText(/Todavía no hay ningún vídeo/);
+    await abrirFormulario(user);
 
     await user.type(
       screen.getByLabelText("URL o identificador"),
@@ -100,6 +133,7 @@ describe("vídeos por juego · alta y validación", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByText(/Todavía no hay ningún vídeo/);
+    await abrirFormulario(user);
 
     await user.type(screen.getByLabelText("URL o identificador"), "abc12345678");
     await user.click(screen.getByRole("combobox", { name: "Tipo de vídeo" }));
@@ -123,6 +157,7 @@ describe("vídeos por juego · alta y validación", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByText(/Todavía no hay ningún vídeo/);
+    await abrirFormulario(user);
 
     await user.click(screen.getByRole("button", { name: /Guardar vídeo/ }));
 
@@ -142,6 +177,7 @@ describe("vídeos por juego · alta y validación", () => {
     );
     renderPanel();
     await screen.findByText(/Todavía no hay ningún vídeo/);
+    await abrirFormulario(user);
 
     await user.type(screen.getByLabelText("URL o identificador"), "https://example.invalid/x");
     await user.click(screen.getByRole("button", { name: /Guardar vídeo/ }));
