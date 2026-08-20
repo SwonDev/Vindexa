@@ -581,6 +581,7 @@ pub fn run() {
             commands::rematch_external_stores,
             commands::launch_external_game,
             commands::list_external_store_sessions,
+            commands::retry_external_store_session,
             commands::begin_external_store_login,
             commands::sign_in_external_store,
             commands::complete_external_store_login,

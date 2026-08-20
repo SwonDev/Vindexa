@@ -196,24 +196,38 @@ pub async fn complete_login(store: ExternalStore, code: &str) -> AppResult<Exter
 /// abierta se sigue viendo caducado. Muere con el proceso y se olvida en cuanto
 /// alguien inicia o cierra sesión.
 type Portrait = Option<(Option<String>, i64, Option<i64>)>;
-static RECORDADO: std::sync::RwLock<Option<Vec<(ExternalStore, Portrait)>>> =
+
+/// Lo que se recuerda de una tienda: su retrato, o que el llavero no dejó leer.
+///
+/// La negativa también se recuerda. Sin eso, con el permiso denegado cada
+/// refresco de la pantalla volvía a abrir dos diálogos de contraseña, que es
+/// justo lo que se estaba intentando evitar. Se olvida al iniciar sesión, al
+/// cerrarla y cuando se pulsa «reintentar», que es lo que hace falta para que
+/// una negativa por error no obligue a reiniciar.
+#[derive(Clone)]
+enum Recuerdo {
+    Sesion(Portrait),
+    Ilegible,
+}
+
+static RECORDADO: std::sync::RwLock<Option<Vec<(ExternalStore, Recuerdo)>>> =
     std::sync::RwLock::new(None);
 
-fn recordar(store: ExternalStore, portrait: Portrait) {
+fn recordar(store: ExternalStore, recuerdo: Recuerdo) {
     if let Ok(mut cache) = RECORDADO.write() {
         let entradas = cache.get_or_insert_with(Vec::new);
         entradas.retain(|(conocida, _)| *conocida != store);
-        entradas.push((store, portrait));
+        entradas.push((store, recuerdo));
     }
 }
 
-fn recordado(store: ExternalStore) -> Option<Portrait> {
+fn recordado(store: ExternalStore) -> Option<Recuerdo> {
     let cache = RECORDADO.read().ok()?;
     let entradas = cache.as_ref()?;
     entradas
         .iter()
         .find(|(conocida, _)| *conocida == store)
-        .map(|(_, portrait)| portrait.clone())
+        .map(|(_, recuerdo)| recuerdo.clone())
 }
 
 /// Olvida lo recordado de una tienda: su sesión acaba de cambiar.
@@ -226,20 +240,31 @@ pub fn forget_remembered_session(store: ExternalStore) {
 }
 
 /// Estado de la sesión de una tienda. No toca la red.
+///
+/// Nunca falla: un llavero que no deja leer es **un estado**, no un error, y
+/// enseñarlo como error dejaba la pantalla sin las dos tarjetas.
 pub fn session_snapshot(store: ExternalStore) -> AppResult<ExternalStoreSession> {
-    if let Some(portrait) = recordado(store) {
-        return Ok(from_portrait(store, portrait));
+    match recordado(store) {
+        Some(Recuerdo::Sesion(portrait)) => return Ok(from_portrait(store, portrait)),
+        Some(Recuerdo::Ilegible) => return Ok(unreadable(store)),
+        None => {}
     }
-    let session = secrets::load(store)?;
+    let session = match secrets::load(store) {
+        Ok(session) => session,
+        Err(_) => {
+            recordar(store, Recuerdo::Ilegible);
+            return Ok(unreadable(store));
+        }
+    };
     recordar(
         store,
-        session.as_ref().map(|session| {
+        Recuerdo::Sesion(session.as_ref().map(|session| {
             (
                 session.account_name.clone(),
                 session.expires_at,
                 session.refresh_expires_at,
             )
-        }),
+        })),
     );
     Ok(describe(store, session.as_ref()))
 }
@@ -267,11 +292,11 @@ fn from_portrait(store: ExternalStore, portrait: Portrait) -> ExternalStoreSessi
 /// otra: cada tarjeta cuenta lo suyo, y la que no se pudo leer lo dice en vez
 /// de aparecer como si no hubiera sesión.
 pub fn list_sessions() -> AppResult<Vec<ExternalStoreSession>> {
-    Ok(ExternalStore::ALL
+    ExternalStore::ALL
         .iter()
         .copied()
-        .map(|store| session_snapshot(store).unwrap_or_else(|_| unreadable(store)))
-        .collect())
+        .map(session_snapshot)
+        .collect()
 }
 
 /// Lo que se enseña cuando el llavero no deja leer la entrada de una tienda.

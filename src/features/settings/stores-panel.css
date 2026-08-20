@@ -589,3 +589,22 @@
   color: var(--v-status-muted);
   font-size: 10px;
 }
+
+/* Un llavero que no deja leer no se enseña como un error rojo cualquiera: es un
+   estado con arreglo, y el arreglo se ofrece al lado. */
+.itch-unreadable {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 10px;
+  border-left: 2px solid var(--v-warning);
+  background: var(--v-surface-raised);
+}
+
+.itch-unreadable p {
+  margin: 0;
+  color: var(--v-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}

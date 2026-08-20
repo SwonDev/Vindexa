@@ -3115,6 +3115,21 @@ pub async fn list_external_store_sessions() -> AppResult<Vec<ExternalStoreSessio
     blocking(stores::online::list_sessions).await
 }
 
+/// Vuelve a preguntar al llavero por la sesión de una tienda.
+///
+/// Existe porque la negativa se recuerda: sin recordarla, cada refresco de la
+/// pantalla volvía a abrir el diálogo de contraseña. Recordándola, hace falta
+/// una forma explícita de decir «inténtalo otra vez» sin reiniciar, y ésta es.
+#[tauri::command]
+pub async fn retry_external_store_session(store: String) -> AppResult<ExternalStoreSession> {
+    let store = stores::ExternalStore::parse(&store)?;
+    blocking(move || {
+        stores::online::forget_remembered_session(store);
+        stores::online::session_snapshot(store)
+    })
+    .await
+}
+
 /// Abre la página de inicio de sesión de la tienda en el navegador del sistema
 /// y devuelve qué hay que traerse de vuelta.
 ///

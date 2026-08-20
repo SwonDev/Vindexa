@@ -250,6 +250,15 @@ export function StoresPanel() {
     queryKey: SESSIONS_KEY,
     queryFn: () => invoke<StoreSession[]>("list_external_store_sessions"),
   });
+  // Cuando el llavero deniega el permiso, la negativa se recuerda para no
+  // volver a abrir el diálogo en cada refresco. Esto es lo que permite decir
+  // «inténtalo otra vez» sin reiniciar la aplicación.
+  const retrySession = useMutation({
+    mutationFn: (store: ExternalStoreId) =>
+      invoke<StoreSession>("retry_external_store_session", { store }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SESSIONS_KEY }),
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
   const gamesRequest: ExternalGameRequest = {
     ...(storeFilter === "all" ? {} : { store: storeFilter }),
     ...(search.trim() ? { query: search.trim() } : {}),
@@ -453,6 +462,7 @@ export function StoresPanel() {
               onSync={() => syncOne.mutate(entry.store)}
               onSignOut={() => signOut.mutate(entry.store)}
               onSignedIn={() => void refresh()}
+              onRetrySession={() => retrySession.mutate(entry.store)}
               onToggleLink={(linked) => toggleLink.mutate({ store: entry.store, linked })}
             />
           ))}
@@ -790,6 +800,7 @@ function StoreCard({
   onSync,
   onSignOut,
   onSignedIn,
+  onRetrySession,
   onToggleLink,
 }: {
   detection: StoreDetection;
@@ -800,6 +811,7 @@ function StoreCard({
   onSync: () => void;
   onSignOut: () => void;
   onSignedIn: () => void;
+  onRetrySession: () => void;
   onToggleLink: (linked: boolean) => void;
 }) {
   const [showPaths, setShowPaths] = useState(false);
@@ -866,6 +878,14 @@ function StoreCard({
       )}
 
       {advice && <p className="store-card__advice">{advice}</p>}
+
+      {/* Con la negativa recordada, sin esto haría falta reiniciar Vindexa para
+          volver a intentarlo. */}
+      {session?.unreadable && (
+        <Button variant="outline" size="sm" disabled={busy} onClick={onRetrySession}>
+          <IconRefresh aria-hidden="true" /> Volver a intentarlo
+        </Button>
+      )}
 
       {detection.detected && detection.detectedPaths.length > 0 && (
         <div className="store-card__paths">
@@ -1080,6 +1100,13 @@ interface ItchAccountProfile {
 interface ItchSessionState {
   /** ¿Hay una clave guardada en el llavero? El valor **nunca** viaja. */
   hasKey: boolean;
+  /**
+   * El llavero no dejó comprobar si hay clave.
+   *
+   * No es lo mismo que no tenerla: la tarjeta pedía generar una nueva cuando la
+   * que había seguía ahí. Igual que en Epic y GOG, se dice lo que pasó.
+   */
+  unreadable: boolean;
   account: string | null;
   lastImportAt: string | null;
   lastImportStatus: "success" | "failed" | null;
@@ -1168,6 +1195,10 @@ function ItchPanel() {
   const busy = connect.isPending || importLibrary.isPending || signOut.isPending;
   const state = session.data;
   const connected = state?.hasKey === true;
+  const unreadable = state?.unreadable === true;
+  const retry = () => {
+    void queryClient.invalidateQueries({ queryKey: ITCH_SESSION_KEY });
+  };
 
   return (
     <section className="itch-panel">
@@ -1191,6 +1222,21 @@ function ItchPanel() {
         <p className="settings-hint" data-kind="error">
           No se pudo consultar el estado de itch.io: {getErrorMessage(session.error)}
         </p>
+      )}
+
+      {/* Igual que en Epic y GOG: un permiso denegado no se arregla generando
+          otra clave, y decirlo así evitaba que pareciera que no hay ninguna. */}
+      {unreadable && (
+        <div className="itch-unreadable">
+          <p>
+            El llavero de macOS no dejó comprobar si hay una clave guardada. Puede que se denegara
+            el permiso o que el llavero esté bloqueado: ábrelo en Acceso a Llaveros, busca
+            «itch-api-key» dentro de «io.vindexa.desktop» y permite el acceso.
+          </p>
+          <Button variant="outline" size="sm" disabled={busy} onClick={retry}>
+            <IconRefresh aria-hidden="true" /> Volver a intentarlo
+          </Button>
+        </div>
       )}
 
       {connected ? (

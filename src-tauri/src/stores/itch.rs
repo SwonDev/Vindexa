@@ -1109,6 +1109,15 @@ fn upsert_account(
 #[serde(rename_all = "camelCase")]
 pub struct ItchSessionState {
     pub has_key: bool,
+    /// El llavero no dejó comprobar si hay clave: permiso denegado, llavero
+    /// bloqueado o fallo del sistema.
+    ///
+    /// No es lo mismo que no tener clave, y confundirlos hacía que la tarjeta
+    /// pidiera generar una nueva cuando la que había seguía ahí. Con esto la
+    /// pantalla dice lo que pasó y ofrece volver a intentarlo, igual que las
+    /// tarjetas de Epic y GOG.
+    #[serde(default)]
+    pub unreadable: bool,
     /// Cuenta con la que se importó por última vez, si consta.
     pub account: Option<String>,
     pub last_import_at: Option<String>,
@@ -1118,8 +1127,17 @@ pub struct ItchSessionState {
 }
 
 /// Reúne lo que Ajustes necesita saber: si hay clave y qué pasó la última vez.
+///
+/// Un llavero que no deja leer no tumba la tarjeta: se enseña lo que sí se sabe
+/// —lo de la base de datos— y se dice que la clave no se pudo comprobar.
 pub fn session_state(connection: &Connection) -> AppResult<ItchSessionState> {
-    read_session_state(connection, secrets::has_api_key()?)
+    match secrets::has_api_key() {
+        Ok(has_key) => read_session_state(connection, has_key),
+        Err(_) => Ok(ItchSessionState {
+            unreadable: true,
+            ..read_session_state(connection, false)?
+        }),
+    }
 }
 
 /// La parte que sólo depende de la base de datos.
@@ -1136,6 +1154,7 @@ fn read_session_state(connection: &Connection, has_key: bool) -> AppResult<ItchS
         // Nunca se ha importado nada: eso no es un error, es un estado.
         return Ok(ItchSessionState {
             has_key,
+            unreadable: false,
             account: None,
             last_import_at: None,
             last_import_status: None,
@@ -1145,6 +1164,7 @@ fn read_session_state(connection: &Connection, has_key: bool) -> AppResult<ItchS
     };
     Ok(ItchSessionState {
         has_key,
+        unreadable: false,
         account: row.get(0)?,
         last_import_at: row.get(1)?,
         last_import_status: row.get(2)?,
@@ -1822,6 +1842,7 @@ mod tests {
             virgen,
             ItchSessionState {
                 has_key: false,
+                unreadable: false,
                 account: None,
                 last_import_at: None,
                 last_import_status: None,
@@ -1838,6 +1859,9 @@ mod tests {
         assert_eq!(despues.last_import_status.as_deref(), Some("success"));
         assert_eq!(despues.game_count, 1);
         assert!(despues.last_import_at.is_some());
+        // Y «no se pudo comprobar» es un estado aparte de «no hay clave»: la
+        // tarjeta pedía generar otra cuando la que había seguía guardada.
+        assert!(!despues.unreadable);
 
         // Lo que viaja a la interfaz no contiene ni rastro de la clave.
         let serializado = serde_json::to_string(&despues).expect("serializar estado");

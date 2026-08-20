@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StoresPanel } from "@/features/settings/StoresPanel";
@@ -86,6 +86,7 @@ const SIGNED_OUT_SESSIONS: StoreSessionFixture[] = [
 /** Estado inerte de itch.io: su panel comparte pantalla pero no esta prueba. */
 const ITCH_IDLE = {
   hasKey: false,
+  unreadable: false,
   account: null,
   lastImportAt: null,
   lastImportStatus: null,
@@ -742,5 +743,47 @@ describe("una sesión que no se pudo leer", () => {
     // Y la otra tienda no hereda el problema: cada tarjeta cuenta lo suyo.
     const gogCard = await screen.findByRole("article", { name: "GOG" });
     expect(within(gogCard).getAllByText("Sin sesión iniciada").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * La negativa se recuerda mientras corre la aplicación, para no volver a
+   * abrir el diálogo de contraseña en cada refresco. Por eso hace falta una
+   * forma explícita de reintentar sin reiniciar.
+   */
+  it("itch.io dice lo mismo cuando el llavero no deja comprobar la clave", async () => {
+    // Sin esto, la tarjeta pedía generar otra clave cuando la que había seguía
+    // guardada: el permiso no se arregla generando una clave nueva.
+    invoke.mockImplementation((command: string) => {
+      if (command === "list_external_store_sessions") {
+        return Promise.resolve(SIGNED_OUT_SESSIONS);
+      }
+      if (command === "itch_session_state") {
+        return Promise.resolve({ ...ITCH_IDLE, unreadable: true });
+      }
+      return Promise.reject(new Error(`Orden no simulada: ${command}`));
+    });
+
+    renderPanel();
+    expect(await screen.findByText(/no dejó comprobar si hay una clave/)).toBeVisible();
+    expect(screen.getAllByText(/itch-api-key/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Volver a intentarlo/ })).toBeVisible();
+  });
+
+  it("ofrece volver a intentarlo, y sólo cuando hace falta", async () => {
+    const user = userEvent.setup();
+    routeInvoke([
+      session({ unreadable: true }),
+      session({ store: "gog", displayName: "GOG", keychainAccount: "gog-store-session" }),
+    ]);
+
+    renderPanel();
+    const epicCard = await screen.findByRole("article", { name: "Epic Games Store" });
+    const gogCard = await screen.findByRole("article", { name: "GOG" });
+    expect(within(gogCard).queryByRole("button", { name: /Volver a intentarlo/ })).toBeNull();
+
+    await user.click(within(epicCard).getByRole("button", { name: /Volver a intentarlo/ }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("retry_external_store_session", { store: "epic" }),
+    );
   });
 });
