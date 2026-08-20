@@ -356,8 +356,11 @@ function SteamSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) 
               <strong>{account.personaName ?? "Cuenta de Steam"}</strong>
               {/* Un SteamID64 son diecisiete cifras: copiarlo a mano de una
                   pantalla es justo el tipo de trabajo que no debería existir. */}
+              {/* La etiqueta y el valor van en una fila: como texto suelto, el
+                  botón de copiar se iba a la línea siguiente y dejaba huérfano
+                  el «SteamID64 ·» arriba. */}
               <span>
-                SteamID64 ·{" "}
+                <span>SteamID64 ·</span>
                 <CopyableValue
                   value={account.steamId}
                   label={`Copiar el SteamID64 ${account.steamId}`}

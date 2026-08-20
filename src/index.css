@@ -2670,6 +2670,10 @@ input[type="search"]::-webkit-search-results-decoration {
   color: #e7edef;
 }
 .steam-account-card__identity span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
   margin-top: 2px;
   color: var(--v-muted);
   font-size: 10px;
