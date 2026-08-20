@@ -1400,6 +1400,17 @@
   white-space: nowrap;
 }
 
+/* Lo que no venía de tus deseados. No compite con la fecha: la acompaña. */
+.upcoming-row__found {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--v-cyan) 45%, transparent);
+  color: var(--v-cyan);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* Una fecha exacta se lee como dato; una aproximada tiene que verse como tal. */
 .upcoming-date {
   padding: 1px 5px;

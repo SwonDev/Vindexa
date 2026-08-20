@@ -1836,6 +1836,15 @@ pub struct UpcomingRelease {
     /// coincidencia. Nunca menciona una faceta que el candidato no tenga.
     pub match_reason: String,
     pub source: String,
+    /// Si el candidato salió de tu lista de deseados.
+    ///
+    /// No es un campo guardado: se calcula al listar mirando si el AppID sigue
+    /// en deseados. Guardarlo dejaría de ser verdad en cuanto quitaras el juego
+    /// de la lista, y la pantalla enseñaría una procedencia caducada.
+    ///
+    /// Distingue las dos clases de aviso que conviven aquí: uno es un
+    /// recordatorio de algo que ya habías marcado, y el otro un hallazgo.
+    pub in_wishlist: bool,
     pub dismissed_at: Option<String>,
     pub discovered_at: String,
     pub updated_at: String,
@@ -2334,24 +2343,51 @@ fn map_upcoming(row: &Row<'_>) -> rusqlite::Result<UpcomingRelease> {
         dismissed_at: row.get(14)?,
         discovered_at: row.get(15)?,
         updated_at: row.get(16)?,
+        in_wishlist: row.get::<_, i64>(17)? != 0,
     })
 }
 
 /// Próximos lanzamientos vivos, de mejor coincidencia a peor y, a igualdad, por
 /// fecha más cercana. Los que tienen fecha van antes que los que no: una fecha
 /// concreta es información y «próximamente» no lo es.
+/// Los candidatos que caben en la pantalla **y** cuántos hay en total.
+///
+/// La cifra de arriba decía «12 candidatos puntuados» siendo doce el tope de la
+/// lista, no lo que había: con cuarenta y cinco guardados, esa frase leída como
+/// total es falsa. El total viaja con la lista para que la pantalla pueda decir
+/// «12 de 45» sin una segunda consulta.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpcomingReleasesView {
+    pub items: Vec<UpcomingRelease>,
+    /// Candidatos vivos, no sólo los que caben.
+    pub total: u32,
+}
+
+/// Cuántos candidatos vivos hay.
+pub fn count_upcoming(connection: &Connection) -> AppResult<u32> {
+    Ok(connection.query_row(
+        "SELECT COUNT(*) FROM upcoming_releases WHERE dismissed_at IS NULL",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
 pub fn list_upcoming(connection: &Connection, limit: u32) -> AppResult<Vec<UpcomingRelease>> {
     let limit = limit.clamp(1, MAX_LIST_LIMIT);
     let mut statement = connection.prepare(
-        "SELECT app_id, title, capsule_url, header_url, release_date, release_date_is_exact,
-                genres_json, categories_json, developer, publisher, short_description,
-                match_score, match_reason, source, dismissed_at, discovered_at, updated_at
-           FROM upcoming_releases
-          WHERE dismissed_at IS NULL
-          ORDER BY match_score DESC,
-                   (release_date IS NULL) ASC,
-                   release_date ASC,
-                   app_id ASC
+        "SELECT u.app_id, u.title, u.capsule_url, u.header_url, u.release_date,
+                u.release_date_is_exact, u.genres_json, u.categories_json, u.developer,
+                u.publisher, u.short_description, u.match_score, u.match_reason, u.source,
+                u.dismissed_at, u.discovered_at, u.updated_at,
+                (EXISTS(SELECT 1 FROM wishlist_entries w WHERE w.app_id = u.app_id)
+                  OR EXISTS(SELECT 1 FROM catalog_wishlist_entries c WHERE c.app_id = u.app_id))
+           FROM upcoming_releases u
+          WHERE u.dismissed_at IS NULL
+          ORDER BY u.match_score DESC,
+                   (u.release_date IS NULL) ASC,
+                   u.release_date ASC,
+                   u.app_id ASC
           LIMIT ?1",
     )?;
     let items = statement
@@ -3179,6 +3215,83 @@ mod tests {
         assert_eq!(
             items[0].match_reason,
             "Todavía no hay señales en tu biblioteca que lo relacionen con nada."
+        );
+    }
+
+    /// De dónde salió cada candidato se calcula, no se guarda.
+    ///
+    /// Conviven dos fuentes: tu lista de deseados y lo que la tienda destaca
+    /// como «próximamente». Uno es un recordatorio y el otro un hallazgo, y la
+    /// pantalla los dice distinto. Guardar la procedencia dejaría de ser verdad
+    /// en cuanto quitaras el juego de deseados.
+    #[test]
+    fn el_listado_dice_cual_venia_de_tus_deseados() {
+        let mut connection = database();
+        connection
+            .execute_batch(
+                "INSERT INTO catalog_games(app_id, title) VALUES (10, 'De tus deseados');
+                 INSERT INTO catalog_wishlist_entries(app_id, bucket)
+                 VALUES (10, 'considering');",
+            )
+            .expect("sembrar deseado");
+        upsert_upcoming(
+            &mut connection,
+            &[
+                ImportedUpcomingRelease {
+                    app_id: 10,
+                    title: "De tus deseados".to_string(),
+                    capsule_url: None,
+                    header_url: None,
+                    release_date: Some("Q4 2026".to_string()),
+                    release_date_is_exact: false,
+                    genres: vec!["Rol".to_string()],
+                    categories: Vec::new(),
+                    developer: None,
+                    publisher: None,
+                    short_description: None,
+                    source: "store".to_string(),
+                },
+                ImportedUpcomingRelease {
+                    app_id: 20,
+                    title: "Lo destaca la tienda".to_string(),
+                    capsule_url: None,
+                    header_url: None,
+                    release_date: Some("Q4 2026".to_string()),
+                    release_date_is_exact: false,
+                    genres: vec!["Rol".to_string()],
+                    categories: Vec::new(),
+                    developer: None,
+                    publisher: None,
+                    short_description: None,
+                    source: "store".to_string(),
+                },
+            ],
+        )
+        .expect("importar");
+
+        let lista = list_upcoming(&connection, 10).expect("listar");
+        let deseado = lista
+            .iter()
+            .find(|item| item.app_id == 10)
+            .expect("está el de deseados");
+        let hallazgo = lista
+            .iter()
+            .find(|item| item.app_id == 20)
+            .expect("está el de la tienda");
+        assert!(deseado.in_wishlist);
+        assert!(!hallazgo.in_wishlist);
+
+        // Y si dejas de desearlo, deja de decir que venía de ahí.
+        connection
+            .execute("DELETE FROM catalog_wishlist_entries WHERE app_id = 10", [])
+            .expect("quitar de deseados");
+        let despues = list_upcoming(&connection, 10).expect("listar");
+        assert!(
+            !despues
+                .iter()
+                .find(|item| item.app_id == 10)
+                .expect("sigue estando")
+                .in_wishlist
         );
     }
 

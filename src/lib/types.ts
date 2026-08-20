@@ -1268,7 +1268,26 @@ export interface TasteReport {
   computedAt: string;
 }
 
+/**
+ * Los candidatos que caben en la pantalla y cuántos hay en total.
+ *
+ * La cifra de arriba decía «12 candidatos puntuados» siendo doce el tope de la
+ * lista, no lo que había: con cuarenta y cinco guardados, leerla como total es
+ * leer algo falso.
+ */
+export interface UpcomingReleasesView {
+  items: UpcomingRelease[];
+  total: number;
+}
+
 export interface UpcomingRelease {
+  /**
+   * Si salió de tu lista de deseados.
+   *
+   * Se calcula al listar, no se guarda: dejaría de ser verdad en cuanto
+   * quitaras el juego de la lista. Distingue el recordatorio del hallazgo.
+   */
+  inWishlist?: boolean;
   appId: number;
   title: string;
   capsuleUrl: string | null;

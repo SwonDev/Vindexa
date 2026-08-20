@@ -25,7 +25,11 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AppError, AppResult};
 use crate::steam::store_api::{STORE_COUNTRY, StoreMetadataFailure};
 
-const FEATURED_ENDPOINT: &str = "https://store.steampowered.com/api/featuredcategories";
+/// El escaparate público de la tienda. Sin clave y sin sesión.
+///
+/// Lo comparten el radar de ofertas y los próximos lanzamientos: es la misma
+/// respuesta, y cada uno lee la sección que le toca.
+pub(crate) const FEATURED_ENDPOINT: &str = "https://store.steampowered.com/api/featuredcategories";
 
 /// De qué escaparate viene una oferta.
 ///

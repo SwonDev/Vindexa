@@ -128,6 +128,12 @@ pub struct StoreMetadataBundle {
     pub price: Option<PriceObservation>,
     /// Si el juego todavía no ha salido, y con qué fecha lo anuncia la tienda.
     pub release: ReleaseWindow,
+    /// Qué clase de ficha es: `game`, `dlc`, `demo`, `music`…
+    ///
+    /// Hace falta para no llamar «próximo lanzamiento» a la demo o al DLC de
+    /// otro juego, que es lo que el escaparate de la tienda mezcla con los
+    /// juegos. `None` cuando la ficha no lo declara, que no es «es un juego».
+    pub app_type: Option<String>,
 }
 
 /// Lo que la tienda dice sobre la salida de un juego.
@@ -184,6 +190,9 @@ struct StoreEnvelope {
 
 #[derive(Debug, Deserialize)]
 struct StoreData {
+    /// `game`, `dlc`, `demo`, `music`… Lo declara la propia ficha.
+    #[serde(rename = "type")]
+    app_type: Option<String>,
     #[serde(default)]
     is_free: bool,
     short_description: Option<String>,
@@ -1006,12 +1015,20 @@ fn parse_store_bundle(app_id: u32, bytes: &[u8]) -> AppResult<StoreBundleOutcome
         })
         .unwrap_or_default();
 
+    let app_type = data
+        .app_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase);
+
     Ok(StoreBundleOutcome::Found(Box::new(StoreMetadataBundle {
         metadata,
         rich,
         content_descriptors,
         price,
         release,
+        app_type,
     })))
 }
 

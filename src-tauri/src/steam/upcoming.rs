@@ -19,16 +19,32 @@
 //! fecha, porque una fecha ausente también puede ser una fecha ilegible. Ver
 //! [`crate::steam::store_api::ReleaseWindow`].
 //!
+//! # La segunda fuente: lo que la tienda destaca
+//!
+//! Sólo con los deseados, la sección no descubre nada: enseña juegos que ya
+//! habías marcado tú. Por eso mira también la sección **«próximamente» del
+//! escaparate público** de Steam —la misma petición sin clave ni sesión que ya
+//! hace el radar de ofertas—, y de ahí se queda con lo que **es un juego** (ni
+//! demos ni DLC, que el escaparate mezcla), no tienes todavía, y la ficha
+//! confirma como no publicado.
+//!
+//! Lo que llega por ahí se puntúa contra el mismo modelo local de gustos, así
+//! que la lista sigue ordenándose por lo que a ti te encaja y no por lo que la
+//! tienda quiera empujar. Y se distingue en pantalla de lo que sale de tus
+//! deseados, porque no son la misma clase de aviso: uno es un recordatorio y el
+//! otro un hallazgo.
+//!
 //! # Qué no hace
 //!
-//! - **No descubre juegos nuevos.** No consulta listas de novedades ni de
-//!   tendencias: si no está en tus deseados, no aparece.
+//! - **No manda nada para descubrir.** La lista de «próximamente» es la misma
+//!   para todo el mundo: pedirla no dice quién eres ni qué tienes.
 //! - **No manda tus gustos a ninguna parte.** El modelo se aplica en local
 //!   sobre lo ya descargado, como documenta `db::priority`.
 //! - **No inventa una fecha.** Cuando la tienda sólo publica «Q4 2026», eso es
 //!   lo que se guarda, marcado como no exacta.
 
 use crate::db::Database;
+use crate::error::AppError;
 use crate::db::priority::{ImportedUpcomingRelease, UpcomingImportSummary};
 use crate::error::AppResult;
 use chrono::Utc;
@@ -211,6 +227,191 @@ fn mark_checked(database: &Database, candidates: &[(u32, String)]) -> AppResult<
     Ok(())
 }
 
+/// Cuántos juegos del escaparate se miran como mucho en una pasada.
+///
+/// La sección «próximamente» devuelve una decena; el tope está para que un día
+/// que devuelva muchos más no convierta la pasada en un barrido.
+const MAX_SHOWCASE_PER_RUN: usize = 12;
+
+/// Un juego tal y como lo publica el escaparate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShowcaseGame {
+    pub app_id: u32,
+    pub title: String,
+}
+
+/// Qué dejó la pasada del escaparate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShowcaseReport {
+    /// Juegos que destacaba la tienda.
+    pub received: u32,
+    /// Los que ya tenías o ya estaban en la lista: no se vuelven a preguntar.
+    pub already_known: u32,
+    /// Fichas pedidas para confirmar que siguen sin salir.
+    pub checked: u32,
+    /// Los que entraron como candidatos.
+    pub inserted: u32,
+    /// Los que ya estaban y se han refrescado.
+    pub updated: u32,
+    /// Descartados por no ser un juego —demos y DLC— o por haber salido ya.
+    pub skipped: u32,
+}
+
+/// Lo que la tienda destaca como «próximamente».
+pub async fn fetch_showcase() -> AppResult<Vec<ShowcaseGame>> {
+    let client = crate::stores::net::client()?;
+    let response = client
+        .get(crate::steam::deals::FEATURED_ENDPOINT)
+        .query(&[("cc", "ES"), ("l", "spanish")])
+        .send()
+        .await
+        .map_err(|_| {
+            AppError::new(
+                "steam_showcase_unreachable",
+                "No se pudo preguntar a la tienda por sus próximos lanzamientos.",
+            )
+        })?;
+    if !response.status().is_success() {
+        return Err(AppError::new(
+            "steam_showcase_http",
+            format!(
+                "La tienda respondió {} al pedir sus próximos lanzamientos.",
+                response.status().as_u16()
+            ),
+        ));
+    }
+    let bytes = response.bytes().await.map_err(|_| {
+        AppError::new(
+            "steam_showcase_body",
+            "La tienda cortó la respuesta de sus próximos lanzamientos.",
+        )
+    })?;
+    parse_showcase(&bytes)
+}
+
+/// Lee la sección «próximamente» del escaparate.
+///
+/// Sólo se queda con el identificador y el nombre: lo demás —si es un juego, si
+/// de verdad no ha salido— lo dice la ficha, y preguntarlo es el paso siguiente.
+pub fn parse_showcase(bytes: &[u8]) -> AppResult<Vec<ShowcaseGame>> {
+    let raiz: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_showcase_invalid_json",
+            "La tienda devolvió una respuesta que no se puede leer.",
+        )
+    })?;
+    let Some(items) = raiz
+        .pointer("/coming_soon/items")
+        .and_then(serde_json::Value::as_array)
+    else {
+        // Que no venga la sección no es un fallo: se sigue con lo que haya.
+        return Ok(Vec::new());
+    };
+    let mut salida = Vec::new();
+    let mut vistos = std::collections::BTreeSet::new();
+    for item in items {
+        let Some(app_id) = item
+            .get("id")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .filter(|value| *value > 0)
+        else {
+            continue;
+        };
+        let Some(title) = item
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if vistos.insert(app_id) {
+            salida.push(ShowcaseGame {
+                app_id,
+                title: title.to_string(),
+            });
+        }
+    }
+    Ok(salida)
+}
+
+/// Trae los próximos lanzamientos que la tienda destaca y no son tuyos.
+pub async fn refresh_from_showcase(database: &Database) -> AppResult<ShowcaseReport> {
+    let destacados = fetch_showcase().await?;
+    let mut report = ShowcaseReport {
+        received: destacados.len() as u32,
+        ..ShowcaseReport::default()
+    };
+
+    let pendientes: Vec<ShowcaseGame> = {
+        let connection = database.open()?;
+        let mut conocido = connection.prepare(
+            "SELECT EXISTS(SELECT 1 FROM games WHERE app_id = ?1)
+                 OR EXISTS(SELECT 1 FROM upcoming_releases WHERE app_id = ?1)",
+        )?;
+        let mut salida = Vec::new();
+        for juego in destacados {
+            let ya: bool = conocido.query_row([juego.app_id], |row| {
+                row.get::<_, i64>(0).map(|value| value != 0)
+            })?;
+            if ya {
+                report.already_known = report.already_known.saturating_add(1);
+            } else if salida.len() < MAX_SHOWCASE_PER_RUN {
+                salida.push(juego);
+            }
+        }
+        salida
+    };
+
+    let mut items: Vec<ImportedUpcomingRelease> = Vec::new();
+    for (indice, juego) in pendientes.iter().enumerate() {
+        if indice > 0 {
+            sleep(BETWEEN_REQUESTS).await;
+        }
+        report.checked = report.checked.saturating_add(1);
+        match store_api::fetch_bundle_with_retry_hint(juego.app_id).await {
+            Ok(StoreBundleOutcome::Found(bundle)) => {
+                // El escaparate mezcla demos y DLC con los juegos, y ninguna de
+                // las dos cosas es un lanzamiento que esperar. Un tipo que la
+                // ficha no declara tampoco cuenta como juego: no se sabe.
+                let es_juego = bundle.app_type.as_deref() == Some("game");
+                if !es_juego || !bundle.release.coming_soon {
+                    report.skipped = report.skipped.saturating_add(1);
+                    continue;
+                }
+                let metadata = &bundle.metadata;
+                items.push(ImportedUpcomingRelease {
+                    app_id: juego.app_id,
+                    title: juego.title.clone(),
+                    capsule_url: metadata.capsule_url.clone(),
+                    header_url: metadata.header_url.clone(),
+                    release_date: bundle.release.label.clone(),
+                    release_date_is_exact: metadata.release_date.is_some(),
+                    genres: metadata.genres.clone(),
+                    categories: metadata.categories.clone(),
+                    developer: metadata.developer.clone(),
+                    publisher: metadata.publisher.clone(),
+                    short_description: metadata.short_description.as_deref().map(recortar),
+                    source: SOURCE.to_string(),
+                });
+            }
+            Ok(StoreBundleOutcome::Unavailable) => {
+                report.skipped = report.skipped.saturating_add(1);
+            }
+            // Un fallo de red corta la pasada y guarda lo reunido.
+            Err(_) => break,
+        }
+    }
+
+    let summary: UpcomingImportSummary =
+        crate::db::priority::upsert_upcoming(&mut database.open()?, &items)?;
+    report.inserted = summary.inserted;
+    report.updated = summary.updated;
+    Ok(report)
+}
+
 /// Cada cuánto se repasa la lista de deseados por su cuenta.
 ///
 /// Doce horas: los lanzamientos no cambian de fecha cada rato, y cada pasada
@@ -245,6 +446,10 @@ pub async fn maintain_if_due(database: &Database) -> AppResult<Option<UpcomingRe
         return Ok(None);
     }
     let report = refresh_from_wishlist(database).await?;
+    // Y lo que la tienda destaca, que es lo único de esta sección que puede
+    // enseñar algo que no hubieras marcado tú. Si falla, la pasada sigue: los
+    // deseados ya están traídos y sería absurdo tirarlos.
+    let _ = refresh_from_showcase(database).await;
     // Aprender y puntuar son baratos y locales: se hacen aunque la tanda no
     // haya traído nada nuevo, porque el historial de juego sí ha cambiado.
     database.learn_taste()?;
@@ -286,6 +491,62 @@ fn mark_done(database: &Database) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
+    /// El escaparate mezcla juegos con demos y con DLC.
+    ///
+    /// Los tres llegan con el mismo `type: 0` en la lista, así que aquí no se
+    /// puede distinguir: lo único que se lee es el identificador y el nombre, y
+    /// quien decide si es un juego es la ficha, un paso más allá.
+    #[test]
+    fn lee_los_destacados_sin_inventarse_lo_que_no_dice_la_lista() {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+          "coming_soon": { "items": [
+            { "id": 2124360, "name": "HYPER PRIMATE", "type": 0 },
+            { "id": 5063510, "name": "僵尸驾到 Demo", "type": 0 },
+            { "id": 2124360, "name": "HYPER PRIMATE (repetido)", "type": 0 },
+            { "id": 0, "name": "Sin identificador" },
+            { "id": 42, "name": "   " }
+          ] }
+        }))
+        .expect("serializar");
+
+        let juegos = super::parse_showcase(&bytes).expect("analizar");
+        assert_eq!(juegos.len(), 2, "{juegos:?}");
+        assert_eq!(juegos[0].app_id, 2_124_360);
+        assert_eq!(juegos[0].title, "HYPER PRIMATE");
+        // El repetido no entra dos veces, y lo que no tiene identificador o
+        // nombre no entra: sin ellos no hay nada que preguntar.
+        assert_eq!(juegos[1].app_id, 5_063_510);
+    }
+
+    #[test]
+    fn una_respuesta_sin_esa_seccion_no_es_un_fallo() {
+        // Que la tienda deje de publicar «próximamente» no puede tumbar la
+        // pasada: los deseados siguen siendo una fuente.
+        assert!(super::parse_showcase(b"{}").expect("analizar").is_empty());
+    }
+
+    /// Contra la tienda de verdad. Apagada por defecto.
+    ///
+    /// ```text
+    /// cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored contra_la_tienda_el_escaparate
+    /// ```
+    #[test]
+    #[ignore = "sale a la red: se ejecuta a mano"]
+    fn contra_la_tienda_el_escaparate_sigue_teniendo_esta_forma() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let juegos = runtime
+            .block_on(super::fetch_showcase())
+            .expect("la tienda responde");
+        assert!(!juegos.is_empty(), "la sección «próximamente» trae algo");
+        for juego in &juegos {
+            assert!(juego.app_id > 0);
+            assert!(!juego.title.trim().is_empty());
+        }
+    }
+
     #[test]
     fn la_primera_vez_siempre_toca() {
         // Sin sello no hay nada aprendido: es justo el caso que dejaba la

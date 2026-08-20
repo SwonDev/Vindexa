@@ -8,7 +8,7 @@ import {
   UpcomingReleasesBlock,
 } from "@/features/discovery/UpcomingReleasesBlock";
 import { api } from "@/lib/tauri";
-import type { TasteReport, UpcomingRelease } from "@/lib/types";
+import type { TasteReport, UpcomingRelease, UpcomingReleasesView } from "@/lib/types";
 
 vi.mock("@/lib/tauri", () => ({
   api: {
@@ -89,6 +89,14 @@ const report: TasteReport = {
 /** El arte de reserva repite el título; se busca el titular real de la fila. */
 const rowTitle = { selector: ".upcoming-row__title" } as const;
 
+/**
+ * La orden devuelve la lista **y** el total: doce era el tope de la lista, no
+ * lo que había, y esa cifra leída como total es falsa.
+ */
+function vista(items: UpcomingRelease[], total = items.length): UpcomingReleasesView {
+  return { items, total };
+}
+
 function renderBlock() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -103,7 +111,7 @@ function renderBlock() {
 describe("próximos lanzamientos puntuados", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedApi.upcomingReleases.mockResolvedValue([exactRelease, approximateRelease]);
+    mockedApi.upcomingReleases.mockResolvedValue(vista([exactRelease, approximateRelease]));
     mockedApi.recordTasteFeedback.mockResolvedValue(undefined);
     mockedApi.dismissUpcomingRelease.mockResolvedValue(undefined);
     mockedApi.learnTaste.mockResolvedValue(report);
@@ -173,6 +181,26 @@ describe("próximos lanzamientos puntuados", () => {
     ).toBeVisible();
   });
 
+  /**
+   * Dos fuentes conviven en esta lista y no son la misma clase de aviso: una
+   * recuerda algo que ya habías marcado y la otra es un hallazgo. Sin marcarlo,
+   * un juego que nunca has visto parece uno de tus deseados.
+   */
+  it("marca lo que no venía de tus deseados, y sólo eso", async () => {
+    mockedApi.upcomingReleases.mockResolvedValue(
+      vista([
+        { ...exactRelease, inWishlist: true },
+        { ...approximateRelease, inWishlist: false },
+      ]),
+    );
+    renderBlock();
+
+    const deseado = (await screen.findByText("Silksong del Norte", rowTitle)).closest("li");
+    const hallazgo = screen.getByText("Proyecto sin fecha", rowTitle).closest("li");
+    expect(within(hallazgo as HTMLElement).getByText("Hallazgo")).toBeVisible();
+    expect(within(deseado as HTMLElement).queryByText("Hallazgo")).toBeNull();
+  });
+
   it("descarta un candidato con el comando dedicado", async () => {
     const user = userEvent.setup();
     renderBlock();
@@ -211,8 +239,29 @@ describe("próximos lanzamientos puntuados", () => {
     expect(screen.getByText("-0,31")).toBeVisible();
   });
 
+  /**
+   * «12 candidatos puntuados» era el tope de la lista, no lo que había.
+   *
+   * Con cuarenta y cinco guardados esa frase, leída como total, es falsa; y
+   * además esconde que los que se ven son los que más encajan, que es
+   * precisamente lo que hace útil el recorte.
+   */
+  it("no presenta el tope de la lista como si fuera el total", async () => {
+    mockedApi.upcomingReleases.mockResolvedValue(vista([exactRelease, approximateRelease], 45));
+    renderBlock();
+
+    expect(await screen.findByText("2 de 45, los que más encajan")).toBeVisible();
+  });
+
+  it("sin recorte no marea con un «de» que sobra", async () => {
+    mockedApi.upcomingReleases.mockResolvedValue(vista([exactRelease, approximateRelease]));
+    renderBlock();
+
+    expect(await screen.findByText("2 candidatos puntuados")).toBeVisible();
+  });
+
   it("mantiene un estado vacío honesto cuando no hay candidatos", async () => {
-    mockedApi.upcomingReleases.mockResolvedValue([]);
+    mockedApi.upcomingReleases.mockResolvedValue(vista([]));
     renderBlock();
 
     expect(await screen.findByText("Todavía no hay ningún candidato que puntuar")).toBeVisible();
@@ -261,7 +310,7 @@ describe("traducción de la coincidencia y de la fecha", () => {
  */
 describe("acciones rápidas de un próximo lanzamiento", () => {
   beforeEach(() => {
-    mockedApi.upcomingReleases.mockResolvedValue([exactRelease, approximateRelease]);
+    mockedApi.upcomingReleases.mockResolvedValue(vista([exactRelease, approximateRelease]));
     mockedApi.recordTasteFeedback.mockResolvedValue(undefined);
     mockedApi.dismissUpcomingRelease.mockResolvedValue(undefined);
   });

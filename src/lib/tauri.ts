@@ -105,7 +105,7 @@ import type {
   TasteSurface,
   TasteVerdict,
   UpcomingRefreshReport,
-  UpcomingRelease,
+  UpcomingReleasesView,
   UpdateCheckResult,
   UpdateCuratedItemInput,
   UpdateGameInput,
@@ -289,7 +289,7 @@ export const api = {
   /** Revisa una tanda de deseados y guarda los que aún no han salido. */
   refreshUpcomingReleases: () => invoke<UpcomingRefreshReport>("refresh_upcoming_releases"),
   upcomingReleases: (limit?: number) =>
-    invoke<UpcomingRelease[]>("list_upcoming_releases", { limit }),
+    invoke<UpcomingReleasesView>("list_upcoming_releases", { limit }),
   dismissUpcomingRelease: (appId: number) => invoke<void>("dismiss_upcoming_release", { appId }),
   listTags: () => invoke<TagDefinition[]>("list_tags"),
   saveTag: (input: SaveTagInput) => invoke<TagDefinition>("save_tag", { input }),

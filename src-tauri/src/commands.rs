@@ -15,7 +15,7 @@ use crate::db::{
     RichGameMetadata, SaveCuratedListInput, SaveGameVideoInput, SaveNotificationRuleInput,
     SavePersonalDatesInput, SaveReminderInput, SaveSessionInput, SaveTagInput, SaveViewInput,
     SaveWishlistEntryInput, SavedView, SteamProfileWrite, SteamWishlistImportResult, TagDefinition,
-    TasteReport, UpcomingRelease, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
+    TasteReport, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
     WishlistPriceStatus,
 };
 use crate::error::{AppError, AppResult};
@@ -1153,18 +1153,31 @@ pub async fn learn_taste(state: State<'_, AppState>) -> AppResult<TasteReport> {
     database_write(&state, move |database| database.learn_taste()).await
 }
 
-/// Revisa una tanda de tu lista de deseados y guarda los que aún no han salido.
+/// Trae candidatos de las dos fuentes: tus deseados y lo que la tienda destaca.
 ///
 /// Es lo que da de comer al motor de gustos: sin candidatos no hay nada que
-/// puntuar. Va por tandas porque cada ficha cuesta una petición a la tienda, y
-/// devuelve cuántos quedan para que la interfaz pueda decirlo en vez de dejar a
-/// la persona adivinando si ya está.
+/// puntuar. Los deseados van por tandas porque cada ficha cuesta una petición a
+/// la tienda, y el informe devuelve cuántos quedan para que la interfaz pueda
+/// decirlo en vez de dejar a la persona adivinando si ya está.
+///
+/// Un fallo del escaparate no tira lo que ya trajeron los deseados: son dos
+/// fuentes independientes y media lista es mejor que ninguna.
 #[tauri::command]
 pub async fn refresh_upcoming_releases(
     state: State<'_, AppState>,
 ) -> AppResult<steam::upcoming::UpcomingRefreshReport> {
     let database = state.database.clone();
-    steam::upcoming::refresh_from_wishlist(&database).await
+    let mut report = steam::upcoming::refresh_from_wishlist(&database).await?;
+    if let Ok(escaparate) = steam::upcoming::refresh_from_showcase(&database).await {
+        report.checked = report.checked.saturating_add(escaparate.checked);
+        report.upcoming = report
+            .upcoming
+            .saturating_add(escaparate.inserted)
+            .saturating_add(escaparate.updated);
+        report.inserted = report.inserted.saturating_add(escaparate.inserted);
+        report.updated = report.updated.saturating_add(escaparate.updated);
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -1185,13 +1198,18 @@ pub async fn score_upcoming_releases(state: State<'_, AppState>) -> AppResult<us
     database_write(&state, move |database| database.score_upcoming_releases()).await
 }
 
+/// Los candidatos que caben en la pantalla, con el total al lado.
+///
+/// El total viaja con la lista porque «12 candidatos puntuados» era el tope de
+/// la lista, no lo que había: con cuarenta y cinco guardados, esa cifra leída
+/// como total es falsa.
 #[tauri::command]
 pub async fn list_upcoming_releases(
     state: State<'_, AppState>,
     limit: Option<u32>,
-) -> AppResult<Vec<UpcomingRelease>> {
+) -> AppResult<crate::db::priority::UpcomingReleasesView> {
     database_read(&state, move |database| {
-        database.list_upcoming_releases(limit.unwrap_or(40))
+        database.upcoming_releases_view(limit.unwrap_or(40))
     })
     .await
 }

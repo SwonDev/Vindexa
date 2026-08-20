@@ -185,7 +185,8 @@ export function UpcomingReleasesBlock() {
     onError: (cause) => setAnnouncement(`No se pudo descartar: ${getErrorMessage(cause)}`),
   });
 
-  const items = upcoming.data ?? [];
+  const items = upcoming.data?.items ?? [];
+  const total = upcoming.data?.total ?? items.length;
   const busy = feedback.isPending || dismiss.isPending;
   const status = upcoming.isPending
     ? "Leyendo candidatos guardados"
@@ -193,7 +194,12 @@ export function UpcomingReleasesBlock() {
       ? "No se pudieron leer"
       : items.length === 0
         ? "Sin candidatos guardados"
-        : `${items.length} candidatos puntuados`;
+        : // Doce era el tope de la lista, no lo que había. Cuando hay más de
+          // los que caben se dice, y se dice cuáles son estos: los que más
+          // encajan, que es el orden con el que llegan.
+          total > items.length
+          ? `${items.length} de ${total}, los que más encajan`
+          : `${items.length} candidatos puntuados`;
 
   const highlights = useMemo(() => report?.highlights.slice(0, 6) ?? [], [report]);
 
@@ -445,6 +451,18 @@ function UpcomingRow({
                     </span>
                   )}
                   {studio ? <span className="upcoming-row__studio">{studio}</span> : null}
+                  {/* Dos fuentes conviven aquí y no son la misma clase de
+                      aviso: uno recuerda algo que ya habías marcado y el otro
+                      es un hallazgo. Se marca el hallazgo, que es el que
+                      necesita explicarse. */}
+                  {!item.inWishlist && (
+                    <span
+                      className="upcoming-row__found"
+                      title="No está en tus deseados: lo destaca la tienda como próximo lanzamiento y encaja con lo que sueles jugar."
+                    >
+                      Hallazgo
+                    </span>
+                  )}
                 </p>
 
                 {/* Una puntuación sin su razón no se pinta: sería una cifra sin

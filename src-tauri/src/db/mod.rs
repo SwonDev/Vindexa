@@ -71,7 +71,7 @@ pub use pricing::{
     WishlistPriceStatus,
 };
 pub use priority::{
-    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, TasteReport, UpcomingRelease,
+    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, TasteReport,
 };
 pub use rich_metadata::{DrmStateCounts, RichGameMetadata, RichMetadataUpdate};
 pub use saved_views::{SaveViewInput, SavedView};
@@ -942,8 +942,13 @@ impl Database {
         priority::score_upcoming(&mut self.open()?, Utc::now())
     }
 
-    pub fn list_upcoming_releases(&self, limit: u32) -> AppResult<Vec<UpcomingRelease>> {
-        priority::list_upcoming(&self.open()?, limit)
+    /// Los candidatos que caben, con el total al lado.
+    pub fn upcoming_releases_view(&self, limit: u32) -> AppResult<priority::UpcomingReleasesView> {
+        let connection = self.open()?;
+        Ok(priority::UpcomingReleasesView {
+            items: priority::list_upcoming(&connection, limit)?,
+            total: priority::count_upcoming(&connection)?,
+        })
     }
 
     pub fn dismiss_upcoming_release(&self, app_id: u32) -> AppResult<()> {

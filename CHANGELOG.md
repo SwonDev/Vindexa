@@ -31,6 +31,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **La lista de ofertas dice cuándo se miró.** Una rebaja que terminó ayer sigue guardada hasta
   la siguiente tanda; pasadas doce horas la línea cambia de tono y avisa de que algunas pueden
   haber terminado.
+- **Los próximos lanzamientos por fin descubren algo.** Salían sólo de tu lista de deseados, así
+  que la sección recordaba juegos que ya habías marcado tú y no enseñaba nada nuevo. Ahora mira
+  también la sección «próximamente» del escaparate público de Steam —la misma petición sin clave
+  ni sesión que ya hace el radar de ofertas—, se queda con lo que **es un juego** (ni demos ni
+  DLC, que el escaparate mezcla), no tienes y la ficha confirma sin publicar, y lo puntúa contra
+  el mismo modelo local. Lo que no venía de tus deseados se marca como **hallazgo**, porque un
+  recordatorio y un descubrimiento no son la misma clase de aviso. Medido en tu instalación: de
+  los diez destacados entraron ocho, y los dos que se quedaron fuera eran justo la demo y el DLC.
 - **Los regalos de Epic también tienen vista rápida.** Guardaban su imagen desde el principio y
   no se pintaba en ninguna parte: ahora, al pasar el ratón, se enseña con lo que Vindexa sabe
   —si ya lo tienes, cuánto queda y de qué va—.
@@ -62,6 +70,9 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   la página que se pidió, no un destino: ahora carga como el marco de la verificación humana,
   sin tocar la barra de direcciones ni el historial, y sólo desde el dominio sin cookies de
   YouTube.
+- **«12 candidatos puntuados» era el tope de la lista, no lo que había.** Con cuarenta y cinco
+  guardados, esa cifra leída como total es falsa. Ahora dice «12 de 45, los que más encajan», que
+  además explica por qué se recortan.
 - **«Steam · al día» lo decía aunque la última sincronización fuera de hace cuatro días.** Que una
   llamada terminara bien no dice nada de lo que ha pasado en tu biblioteca desde entonces, y menos
   con la sincronización periódica en «sólo manual». Pasado un día, el distintivo dice **cuándo**
