@@ -36,73 +36,45 @@ test("la vista ultracompacta mantiene varias filas legibles a 960x700", async ({
   await expect(page).toHaveScreenshot("ultracompact-960x700.png", { fullPage: true });
 });
 
-test("Steam Family conserva controles y filas densas a 960x700", async ({ app, page }) => {
+/**
+ * El catálogo de Steam Family a 960×700.
+ *
+ * Dejó de ser una pantalla aparte con su propia barra y su propia rejilla: es
+ * un ámbito más de la biblioteca. Esta prueba se quedó comprobando aquella
+ * pantalla —`.family-catalog-browser`, «Vista familiar ultracompacta», una fila
+ * por juego— y fallaba entera desde entonces. Lo que sigue teniendo sentido
+ * comprobar es lo de siempre: que en la ventana pequeña quepa, que la barra de
+ * herramientas no se pierda al desplazarse y que no haya barreras de acceso.
+ */
+test("Steam Family cabe en 960x700 sin perder los controles", async ({ app, page }) => {
   await page.setViewportSize({ width: 960, height: 700 });
   await app.goto();
   await app.waitForShell();
   await page.getByRole("button", { name: /Steam Family/ }).click();
 
-  await expect(page.getByRole("button", { name: /^Cuenta vinculada · / })).toBeVisible();
-  // El recuento vive en la barra lateral desde que la de estado dejó de repetir
-  // lo que ya se ve en otro sitio.
-  await expect(page.getByRole("button", { name: /^Todos los juegos/ })).toContainText("3");
-  await expect(page.getByRole("combobox", { name: "Filtrar catálogo familiar" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Ordenar catálogo familiar" })).toBeVisible();
-  await expect(page.locator(".family-catalog-browser--grid")).toBeVisible();
-  const gridRows = page.locator(".family-catalog-browser--grid .virtual-grid-row");
-  await expect(gridRows).toHaveCount(3);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        ),
-      ),
-    );
-  });
-  const firstRow = await gridRows.nth(0).boundingBox();
-  const secondRow = await gridRows.nth(1).boundingBox();
-  expect(firstRow).not.toBeNull();
-  expect(secondRow).not.toBeNull();
-  expect(secondRow?.y ?? 0).toBeGreaterThanOrEqual((firstRow?.y ?? 0) + (firstRow?.height ?? 0));
-  await expect(page).toHaveScreenshot("family-grid-960x700.png", { fullPage: true });
+  await expect(page.getByRole("button", { name: /^Cuenta de Steam vinculada/ })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Ordenar biblioteca" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Agrupar biblioteca" })).toBeVisible();
+  await expect(page.locator(".game-browser")).toBeVisible();
+  await app.expectNoHorizontalOverflow();
 
-  await gridRows.nth(1).evaluate((row) => {
-    const scrollContainer = row.closest<HTMLElement>(".family-catalog-browser");
-    if (!scrollContainer) return;
-    const rowBounds = row.getBoundingClientRect();
-    const containerBounds = scrollContainer.getBoundingClientRect();
-    scrollContainer.scrollTop = Math.round(
-      scrollContainer.scrollTop + rowBounds.top - containerBounds.top - 190,
-    );
-    scrollContainer.dispatchEvent(new Event("scroll"));
+  // La barra de herramientas es fija: desplazarse no puede esconderla bajo el
+  // listado, que es justo lo que comprobaba la versión anterior de esta prueba.
+  await page.locator(".game-browser").evaluate((node) => {
+    node.scrollTop = 400;
+    node.dispatchEvent(new Event("scroll"));
   });
   await page.evaluate(async () => {
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
   });
-  await expect(gridRows.nth(1)).toBeVisible();
-  const controlsRemainTopmost = await page
-    .locator(".family-catalog-controls")
-    .evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      const hit = document.elementFromPoint(
-        bounds.left + bounds.width / 2,
-        bounds.top + bounds.height / 2,
-      );
-      return hit === element || element.contains(hit);
-    });
-  expect(controlsRemainTopmost).toBe(true);
-  await expect(page).toHaveScreenshot("family-grid-scrolled-960x700.png", { fullPage: true });
-
-  await page.getByRole("radio", { name: "Vista familiar ultracompacta" }).click();
-  await expect(page.locator(".family-catalog-browser--compact")).toBeVisible();
-  await expect(page.locator(".family-game-row")).toHaveCount(12);
-  await expect(page.getByRole("button", { name: "Abrir ficha de Aurora Assembly" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Abrir ficha de Bastion of Moss" })).toHaveCount(0);
-  await app.expectNoHorizontalOverflow();
+  const toolbarOnTop = await page.locator(".library-toolbar").evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(bounds.left + 8, bounds.top + bounds.height / 2);
+    return hit === element || element.contains(hit);
+  });
+  expect(toolbarOnTop).toBe(true);
 
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
@@ -111,7 +83,7 @@ test("Steam Family conserva controles y filas densas a 960x700", async ({ app, p
     (violation) => violation.impact === "serious" || violation.impact === "critical",
   );
   expect(blocking).toEqual([]);
-  await expect(page).toHaveScreenshot("family-ultracompact-960x700.png", { fullPage: true });
+  await expect(page).toHaveScreenshot("family-grid-960x700.png", { fullPage: true });
 });
 
 test("la ficha desactiva por completo el parallax con movimiento reducido", async ({

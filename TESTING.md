@@ -353,9 +353,23 @@ Checklist de accesibilidad:
 `pnpm test:e2e` ejecuta el arnés Playwright determinista con IPC Tauri simulado y conserva
 baselines en `tests/e2e/__screenshots__/` para 960 × 700, 1440 × 900 y 1920 × 900. Cubre
 arranque, carga/error/recuperación, persistencia de interfaz, DnD con deshacer, reinicio,
-colecciones, catálogo Steam Family filtrado y ultracompacto a 960 × 700,
-`prefers-reduced-motion`, integridad de maquetación y Axe sin incidencias
-`serious`/`critical`. Sin reintentos: `retries: 0` y un único worker.
+colecciones, el ámbito de Steam Family a 960 × 700, `prefers-reduced-motion`, integridad de
+maquetación y Axe sin incidencias `serious`/`critical`. Sin reintentos: `retries: 0` y un único
+worker.
+
+> [!IMPORTANT]
+> **Esta suite no corre en el CI y por eso hay que ejecutarla a mano.** Sus baselines son
+> capturas de macOS: en otro sistema el texto se rasteriza distinto y no coincidirían. El CI
+> ejecuta tipos, estilo, Vitest, `vite build` y todo lo de Rust.
+>
+> Se comprobó el 20/08/2026 que llevaba tiempo en rojo sin que nadie lo notara: doce
+> escenarios fallaban contra una interfaz que ya no existía —la barra de estado que se quitó,
+> el conmutador de vista que pasó a ser un grupo de radios, el catálogo familiar que se fundió
+> con la biblioteca—. Una suite que no se ejecuta deja de describir la aplicación.
+
+El puerto del servidor de pruebas es el 4173. Si está ocupado —un `vite preview` olvidado, por
+ejemplo—, `VINDEXA_E2E_PORT=4271 pnpm test:e2e` usa otro en vez de obligar a matar procesos
+ajenos.
 
 `showcase.spec.ts` vive en el mismo directorio, así que `pnpm test:e2e` también lo arranca.
 No compara nada: escribe las capturas de `artifacts/showcase/` y **necesita red** para
