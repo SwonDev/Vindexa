@@ -1655,6 +1655,12 @@ export interface PriceRefreshReport {
   alerts: number;
   /** Fichas sin bloque de precio: desconocido, que no es cero. */
   withoutPrice: number;
+  /**
+   * De las anteriores, cuántas no tienen precio porque el juego **aún no ha
+   * salido**. Es una espera, no una retirada, y sólo el índice de la tienda lo
+   * distingue.
+   */
+  comingSoon: number;
   failed: number;
 }
 

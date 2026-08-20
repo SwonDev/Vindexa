@@ -251,6 +251,20 @@ export function WishlistBoard({
   const refreshPrices = useMutation({
     mutationFn: () => api.refreshWishlistPrices(),
     onSuccess: (report) => {
+      // «0 precios consultados» se lee como un fallo, y no lo es: significa que
+      // no había ninguno que preguntar porque todos son recientes. La cola deja
+      // en paz seis horas lo que acaba de mirar, y un día lo que la tienda dijo
+      // que no tiene precio.
+      const nadaQueHacer =
+        report.observed === 0 && report.withoutPrice === 0 && report.failed === 0;
+      if (nadaQueHacer) {
+        setMessage({
+          tone: "info",
+          text: "Nada que consultar: todos los precios se han mirado hace poco.",
+        });
+        void queryClient.invalidateQueries({ queryKey: ["wishlist-prices"] });
+        return;
+      }
       const parts = [
         report.observed === 1 ? "1 precio consultado" : `${report.observed} precios consultados`,
       ];
@@ -258,7 +272,14 @@ export function WishlistBoard({
       if (report.alerts > 0) parts.push(`${report.alerts} bajaron de tu objetivo`);
       // Lo que no se pudo saber también se cuenta: es la mitad honesta del
       // informe y la que explica por qué la lista sigue incompleta.
-      if (report.withoutPrice > 0) parts.push(`${report.withoutPrice} sin precio publicado`);
+      if (report.withoutPrice > 0) {
+        const porSalir = report.comingSoon;
+        parts.push(
+          porSalir > 0
+            ? `${report.withoutPrice} sin precio publicado, ${porSalir} de ellos porque aún no han salido`
+            : `${report.withoutPrice} sin precio publicado`,
+        );
+      }
       if (report.failed > 0) parts.push(`${report.failed} fallaron`);
       setMessage({ tone: "info", text: `${parts.join("; ")}.` });
       void queryClient.invalidateQueries({ queryKey: ["wishlist-prices"] });

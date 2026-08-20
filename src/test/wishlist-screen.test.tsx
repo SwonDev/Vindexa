@@ -350,6 +350,60 @@ describe("pantalla de deseados · cubos de intención", () => {
  * orden por descuento —el de omisión— ocupaban la cabecera: lo primero que se
  * ve son las filas sobre las que no se puede hacer nada.
  */
+/**
+ * «0 precios consultados» se leía como un fallo.
+ *
+ * La cola deja en paz seis horas lo que acaba de mirar, así que pulsar
+ * «Actualizar precios» dos veces seguidas devuelve cero: no es que fallara, es
+ * que no había nada que preguntar. Y cuando sí hay ausencias, se dice cuántas
+ * son porque el juego aún no ha salido, que es una espera y no una retirada.
+ */
+describe("el informe de precios", () => {
+  beforeEach(() => {
+    mockedApi.listGameVideos.mockResolvedValue([]);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 8, offset: 0 });
+    mockedApi.wishlistOverview.mockResolvedValue(fullOverview);
+  });
+
+  it("dice que no había nada que consultar en vez de decir cero", async () => {
+    const user = userEvent.setup();
+    mockedApi.refreshWishlistPrices.mockResolvedValue({
+      observed: 0,
+      changed: 0,
+      alerts: 0,
+      withoutPrice: 0,
+      comingSoon: 0,
+      failed: 0,
+    });
+    renderScreen();
+    await user.click(await screen.findByRole("radio", { name: "Lista" }));
+    await user.click(await screen.findByRole("button", { name: /Actualizar precios/ }));
+
+    expect(
+      await screen.findByText("Nada que consultar: todos los precios se han mirado hace poco."),
+    ).toBeVisible();
+  });
+
+  it("separa los que no tienen precio de los que aún no han salido", async () => {
+    const user = userEvent.setup();
+    mockedApi.refreshWishlistPrices.mockResolvedValue({
+      observed: 12,
+      changed: 2,
+      alerts: 0,
+      withoutPrice: 453,
+      comingSoon: 422,
+      failed: 0,
+    });
+    renderScreen();
+    await user.click(await screen.findByRole("radio", { name: "Lista" }));
+    await user.click(await screen.findByRole("button", { name: /Actualizar precios/ }));
+
+    expect(
+      await screen.findByText(/453 sin precio publicado, 422 de ellos porque aún no han salido/),
+    ).toBeVisible();
+  });
+});
+
 describe("deseados que ya están en la biblioteca", () => {
   beforeEach(() => {
     mockedApi.listGameVideos.mockResolvedValue([]);
