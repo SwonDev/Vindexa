@@ -18,10 +18,43 @@
 //! trae precio con moneda: un importe sin moneda no es un precio.
 
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::error::{AppError, AppResult};
 
 const CATALOG_ENDPOINT: &str = "https://catalog.gog.com/v1/catalog";
+
+/// Anfitriones desde los que GOG sirve las carátulas de su catálogo.
+///
+/// # Por qué hay una lista y no basta con «https»
+///
+/// La política de contenido de la ventana sólo pinta imágenes de anfitriones
+/// declarados. Una carátula de un anfitrión que no esté en `img-src` **no
+/// falla**: se queda en blanco, y eso es indistinguible de un juego sin
+/// carátula. Pasó con `gog-statics.com`, que es donde GOG sirve las del
+/// catálogo mientras que la biblioteca usa `images.gog.com`.
+///
+/// Guardar una dirección que la ventana no va a pintar es guardar una promesa
+/// que no se cumple, así que se descarta aquí. Y hay una prueba que compara
+/// esta lista con la `img-src` de `tauri.conf.json`, porque las dos tienen que
+/// decir lo mismo.
+pub const IMAGE_HOSTS: [&str; 2] = ["gog.com", "gog-statics.com"];
+
+/// La dirección de una carátula que la ventana sí puede pintar.
+///
+/// Se analiza entera y se mira el anfitrión: comparar el principio de la cadena
+/// dejaría pasar `https://gog.com.attacker.tld/`.
+fn imagen_pintable(raw: &str) -> Option<String> {
+    let url = Url::parse(raw).ok()?;
+    if url.scheme() != "https" {
+        return None;
+    }
+    let host = url.host_str()?.to_ascii_lowercase();
+    IMAGE_HOSTS
+        .iter()
+        .any(|base| host == *base || host.ends_with(&format!(".{base}")))
+        .then(|| raw.to_string())
+}
 
 /// Cuántas se piden. La sección enseña unas pocas; pedir cien sería traer
 /// noventa que nadie va a mirar.
@@ -183,9 +216,7 @@ fn parse_product(product: &serde_json::Value) -> Option<GogDeal> {
         .get("coverHorizontal")
         .or_else(|| product.get("coverVertical"))
         .and_then(serde_json::Value::as_str)
-        // Sólo `https`: la imagen se pinta dentro de la ventana de la aplicación.
-        .filter(|url| url.starts_with("https://"))
-        .map(str::to_string);
+        .and_then(imagen_pintable);
 
     let genres = product
         .get("genres")
@@ -371,6 +402,52 @@ mod tests {
             assert!(oferta.store_url.starts_with("https://www.gog.com/"));
             assert_eq!(oferta.currency, "EUR");
             assert!(oferta.initial_cents >= oferta.final_cents);
+        }
+    }
+
+
+    /// La carátula que se guarda tiene que poder pintarse.
+    ///
+    /// GOG sirve las del catálogo desde `gog-statics.com`, que no estaba en la
+    /// `img-src` de la ventana: la dirección se guardaba, la fila la pedía y el
+    /// navegador la bloqueaba en silencio. Quedaba el hueco con las iniciales,
+    /// que es exactamente lo que se enseña cuando **no hay** carátula.
+    #[test]
+    fn solo_se_guarda_una_caratula_que_la_ventana_puede_pintar() {
+        assert_eq!(
+            imagen_pintable("https://images.gog-statics.com/abc.png").as_deref(),
+            Some("https://images.gog-statics.com/abc.png")
+        );
+        assert_eq!(
+            imagen_pintable("https://images.gog.com/abc.png").as_deref(),
+            Some("https://images.gog.com/abc.png")
+        );
+        // Un anfitrión que sólo termina pareciéndose no hereda el permiso, y sin
+        // cifrar tampoco: comparar el principio de la cadena dejaba pasar las dos.
+        assert_eq!(imagen_pintable("https://gog.com.attacker.tld/abc.png"), None);
+        assert_eq!(imagen_pintable("https://evilgog-statics.com/abc.png"), None);
+        assert_eq!(imagen_pintable("http://images.gog.com/abc.png"), None);
+        assert_eq!(imagen_pintable("https://cdn.otra-tienda.com/abc.png"), None);
+    }
+
+    /// Y la lista de aquí tiene que coincidir con la de la ventana.
+    ///
+    /// Son dos archivos distintos —este y `tauri.conf.json`— y el desajuste no
+    /// da error: da un hueco en blanco. Por eso se comparan.
+    #[test]
+    fn la_politica_de_contenido_permite_esos_mismos_anfitriones() {
+        let configuracion = include_str!("../../tauri.conf.json");
+        let raiz: serde_json::Value =
+            serde_json::from_str(configuracion).expect("tauri.conf.json es JSON válido");
+        let csp = raiz["app"]["security"]["csp"]
+            .as_str()
+            .expect("la configuración declara una política de contenido");
+        for host in IMAGE_HOSTS {
+            let comodin = format!("https://*.{host}");
+            assert!(
+                csp.contains(&comodin),
+                "«{comodin}» falta en img-src: la carátula se guardaría y no se pintaría"
+            );
         }
     }
 }
