@@ -330,6 +330,18 @@ vaciarlo antes de nada.
 
 ## Lo que no está, y por qué
 
+- **Reclamar por ti el regalo de Epic.** Vindexa avisa, dice si ya lo tienes y abre la ficha en
+  el navegador integrado, donde ya estás identificado: un clic. Conducir tu sesión por el flujo
+  de compra —pulsar «Obtener», aceptar la ventana de confirmación— es otra cosa, y no se hace
+  sin pedirlo expresamente. Está aquí y no en el código porque es una decisión, no una carencia.
+- **Una pasada sistemática de fricción visual.** Se han corregido sitios concretos —el alta de
+  vídeos plegada, el tablero de colecciones a partir de la segunda, la barra de deseados que se
+  desbordaba, la vista rápida que se quedaba sobre la ficha— y se han añadido guardas que
+  recorren las cinco pantallas: accesibilidad con axe y desbordamiento horizontal a 1024, 1180 y
+  1440 px. Lo que no se ha hecho es un repaso pantalla por pantalla de densidad y jerarquía.
+- **Los logros esperan a que se cargue la clave de Steam.** No es un fallo: la pasada se abstiene
+  a propósito para no abrir un diálogo de contraseña sin nadie delante (ver 9 ter). El primer
+  acto explícito que cargue la clave la pone en marcha.
 - **Un cliente de Telegram dentro de Vindexa.** Ver arriba.
 - **Más movimiento en las tarjetas que se arrastran.** Ver el punto 1.
 - **Descargar modelos desde Vindexa.** Se proponen los que caben, preguntando a
