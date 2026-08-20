@@ -539,6 +539,25 @@ pub fn is_valid_archive_scope(value: &str) -> bool {
     ARCHIVE_SCOPES.contains(&value)
 }
 
+/// A qué juegos se les puede preguntar por su DRM.
+///
+/// La ficha de la tienda de Steam es la única fuente que se consulta, así que
+/// un juego de Epic o de itch.io no entra: no hay a quién preguntarle. GOG no
+/// necesita la pregunta —su catálogo entero es sin DRM y así lo declara— y ya
+/// llega marcado.
+///
+/// Vive aquí, junto a `archive_scope_clause`, por lo mismo que aquélla: las
+/// pruebas de integración compilan `db/library.rs` con `models.rs` y sin el
+/// resto de `db`.
+///
+/// Se escribe una vez porque la usan el repaso que pregunta y el recuento que
+/// dice cuántos faltan. Cuando eran dos condiciones distintas, la biblioteca
+/// prometía comprobar 274 juegos que nadie iba a preguntar nunca, y la nota
+/// «sin comprobar» no podía llegar a cero.
+///
+/// La tabla `games` tiene que estar aliasada como `g`.
+pub const DRM_PREGUNTABLE: &str = "(g.external_store IS NULL OR g.external_store = '')";
+
 /// Cláusula que filtra la consulta de biblioteca según el ámbito. `None`
 /// significa «no filtres», que es exactamente lo que pide `all`.
 ///

@@ -2697,6 +2697,43 @@ mod pruebas_del_recuento_de_familia {
         );
     }
 
+    /// «Sin comprobar» sólo cuenta lo que se va a comprobar.
+    ///
+    /// El DRM se le pregunta a la ficha de Steam, así que un juego de Epic o de
+    /// itch.io no entra en el repaso: no hay a quién preguntarle. La cifra los
+    /// contaba igual, y la nota de la biblioteca prometía comprobar 274 juegos
+    /// que nadie iba a preguntar nunca —una cuenta atrás que no llegaba a cero.
+    #[test]
+    fn los_juegos_de_otra_tienda_no_cuentan_como_drm_por_comprobar() {
+        let connection = base();
+        for (app_id, tienda) in [
+            (2_000_000_010_u32, Some("epic")),
+            (2_000_000_011, Some("itch")),
+            (770_u32, None),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, ownership_source, external_store,
+                                       drm_state, drm_checked_at)
+                     VALUES (?1, 'Un juego', 'owned', ?2, 'unknown', NULL)",
+                    rusqlite::params![app_id, tienda],
+                )
+                .expect("insertar juego");
+            connection
+                .execute(
+                    "INSERT INTO game_personal(app_id, status_id) VALUES (?1, 'unclassified')",
+                    [app_id],
+                )
+                .expect("insertar ficha personal");
+        }
+
+        let stats = library::library_stats(&connection).expect("estadísticas");
+        assert_eq!(
+            stats.drm_pending_games, 1,
+            "sólo el de Steam está esperando a que se le pregunte"
+        );
+    }
+
     #[test]
     fn los_prestados_se_cuentan_aparte_de_los_propios() {
         // La cifra tiene que ser la misma que se encuentra al entrar en «Steam

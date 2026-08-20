@@ -1,9 +1,9 @@
 use crate::error::{AppError, AppResult};
 use crate::models::RichGameMetadata;
 use crate::models::{
-    ActivityItem, BulkUpdateStatusInput, GameDetail, GameListRequest, GameSession, GameSummary,
-    LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PagedGames, UpdateGameInput,
-    archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
+    ActivityItem, BulkUpdateStatusInput, DRM_PREGUNTABLE, GameDetail, GameListRequest, GameSession,
+    GameSummary, LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PagedGames,
+    UpdateGameInput, archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
 };
 use chrono::NaiveDate;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, Transaction, params, params_from_iter};
@@ -176,7 +176,8 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
 
     connection
         .query_row(
-            "SELECT COUNT(*),
+            &format!(
+                "SELECT COUNT(*),
                     COALESCE(SUM(CASE WHEN p.installed = 1 THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN p.status_id = 'playing' THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN p.status_id = 'backlog' THEN 1 ELSE 0 END), 0),
@@ -200,13 +201,15 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
                     -- la misma biblioteca.
                     COALESCE(SUM(CASE WHEN g.drm_state = 'unknown'
                                        AND g.drm_checked_at IS NULL
+                                       AND {DRM_PREGUNTABLE}
                                       THEN 1 ELSE 0 END), 0)
              FROM games g JOIN game_personal p ON p.app_id = g.app_id
             WHERE NOT (
                 g.ownership_source = 'family_shared'
                 AND g.family_availability <> 'confirmed'
             )
-              AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)",
+              AND NOT EXISTS (SELECT 1 FROM game_archive a WHERE a.app_id = g.app_id)"
+            ),
             [],
             |row| {
                 Ok(LibraryStats {

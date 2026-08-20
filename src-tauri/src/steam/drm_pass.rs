@@ -38,6 +38,7 @@ use tokio::time::sleep;
 
 use crate::db::Database;
 use crate::error::AppResult;
+use crate::models::DRM_PREGUNTABLE;
 use crate::steam::store_api;
 
 /// Cuántos juegos se repasan por tanda. Con pausa de segundo y medio, una tanda
@@ -163,15 +164,15 @@ pub async fn run_if_due(database: &Database) -> AppResult<Option<DrmPassReport>>
 /// camino, que es el que sí revisita.
 fn pending_app_ids(database: &Database, limit: u32) -> AppResult<Vec<u32>> {
     let connection = database.open()?;
-    let mut statement = connection.prepare(
-        "SELECT app_id
-           FROM games
-          WHERE (external_store IS NULL OR external_store = '')
-            AND drm_state = 'unknown'
-            AND drm_checked_at IS NULL
-          ORDER BY app_id ASC
-          LIMIT ?1",
-    )?;
+    let mut statement = connection.prepare(&format!(
+        "SELECT g.app_id
+           FROM games g
+          WHERE {DRM_PREGUNTABLE}
+            AND g.drm_state = 'unknown'
+            AND g.drm_checked_at IS NULL
+          ORDER BY g.app_id ASC
+          LIMIT ?1"
+    ))?;
     let ids = statement
         .query_map([limit], |row| row.get::<_, u32>(0))?
         .collect::<Result<Vec<_>, _>>()?;
@@ -181,11 +182,13 @@ fn pending_app_ids(database: &Database, limit: u32) -> AppResult<Vec<u32>> {
 fn pending_count(database: &Database) -> AppResult<u32> {
     let connection = database.open()?;
     let total: i64 = connection.query_row(
-        "SELECT COUNT(*)
-           FROM games
-          WHERE (external_store IS NULL OR external_store = '')
-            AND drm_state = 'unknown'
-            AND drm_checked_at IS NULL",
+        &format!(
+            "SELECT COUNT(*)
+           FROM games g
+          WHERE {DRM_PREGUNTABLE}
+            AND g.drm_state = 'unknown'
+            AND g.drm_checked_at IS NULL"
+        ),
         [],
         |row| row.get(0),
     )?;
