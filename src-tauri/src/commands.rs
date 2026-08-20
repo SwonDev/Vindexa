@@ -1303,10 +1303,10 @@ pub async fn game_preview(
 pub async fn store_deals(
     state: State<'_, AppState>,
     limit: Option<u32>,
-) -> AppResult<Vec<crate::db::deals::DealCandidate>> {
+) -> AppResult<crate::db::deals::StoreDealsView> {
     let database = state.database.clone();
     let limit = limit.unwrap_or(40).clamp(1, 200);
-    blocking(move || database.store_deals(limit)).await
+    blocking(move || database.store_deals_view(limit)).await
 }
 
 /// Vuelve a preguntar a las tiendas por sus rebajas, ahora.

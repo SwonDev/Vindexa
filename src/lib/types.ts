@@ -1480,6 +1480,18 @@ export interface GamePreview {
  * `matchScore` a `null` es «aún no se ha podido puntuar» —faltan sus géneros—,
  * no «no te interesa». Cero sería una afirmación que nadie ha comprobado.
  */
+/**
+ * Las ofertas guardadas y cuándo se preguntó por ellas.
+ *
+ * La fecha viaja con la lista porque sin ella la lista miente por omisión: una
+ * rebaja que terminó ayer sigue guardada hasta la siguiente tanda.
+ */
+export interface StoreDealsView {
+  deals: DealCandidate[];
+  /** Cuándo terminó la última tanda. `null` es «todavía no se ha preguntado». */
+  checkedAt?: string | null;
+}
+
 /** Qué dejó una tanda del radar de ofertas. */
 export interface DealRadarReport {
   /** Ofertas que devolvieron las tiendas. */

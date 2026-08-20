@@ -1785,6 +1785,11 @@
   font-size: 11px;
 }
 
+/* Una lista vieja no se lee igual que una recién traída. */
+.store-deals__note[data-stale="true"] {
+  color: var(--v-warning);
+}
+
 /* --- Controles de la decisión, en línea con su título ---------------------- */
 .decision-controls {
   display: flex;

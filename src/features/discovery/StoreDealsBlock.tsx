@@ -20,6 +20,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { describeMatch } from "@/features/discovery/UpcomingReleasesBlock";
+import { formatRelativeDate } from "@/lib/format";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { DealCandidate } from "@/lib/types";
 
@@ -52,6 +53,22 @@ import type { DealCandidate } from "@/lib/types";
 
 /** Cuántas se enseñan sin desplegar. Bastantes para elegir, pocas para leerlas. */
 const VISIBLE = 6;
+
+/**
+ * A partir de cuánto una lista de rebajas deja de ser fiable.
+ *
+ * La tanda va cada seis horas mientras la aplicación está abierta. Si estuvo
+ * cerrada un fin de semana, lo guardado puede llevar días caducado: una rebaja
+ * terminada lleva a la tienda a pagar el precio completo creyendo que hay
+ * descuento, así que pasado el doble del ritmo normal se avisa.
+ */
+const STALE_HOURS = 12;
+
+function isStale(checkedAt: string): boolean {
+  const cuando = Date.parse(checkedAt);
+  if (Number.isNaN(cuando)) return true;
+  return Date.now() - cuando >= STALE_HOURS * 60 * 60 * 1000;
+}
 
 export function StoreDealsBlock() {
   const queryClient = useQueryClient();
@@ -122,7 +139,7 @@ export function StoreDealsBlock() {
     },
   });
 
-  const items = deals.data ?? [];
+  const items = deals.data?.deals ?? [];
   // Sin ofertas el bloque no ocupa sitio: un recuadro vacío en una columna larga
   // es ruido, no información.
   if (!deals.isPending && items.length === 0 && !deals.isError) return null;
@@ -191,6 +208,17 @@ export function StoreDealsBlock() {
         <Button variant="ghost" size="xs" onClick={() => setExpanded((abierto) => !abierto)}>
           {expanded ? `Ver sólo ${VISIBLE}` : `Ver las ${items.length}`}
         </Button>
+      )}
+
+      {/* Cuándo se miró. Sin esta línea la lista miente por omisión: una rebaja
+          que terminó ayer sigue guardada hasta la siguiente tanda. */}
+      {!report && !error && deals.data?.checkedAt && (
+        <p className="store-deals__note" data-stale={isStale(deals.data.checkedAt)}>
+          Consultado {formatRelativeDate(deals.data.checkedAt)}.{" "}
+          {isStale(deals.data.checkedAt)
+            ? "Algunas pueden haber terminado: pulsa «Actualizar»."
+            : "Las tiendas se repasan solas cada seis horas."}
+        </p>
       )}
 
       {report && !error && (

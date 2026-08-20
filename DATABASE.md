@@ -1,7 +1,7 @@
 # Esquema y persistencia de Vindexa
 
 SQLite es la fuente de verdad de Vindexa. Este documento describe el esquema vigente de la
-migración **26** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
+migración **47** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
 normativa ejecutable.
 
 ## Índice
@@ -72,11 +72,16 @@ permite incorporarlo a la biblioteca personal como `family_shared`.
 | Ficha enriquecida | `game_media` | Capturas y vídeos oficiales ordenados por juego. |
 | Contenido adicional | `game_dlc` | DLC declarados por la tienda, con propiedad e instalación derivadas de evidencia local. |
 | Listas curadas | `curated_lists`, `curated_list_items` | Selecciones editoriales propias con orden manual, nota y destacado. |
-| Deseados | `wishlist_entries`, `game_videos` | Cubos de intención de compra y vídeos asociados a un juego. |
+| Deseados | `wishlist_entries`, `catalog_games`, `catalog_wishlist_entries`, `game_videos` | Cubos de intención de compra —los de la biblioteca y los que aún no se tienen, que viven en el catálogo— y vídeos asociados a un juego. |
+| Precios | `game_prices`, `game_price_history`, `game_price_checks` | Último precio observado por moneda, su evolución y la respuesta de la tienda cuando **no** hay precio, que no es lo mismo que no haber preguntado. |
+| Ofertas | `store_deals` | Rebajas vigentes de Steam y GOG, con clave `(tienda, identificador)` porque los dos catálogos no comparten numeración. |
+| Regalos | `epic_free_offers` | Lo que Epic regala cada semana, con su ventana y lo descartado a mano. |
+| Vista rápida | `preview_screenshots`, `preview_screenshot_checks` | Capturas del emergente y el registro de a qué juegos ya se les preguntó, incluida la ausencia. |
 | Avisos | `notification_rules`, `notification_events` | Recordatorios programables y eventos oficiales derivados sin duplicar. |
-| Prioridad y gustos | `priority_signals`, `taste_weights`, `taste_feedback`, `upcoming_releases` | Puntuación explicable, modelo local de afinidad y próximos lanzamientos puntuados. |
-| Tiendas externas | `external_store_accounts`, `external_games` | Detección local de Epic y GOG, emparejado y estado DRM. |
-| Agentes | `agent_clients`, `agent_audit_log` | Clientes autorizados y registro auditable de cada acción automatizada. |
+| Prioridad y gustos | `priority_signals`, `taste_weights`, `taste_feedback`, `upcoming_releases`, `upcoming_checks` | Puntuación explicable, modelo local de afinidad, próximos lanzamientos puntuados y a qué deseados ya se les preguntó por su fecha. |
+| Tiendas externas | `external_store_accounts`, `external_games` | Detección local y por cuenta de Epic, GOG e itch.io, emparejado y estado DRM. |
+| Archivo y vistas | `game_archive`, `saved_views`, `metadata_enrichment_queue` | Juegos apartados sin borrarlos, filtros guardados y la cola de enriquecimiento de fichas. |
+| Agentes | `agent_clients`, `agent_audit_log`, `agent_tasks` | Clientes autorizados, registro auditable de cada acción automatizada y encargos programados. |
 
 ## Campos e invariantes relevantes
 
@@ -194,6 +199,20 @@ formato exacto; el frontend jamás concatena esa dirección.
 `priority_signals` y `taste_weights` se calculan en local a partir del comportamiento propio
 y no salen del equipo. Una prioridad manual anclada (`priority_locked = 1`) nunca la pisa el
 cálculo derivado.
+
+`game_price_checks` guarda **la respuesta**, no el precio: cuándo se preguntó y qué contestó
+la tienda cuando no publicó ninguno (`no_price` para lo que no está a la venta —sin fecha de
+salida, gratuito o retirado— y `unavailable` para un AppID que no reconoce). Sin esa fila,
+un juego preguntado sin precio es indistinguible de uno al que nadie preguntó nunca, y la
+pantalla acusaba a la aplicación de no haber mirado. La fila se borra en cuanto llega un
+precio de verdad.
+
+`store_deals` tiene clave `(store, external_id)`: GOG numera sus productos a su manera y
+compartir columna con los AppID de Steam sería apostar a que dos catálogos no coinciden nunca
+en un número. `app_id` sólo existe cuando la oferta es de Steam, y es lo que permite cruzarla
+con la biblioteca y enseñar sus capturas; en GOG es nulo y no se adivina por el título. Cada
+tienda se sincroniza y se limpia por separado: la tanda de una nunca borra las filas de la
+otra.
 
 `steam_news_items` solo acepta el feed `steam_community_announcements`. La tabla de estado
 conserva último intento/éxito, fallos consecutivos y próximo intento; no contiene la Web API

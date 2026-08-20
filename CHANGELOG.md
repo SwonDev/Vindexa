@@ -6,6 +6,53 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 
 ## [Sin publicar]
 
+### Añadido
+
+- **GOG entra en las ofertas.** «Ofertas para ti» sólo miraba Steam. Ahora pregunta también al
+  catálogo público de GOG, que está aquí por dos motivos: vende **sin DRM por definición** —que
+  es justo lo que esta biblioteca mira— y entrega el género y el estudio con la propia oferta,
+  así que sus rebajas se puntúan en el acto contra tu modelo de gustos sin una petición por
+  juego. Cada fila dice de qué tienda es, y pulsarla abre esa tienda: el mismo juego no cuesta
+  lo mismo en las dos. Medido en una instalación real: 32 ofertas guardadas —24 de GOG y 8 de
+  Steam—, las 32 puntuadas.
+- **Un botón para preguntar ahora.** Las tiendas se repasan solas cada seis horas, que es el
+  ritmo al que cambian las rebajas, pero una que se acaba no espera. El informe dice lo que
+  trajo y, sobre todo, **qué tienda no respondió**: una lista corta con pinta de completa es
+  peor que no traer nada.
+- **La columna de señales se reparte en tres grupos.** Eran nueve bloques apilados con
+  desplazamiento, y lo que llega hoy —un regalo que caduca el jueves— quedaba a la misma altura
+  visual que el histórico de descartados. Ahora hay *Oportunidades*, *Novedades* y *Avisos*,
+  repartidos por lo que se hace con cada cosa. Ninguna pestaña se queda vacía: cada bloque trae
+  su propio «aquí no hay nada» y lo explica.
+
+### Corregido
+
+- **Un juego a precio completo aparecía bajo «Ofertas para ti».** El escaparate de más vendidos
+  de Steam mezcla rebajas con precios normales, y ahí estaba *Mortal Shell II* a 49,99 € sin
+  descuento. Una oferta ahora exige un precio de referencia **mayor** que el vigente: sin eso no
+  hay rebaja que comprobar.
+- **«451 juegos sin precio consultado» eran 451 juegos consultados.** La tienda había respondido
+  por todos: no publica precio para juegos sin fecha de salida, gratuitos o retirados. Esa
+  respuesta ahora se guarda, se cuenta aparte —«no pone a la venta» frente a «sin consultar»—,
+  cada fila dice cuál de las dos cosas le pasa, y deja de repreguntarse cada seis horas por algo
+  que no va a cambiar hoy.
+- **«Sin DRM 604» parecía un total y era un avance.** El repaso pregunta a la tienda juego a
+  juego y una biblioteca grande tarda horas. Mientras queden por comprobar, la cabecera dice
+  cuántos y aclara que «sin comprobar» no es «lleva DRM».
+- **Un permiso del llavero denegado se enseñaba como «sin sesión iniciada».** La sesión de la
+  tienda estaba guardada; lo que faltaba era el permiso, y volver a iniciar sesión no arregla un
+  permiso. Ahora la tarjeta dice que no se pudo leer y lleva a Acceso a Llaveros nombrando la
+  entrada exacta. Además la pantalla deja de preguntar en cada visita: recuerda mientras corre
+  los tres datos que enseña —nombre y caducidades, nunca el testigo— y recalcula las caducidades
+  contra el reloj de cada consulta.
+- **El tráiler de una ficha de GOG disparaba un aviso de destino no permitido.** Es contenido de
+  la página que se pidió, no un destino: ahora carga como el marco de la verificación humana,
+  sin tocar la barra de direcciones ni el historial, y sólo desde el dominio sin cookies de
+  YouTube.
+- La vista rápida ya no corta la razón de la coincidencia a media palabra, la lista larga de
+  ofertas se puede volver a recoger, y el deslizador de progreso de la ficha deja de montarse
+  sobre su etiqueta al llegar con el teclado.
+
 ## [0.1.4] · 2026-08-19
 
 ### Añadido

@@ -81,6 +81,20 @@ pub struct DealCandidate {
     pub match_reason: String,
 }
 
+/// Las ofertas guardadas y cuándo se preguntó por ellas.
+///
+/// La fecha viaja con la lista porque sin ella la lista miente por omisión: una
+/// rebaja que terminó ayer sigue en la tabla hasta la siguiente tanda, y quien
+/// la mira no tiene forma de saber si está viendo lo de ahora o lo de hace seis
+/// horas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreDealsView {
+    pub deals: Vec<DealCandidate>,
+    /// Cuándo terminó la última tanda. `null` es «todavía no se ha preguntado».
+    pub checked_at: Option<String>,
+}
+
 /// Qué dejó una tanda.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -296,6 +310,18 @@ pub fn list(connection: &Connection, limit: u32) -> AppResult<Vec<DealCandidate>
 }
 
 /// Descarta una oferta para que deje de aparecer.
+/// Cuándo terminó la última tanda del radar.
+pub fn last_checked_at(connection: &Connection) -> AppResult<Option<String>> {
+    let valor: Option<String> = connection
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'deals.last_auto_refresh'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(valor)
+}
+
 /// A dónde lleva «abrir en la tienda» esa oferta, si sigue viva.
 ///
 /// La dirección sale de la base, no del frente: así lo que se abre es lo que

@@ -1067,8 +1067,13 @@ impl Database {
         priority::score_deals(&mut self.open()?, Utc::now())
     }
 
-    pub fn store_deals(&self, limit: u32) -> AppResult<Vec<deals::DealCandidate>> {
-        deals::list(&self.open()?, limit)
+    /// Las ofertas guardadas, con la fecha de la última tanda.
+    pub fn store_deals_view(&self, limit: u32) -> AppResult<deals::StoreDealsView> {
+        let connection = self.open()?;
+        Ok(deals::StoreDealsView {
+            deals: deals::list(&connection, limit)?,
+            checked_at: deals::last_checked_at(&connection)?,
+        })
     }
 
     /// La dirección de una oferta en su tienda.

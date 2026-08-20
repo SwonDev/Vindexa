@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreDealsBlock } from "@/features/discovery/StoreDealsBlock";
 import { api } from "@/lib/tauri";
-import type { DealCandidate } from "@/lib/types";
+import type { DealCandidate, StoreDealsView } from "@/lib/types";
 
 vi.mock("@/components/common/Artwork", () => ({
   Artwork: ({ title }: { title: string }) => <div aria-hidden="true">{title}</div>,
@@ -64,6 +64,14 @@ function gogDeal(overrides: Partial<DealCandidate> = {}): DealCandidate {
   };
 }
 
+/**
+ * La orden devuelve la lista **y** cuándo se preguntó: sin la fecha, una
+ * rebaja que terminó ayer se enseña como vigente y nadie puede saberlo.
+ */
+function vista(deals: DealCandidate[], checkedAt = "2026-08-20T01:00:00Z"): StoreDealsView {
+  return { deals, checkedAt };
+}
+
 function renderBlock() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -100,7 +108,7 @@ beforeEach(() => {
  */
 describe("ofertas para ti", () => {
   it("enseña el precio, el descuento y la coincidencia", async () => {
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.storeDeals.mockResolvedValue(vista([deal({ appId: 10, title: "Kingdom Come" })]));
     renderBlock();
 
     const fila = await screen.findByRole("button", { name: /Kingdom Come/ });
@@ -112,9 +120,9 @@ describe("ofertas para ti", () => {
   it("una oferta sin puntuar no finge un cero", async () => {
     // Sin sus géneros no se puede saber si encaja; cero significaría «no te
     // interesa», y eso no lo ha comprobado nadie.
-    mockedApi.storeDeals.mockResolvedValue([
-      deal({ appId: 10, title: "Sin puntuar", matchScore: null, matchReason: "" }),
-    ]);
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([deal({ appId: 10, title: "Sin puntuar", matchScore: null, matchReason: "" })]),
+    );
     renderBlock();
 
     const fila = await screen.findByRole("button", { name: /Sin puntuar/ });
@@ -125,18 +133,20 @@ describe("ofertas para ti", () => {
   });
 
   it("cuenta cuántas encajan contigo, que es la razón de la sección", async () => {
-    mockedApi.storeDeals.mockResolvedValue([
-      deal({ appId: 10, matchScore: 0.8 }),
-      deal({ appId: 11, matchScore: 0.2 }),
-      deal({ appId: 12, matchScore: null }),
-    ]);
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([
+        deal({ appId: 10, matchScore: 0.8 }),
+        deal({ appId: 11, matchScore: 0.2 }),
+        deal({ appId: 12, matchScore: null }),
+      ]),
+    );
     renderBlock();
     expect(await screen.findByText("1 encaja contigo")).toBeVisible();
   });
 
   it("pulsar una oferta abre su ficha en la tienda protegida", async () => {
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.storeDeals.mockResolvedValue(vista([deal({ appId: 10, title: "Kingdom Come" })]));
     renderBlock();
 
     await user.click(await screen.findByRole("button", { name: /Kingdom Come/ }));
@@ -147,7 +157,7 @@ describe("ofertas para ti", () => {
     // Se manda la pareja tienda-identificador y la dirección la resuelve el
     // backend: abrir «el 1207658930» en Steam llevaría a otro juego, o a nada.
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([gogDeal()]);
+    mockedApi.storeDeals.mockResolvedValue(vista([gogDeal()]));
     renderBlock();
 
     await user.click(await screen.findByRole("button", { name: /The Witcher 3/ }));
@@ -157,7 +167,9 @@ describe("ofertas para ti", () => {
   it("cada fila dice de qué tienda es", async () => {
     // El mismo juego cuesta cosas distintas en cada tienda: un precio sin
     // tienda no se puede comparar con nada.
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" }), gogDeal()]);
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([deal({ appId: 10, title: "Kingdom Come" }), gogDeal()]),
+    );
     renderBlock();
 
     const steam = await screen.findByRole("button", { name: /Kingdom Come/ });
@@ -169,10 +181,12 @@ describe("ofertas para ti", () => {
   it("dos tiendas con el mismo número no se pisan en la lista", async () => {
     // Si la fila se identificara sólo por el número, React descartaría una de
     // las dos y desaparecería una oferta sin que nadie se enterase.
-    mockedApi.storeDeals.mockResolvedValue([
-      deal({ appId: 1207, title: "El de Steam" }),
-      gogDeal({ externalId: "1207", title: "El de GOG" }),
-    ]);
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([
+        deal({ appId: 1207, title: "El de Steam" }),
+        gogDeal({ externalId: "1207", title: "El de GOG" }),
+      ]),
+    );
     renderBlock();
 
     expect(await screen.findByRole("button", { name: /El de Steam/ })).toBeVisible();
@@ -183,7 +197,7 @@ describe("ofertas para ti", () => {
     // Los deseados se llevan por AppID de Steam. Ofrecer el botón y fallar al
     // pulsarlo sería peor que decir por qué no está.
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([gogDeal()]);
+    mockedApi.storeDeals.mockResolvedValue(vista([gogDeal()]));
     renderBlock();
 
     await user.pointer({
@@ -197,7 +211,7 @@ describe("ofertas para ti", () => {
 
   it("se puede pasar a deseados sin salir de aquí", async () => {
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.storeDeals.mockResolvedValue(vista([deal({ appId: 10, title: "Kingdom Come" })]));
     renderBlock();
 
     await user.pointer({
@@ -215,7 +229,7 @@ describe("ofertas para ti", () => {
 
   it("descartar una oferta se guarda", async () => {
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.storeDeals.mockResolvedValue(vista([deal({ appId: 10, title: "Kingdom Come" })]));
     renderBlock();
 
     await user.pointer({
@@ -230,7 +244,7 @@ describe("ofertas para ti", () => {
     // Una tienda caída deja una lista corta con pinta de completa. Peor que no
     // traer nada es traer la mitad sin decirlo.
     const user = userEvent.setup();
-    mockedApi.storeDeals.mockResolvedValue([deal({ appId: 10, title: "Kingdom Come" })]);
+    mockedApi.storeDeals.mockResolvedValue(vista([deal({ appId: 10, title: "Kingdom Come" })]));
     mockedApi.refreshStoreDeals.mockResolvedValue({
       received: 24,
       discovered: 3,
@@ -251,8 +265,10 @@ describe("ofertas para ti", () => {
   it("la lista se despliega y se vuelve a recoger", async () => {
     const user = userEvent.setup();
     mockedApi.storeDeals.mockResolvedValue(
-      Array.from({ length: 9 }, (_, indice) =>
-        deal({ appId: 10 + indice, title: `Juego ${indice}` }),
+      vista(
+        Array.from({ length: 9 }, (_, indice) =>
+          deal({ appId: 10 + indice, title: `Juego ${indice}` }),
+        ),
       ),
     );
     renderBlock();
@@ -268,8 +284,42 @@ describe("ofertas para ti", () => {
     expect(screen.queryByRole("button", { name: /Juego 8/ })).toBeNull();
   });
 
+  it("dice cuándo se miró, para que la lista no mienta por omisión", async () => {
+    // Una rebaja que terminó ayer sigue guardada hasta la siguiente tanda: sin
+    // la fecha, quien la mira no puede saber si ve lo de ahora o lo de anoche.
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([deal({ appId: 10, title: "Kingdom Come" })], "2026-08-20T01:00:00Z"),
+    );
+    renderBlock();
+
+    expect(await screen.findByText(/Consultado/)).toBeVisible();
+    expect(screen.getByText(/se repasan solas cada seis horas/)).toBeVisible();
+  });
+
+  it("una lista vieja avisa de que puede haber caducado", async () => {
+    // Si la aplicación estuvo cerrada un fin de semana, lo guardado lleva días:
+    // una rebaja terminada lleva a la tienda a pagar el precio completo.
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([deal({ appId: 10, title: "Kingdom Come" })], "2020-01-01T00:00:00Z"),
+    );
+    renderBlock();
+
+    expect(await screen.findByText(/pueden haber terminado/)).toBeVisible();
+  });
+
+  it("sin haber preguntado nunca no se inventa una fecha", async () => {
+    mockedApi.storeDeals.mockResolvedValue({
+      deals: [deal({ appId: 10, title: "Kingdom Come" })],
+      checkedAt: null,
+    });
+    renderBlock();
+
+    await screen.findByRole("button", { name: /Kingdom Come/ });
+    expect(screen.queryByText(/Consultado/)).toBeNull();
+  });
+
   it("sin ofertas el bloque no ocupa sitio", async () => {
-    mockedApi.storeDeals.mockResolvedValue([]);
+    mockedApi.storeDeals.mockResolvedValue(vista([]));
     const { container } = renderBlock();
     await waitFor(() => expect(container.querySelector(".store-deals")).toBeNull());
   });
