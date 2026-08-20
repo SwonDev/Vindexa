@@ -658,6 +658,127 @@ mod tests {
         assert!(guardada.contains("/c45a0dcc4361206e34be411af44de7cf0cd2cd5b/"));
     }
 
+    /// El banner llega hasta la columna, y una convención equivocada se borra.
+    ///
+    /// Analizar bien la respuesta no sirve de nada si el `UPDATE` no la escribe.
+    /// Y hay un caso que no puede tratarse como los demás: cuando el índice
+    /// resuelve el juego y **no** publica banner, dejar puesta una URL derivada
+    /// por convención es conservar una dirección que devuelve 404, y el caché de
+    /// arte gastaría una petición en ella cada vez.
+    #[test]
+    fn el_banner_llega_a_la_columna_y_borra_la_conjetura_equivocada() {
+        let directory = TempDir::new().expect("crear directorio temporal");
+        let database = temp_database(&directory);
+        let conjetura =
+            "https://shared.steamstatic.com/store_item_assets/steam/apps/2700/library_hero.jpg";
+        {
+            let connection = database.open().expect("abrir base");
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, library_hero_url)
+                     VALUES (3483510, 'Elliot', NULL)",
+                    [],
+                )
+                .expect("insertar el moderno");
+            // Este sí tiene una conjetura guardada, y el índice dice que no hay
+            // banner: la 049 la escribió para toda la biblioteca.
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, library_hero_url)
+                     VALUES (2700, 'Half-Life: Source', ?1)",
+                    [conjetura],
+                )
+                .expect("insertar el que no tiene banner");
+        }
+
+        let resolved = parse_assets(INDEX_OK.as_bytes()).expect("leer índice");
+        persist(&database, &resolved).expect("guardar");
+
+        let connection = database.open().expect("abrir base");
+        let moderno: Option<String> = connection
+            .query_row(
+                "SELECT library_hero_url FROM games WHERE app_id = 3483510",
+                [],
+                |row| row.get(0),
+            )
+            .expect("leer el moderno");
+        assert_eq!(
+            moderno.as_deref(),
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/3483510/a38bcd252faf83c70e24dd9f17731bfd0c0aaa6f/library_hero_2x.jpg"
+            ),
+            "el banner con su hash tiene que llegar a la columna"
+        );
+
+        let sin_banner: Option<String> = connection
+            .query_row(
+                "SELECT library_hero_url FROM games WHERE app_id = 2700",
+                [],
+                |row| row.get(0),
+            )
+            .expect("leer el que no tiene banner");
+        assert_eq!(
+            sin_banner, None,
+            "sin banner publicado, la conjetura se borra en vez de quedarse dando 404"
+        );
+    }
+
+    /// Contra el índice de verdad.
+    ///
+    /// Apagada por defecto. Comprueba lo único que se rompe solo: que el índice
+    /// sigue publicando `library_hero` y que en un juego moderno viene bajo un
+    /// hash —que es justo lo que ninguna convención alcanza y el motivo por el
+    /// que la ficha enseñaba el fondo oscuro de la tienda—.
+    ///
+    /// ```text
+    /// cargo test --manifest-path src-tauri/Cargo.toml -- --ignored contra_el_indice_de_verdad
+    /// ```
+    #[test]
+    #[ignore = "sale a la red: se ejecuta a mano"]
+    fn contra_el_indice_de_verdad_el_banner_sigue_publicandose() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        // Portal 2, de 2011, y DragonSword : Awakening, de 2026: uno con los
+        // nombres de siempre y otro con hash por archivo.
+        let art = runtime
+            .block_on(super::resolve(&[620, 4_570_720]))
+            .expect("preguntar al índice");
+
+        for app_id in [620_u32, 4_570_720] {
+            let (_, juego) = art
+                .iter()
+                .find(|(id, _)| *id == app_id)
+                .unwrap_or_else(|| panic!("el índice ya no resuelve {app_id}"));
+            let banner = juego
+                .library_hero_url
+                .as_deref()
+                .unwrap_or_else(|| panic!("el índice dejó de publicar el banner de {app_id}"));
+            assert!(
+                banner.contains("library_hero"),
+                "el banner de {app_id} dejó de llamarse library_hero: {banner}"
+            );
+        }
+
+        let moderno = art
+            .iter()
+            .find(|(id, _)| *id == 4_570_720)
+            .expect("el moderno")
+            .1
+            .library_hero_url
+            .clone()
+            .expect("banner del moderno");
+        let ruta = moderno
+            .rsplit_once("/apps/4570720/")
+            .expect("la ruta nombra el AppID")
+            .1;
+        assert!(
+            ruta.contains('/'),
+            "un juego moderno guarda su banner bajo un hash; sin él, la convención bastaría: {ruta}"
+        );
+    }
+
     #[test]
     fn a_game_the_index_ignores_keeps_what_it_had() {
         let directory = TempDir::new().expect("crear directorio temporal");

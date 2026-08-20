@@ -22,6 +22,7 @@ vi.mock("@/lib/tauri", () => {
     exportBackup: vi.fn(),
     importBackup: vi.fn(),
     clearArtCache: vi.fn(),
+    refreshSteamArt: vi.fn(),
     checkForUpdates: vi.fn(),
     deleteStatus: vi.fn(),
     deletePlannerColumn: vi.fn(),
@@ -636,6 +637,56 @@ describe("privacidad", () => {
  * botón todos los días. Y una copia que dejó de hacerse **en silencio** sólo se
  * descubre el día que se necesita, así que el fallo tiene que verse.
  */
+/**
+ * El arte se puede volver a contrastar sin esperar doce horas.
+ *
+ * La orden existía en Rust desde que el índice oficial arregló 445 carátulas
+ * rotas —«quien vea una carátula rota puede forzar la corrección sin esperar»,
+ * decía su documentación— y no la llamaba nadie: no estaba en `api` ni había
+ * botón. La pasada automática corre cada doce horas, así que ver algo mal
+ * significaba esperar.
+ */
+describe("contrastar el arte con la tienda", () => {
+  it("dice cuántos se corrigieron y cuántos no tienen arte publicada", async () => {
+    const user = userEvent.setup();
+    mockedApi.refreshSteamArt.mockResolvedValue({
+      examined: 3877,
+      resolved: 3501,
+      updated: 1786,
+      withoutArt: 376,
+      failedBatches: 0,
+    });
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Datos y copias" }));
+    await user.click(
+      await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }),
+    );
+
+    expect(await screen.findByText(/3.501 de 3.877|3501 de 3877/)).toBeVisible();
+    expect(screen.getByText(/376 sin arte publicada/)).toBeVisible();
+  });
+
+  it("un lote sin respuesta se cuenta en vez de pasar por completo", async () => {
+    const user = userEvent.setup();
+    mockedApi.refreshSteamArt.mockResolvedValue({
+      examined: 400,
+      resolved: 200,
+      updated: 12,
+      withoutArt: 0,
+      failedBatches: 1,
+    });
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Datos y copias" }));
+    await user.click(
+      await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }),
+    );
+
+    expect(await screen.findByText(/1 lote sin respuesta/)).toBeVisible();
+  });
+});
+
 describe("copias automáticas", () => {
   it("dice cuándo fue la última, cuántas hay y dónde están", async () => {
     const user = userEvent.setup();

@@ -629,6 +629,20 @@ export interface DiscoverySnapshot {
   capabilities: DiscoveryCapabilities;
 }
 
+/**
+ * Qué dejó una pasada del índice oficial de arte.
+ *
+ * `withoutArt` no es un fallo: hay juegos retirados o restringidos para los que
+ * la tienda no publica nada, y entonces no se enseña arte inventado.
+ */
+export interface ArtIndexReport {
+  examined: number;
+  resolved: number;
+  updated: number;
+  withoutArt: number;
+  failedBatches: number;
+}
+
 export interface DatabaseDiagnostics {
   path: string;
   sizeBytes: number;

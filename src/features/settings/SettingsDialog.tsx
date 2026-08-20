@@ -985,6 +985,29 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
       }),
     onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
   });
+  /**
+   * Volver a preguntar por el arte real, sin esperar a la pasada automática.
+   *
+   * El índice oficial de la tienda publica el nombre de cada archivo, incluido
+   * el banner de la ficha, que en los juegos modernos vive bajo un hash que
+   * ninguna convención alcanza. La pasada corre sola cada doce horas; esto es
+   * para cuando ves algo mal y no quieres esperar.
+   */
+  const refreshArt = useMutation({
+    mutationFn: api.refreshSteamArt,
+    onSuccess: (report) =>
+      setNotice({
+        kind: report.failedBatches > 0 ? "error" : "success",
+        message:
+          `Arte contrastado con la tienda: ${report.resolved} de ${report.examined} juegos con arte publicada, ` +
+          `${report.updated} corregido${report.updated === 1 ? "" : "s"}` +
+          (report.withoutArt > 0 ? `, ${report.withoutArt} sin arte publicada` : "") +
+          (report.failedBatches > 0
+            ? `. ${report.failedBatches} lote${report.failedBatches === 1 ? "" : "s"} sin respuesta: esos juegos conservan lo que tenían.`
+            : "."),
+      }),
+    onError: (error) => setNotice({ kind: "error", message: getErrorMessage(error) }),
+  });
   const clearCache = useMutation({
     mutationFn: api.clearArtCache,
     onSuccess: () =>
@@ -1042,6 +1065,14 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
           disabled={maintainCache.isPending}
         >
           <IconRefresh /> Depurar caché
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => refreshArt.mutate()}
+          disabled={refreshArt.isPending}
+        >
+          <IconRefresh /> Contrastar arte con la tienda
         </Button>
       </div>
       <p className="settings-hint">

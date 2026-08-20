@@ -24,6 +24,7 @@ import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
   AddCuratedGameInput,
   AppBootstrap,
+  ArtIndexReport,
   AppPreferences,
   ArchiveReport,
   ArtCacheMaintenanceReport,
@@ -377,6 +378,14 @@ export const api = {
    */
   discoveryRadarPage: (view: "forgotten" | "almost" | "upcoming", offset: number, limit: number) =>
     invoke<GameSummary[]>("discovery_radar_page", { view, offset, limit }),
+  /**
+   * Vuelve a preguntar al índice oficial por el arte de toda la biblioteca.
+   *
+   * La orden existía en Rust desde que el índice arregló 445 carátulas rotas y
+   * no la llamaba nadie: quien viera una carátula o un banner mal tenía que
+   * esperar a que la pasada automática le tocara, hasta doce horas después.
+   */
+  refreshSteamArt: () => invoke<ArtIndexReport>("refresh_steam_art"),
   refreshDiscoveryNews: () => invoke<NewsRefreshReport>("refresh_discovery_news"),
   saveReminder: (input: SaveReminderInput) => invoke<GameReminder>("save_reminder", { input }),
   completeReminder: (id: string) => invoke<void>("complete_reminder", { id }),
