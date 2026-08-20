@@ -4,7 +4,7 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
-## [Sin publicar]
+## [0.1.5] · 2026-08-20
 
 ### Añadido
 
@@ -199,6 +199,38 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **Los deseados que ya tienes se pueden esconder.** La lista existe para decidir una compra y
   65 de sus 1.410 entradas son juegos ya comprados; con el orden por descuento ocupaban la
   cabecera. El interruptor va apagado, y al encenderlo el recuento pasa a «1.345 de 1.410».
+- **El banner a color seguía faltando en la mitad de la biblioteca.** Derivarlo de la dirección
+  del encabezado funciona con los juegos antiguos y falla con todo lo publicado en los últimos
+  años: Steam guarda **cada archivo bajo su propia huella**, así que la huella del encabezado no
+  sirve para el banner. Ahora el índice público de la tienda —el mismo que ya se pregunta por
+  lotes de doscientos— entrega la ruta exacta de cada archivo, y lo que llega **sustituye** a la
+  conjetura anterior en vez de sumarse a ella: una dirección inventada que devuelve 404 dejaba la
+  ficha apagada para siempre. De 161 banners buenos se pasó a 3.183.
+- **La vista rápida se quedaba clavada encima de la ficha.** Al pulsar un juego se abría el panel
+  de detalles justo debajo del puntero, y como el ratón ya no se movía nunca llegaba el gesto que
+  cierra el emergente: quedaba flotando sobre el contenido hasta mover el ratón a otro sitio.
+  Ahora se cierra al pulsar, que es cuando deja de tener sentido.
+- **Editar una ficha obligaba a rellenar la duración restante.** Un juego terminado no tiene
+  minutos restantes, y el formulario no dejaba guardar sin ellos. Ningún campo es obligatorio:
+  se guarda lo que escribas y lo que dejes en blanco se queda como estaba. Si algo no se puede
+  interpretar, se dice **qué** campo y por qué, en vez de bloquear el botón sin explicación.
+- **El distintivo de Steam se ponía en ámbar por llevar cuatro días sin sincronizar.** O la
+  cuenta está vinculada o no lo está; el tiempo que lleve un dato guardado no es un estado de la
+  conexión. Vuelve a haber dos: vinculada y sólo local. Un fallo de sincronización se dice en la
+  barra de estado, que es donde se miran los fallos.
+- **La barra de deseados se salía de su columna.** Buscador, orden y filtros iban en una rejilla
+  de anchos fijos que no cabía con el panel de detalles abierto: el contenido se montaba sobre la
+  lista. Ahora fluye y se reparte en dos filas cuando hace falta, y una prueba de extremo a
+  extremo comprueba que ningún panel invade al de al lado.
+- **«0 precios consultados» se leía como un fallo.** Cuando todo estaba mirado hace poco, el
+  informe decía cero tres veces seguidas. Ahora dice que no había nada que consultar, y cuando
+  sí hay ausencias distingue las dos clases: cuántos no publican precio y cuántos de ellos es
+  porque aún no han salido.
+- **«Quedan 429 deseados por revisar» no bajaba nunca.** El recuento contaba todos los que están
+  por salir, mirados o no, así que revisar sesenta no cambiaba la frase y no había forma de saber
+  cuándo terminaba la vuelta. Ahora cuenta los que faltan **en esta vuelta**, y mientras quede
+  cola la pasada automática vuelve cada media hora en vez de cada doce: cubrir la lista entera
+  pasa de cuatro días a una mañana.
 
 ## [0.1.4] · 2026-08-19
 
