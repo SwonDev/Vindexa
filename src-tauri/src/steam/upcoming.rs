@@ -215,19 +215,27 @@ fn pending_candidates(database: &Database, limit: usize) -> AppResult<Vec<(u32, 
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-/// Cuántos deseados quedan por mirar.
+/// Cuántos deseados quedan por mirar **en esta vuelta**.
 ///
-/// Los mismos que la cola: los que están por salir y los que no constan. Contar
-/// los 1.345 cuando sólo se van a preguntar 422 sería decir que queda tres
-/// veces más trabajo del que hay.
+/// Los mismos que la cola —los que están por salir y los que no constan— menos
+/// los que ya se miraron hace poco. Sin ese «hace poco» el número no bajaba
+/// nunca: se pulsaba «Recalcular», se revisaban sesenta y la frase seguía
+/// diciendo «quedan 429», que es exactamente la clase de recuento que no
+/// coincide con lo que acaba de pasar.
+///
+/// Pasadas doce horas todos vuelven a contar, porque una fecha de salida
+/// mirada ayer ya no dice nada de hoy.
 fn pending_count(database: &Database) -> AppResult<u32> {
     let connection = database.open()?;
     Ok(connection.query_row(
         "SELECT COUNT(*)
            FROM catalog_wishlist_entries w
            LEFT JOIN upcoming_checks k ON k.app_id = w.app_id
-          WHERE k.coming_soon IS NULL OR k.coming_soon = 1",
-        [],
+          WHERE (k.coming_soon IS NULL OR k.coming_soon = 1)
+            AND (k.checked_at IS NULL
+                 OR k.checked_at = ''
+                 OR k.checked_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?1))",
+        [format!("-{AUTO_INTERVAL_HOURS} hours")],
         |row| row.get(0),
     )?)
 }
@@ -538,12 +546,21 @@ pub async fn revisit_candidates(database: &Database) -> AppResult<RevisitReport>
     Ok(report)
 }
 
-/// Cada cuánto se repasa la lista de deseados por su cuenta./// Cada cuánto se repasa la lista de deseados por su cuenta.
+/// Cada cuánto se repasa la lista de deseados por su cuenta.
 ///
 /// Doce horas: los lanzamientos no cambian de fecha cada rato, y cada pasada
 /// son sesenta peticiones a la tienda. Menos sería gastar red para nada; más,
 /// enterarse tarde de que algo ya ha salido.
 const AUTO_INTERVAL_HOURS: i64 = 12;
+
+/// Cada cuánto se vuelve cuando **queda cola**.
+///
+/// Una pasada mira sesenta deseados. Con 429 por salir eso son ocho pasadas, y
+/// a doce horas por pasada la lista tardaba cuatro días en cubrirse entera: la
+/// sección enseñaba 112 candidatos de los 429 posibles y nada indicaba que
+/// faltara nada. Mientras haya atrasados se vuelve cada media hora, que cubre
+/// la lista en una mañana; cuando no queda ninguno se vuelve a las doce horas.
+const CATCH_UP_MINUTES: i64 = 30;
 
 /// Clave en `app_settings` con la última pasada automática.
 const LAST_AUTO_KEY: &str = "upcoming_last_auto_refresh";
@@ -604,6 +621,7 @@ fn is_due(database: &Database) -> AppResult<bool> {
             |row| row.get(0),
         )
         .optional()?;
+    drop(connection);
     let Some(last) = last else {
         return Ok(true);
     };
@@ -611,8 +629,13 @@ fn is_due(database: &Database) -> AppResult<bool> {
     let Ok(moment) = chrono::DateTime::parse_from_rfc3339(&last) else {
         return Ok(true);
     };
-    Ok(Utc::now().signed_duration_since(moment.with_timezone(&Utc))
-        >= chrono::Duration::hours(AUTO_INTERVAL_HOURS))
+    // Con cola atrasada se vuelve pronto; sin ella, a la cadencia de siempre.
+    let espera = if pending_count(database)? > 0 {
+        chrono::Duration::minutes(CATCH_UP_MINUTES)
+    } else {
+        chrono::Duration::hours(AUTO_INTERVAL_HOURS)
+    };
+    Ok(Utc::now().signed_duration_since(moment.with_timezone(&Utc)) >= espera)
 }
 
 fn mark_done(database: &Database) -> AppResult<()> {
@@ -836,6 +859,48 @@ mod tests {
 
         // Y el recuento de pendientes cuenta lo mismo que la cola: decir 3
         // cuando sólo se van a preguntar 2 es prometer trabajo que no existe.
+        assert_eq!(pending_count(&database).expect("pendientes"), 2);
+    }
+
+    /// El recuento baja cuando se mira, y vuelve a subir cuando caduca.
+    ///
+    /// La frase que lo enseña dice «vuelve a recalcular para seguir». Si el
+    /// número no bajaba nunca, esa frase mandaba a repetir un trabajo ya hecho
+    /// y no había forma de saber cuándo se había terminado.
+    #[test]
+    fn los_ya_mirados_dejan_de_contar_hasta_que_caducan() {
+        let (_directory, database) = base();
+        for (app_id, title) in [(30_u32, "Por salir"), (40, "También por salir")] {
+            deseado(&database, app_id, title);
+        }
+        database
+            .record_wishlist_release_state(&[(30, true), (40, true)])
+            .expect("apuntar el estado");
+        assert_eq!(
+            pending_count(&database).expect("pendientes"),
+            2,
+            "recién apuntados, ninguno se ha mirado todavía"
+        );
+
+        mark_checked(&database, &[(30, "Por salir".to_string())]).expect("marcar");
+        assert_eq!(
+            pending_count(&database).expect("pendientes"),
+            1,
+            "el que se acaba de mirar no vuelve a contar"
+        );
+
+        // Y pasado el ciclo vuelve a contar: una fecha mirada ayer no dice nada
+        // de hoy.
+        let connection = database.open().expect("abrir");
+        connection
+            .execute(
+                "UPDATE upcoming_checks
+                    SET checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-13 hours')
+                  WHERE app_id = 30",
+                [],
+            )
+            .expect("envejecer la marca");
+        drop(connection);
         assert_eq!(pending_count(&database).expect("pendientes"), 2);
     }
 
