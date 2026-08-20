@@ -1168,6 +1168,9 @@ pub async fn refresh_upcoming_releases(
 ) -> AppResult<steam::upcoming::UpcomingRefreshReport> {
     let database = state.database.clone();
     let mut report = steam::upcoming::refresh_from_wishlist(&database).await?;
+    // Y los que ya salieron dejan de figurar como próximos: nadie los retiraba,
+    // así que la lista se habría llenado de fechas pasadas.
+    let _ = steam::upcoming::revisit_candidates(&database).await;
     if let Ok(escaparate) = steam::upcoming::refresh_from_showcase(&database).await {
         report.checked = report.checked.saturating_add(escaparate.checked);
         report.upcoming = report

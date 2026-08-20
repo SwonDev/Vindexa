@@ -1113,10 +1113,24 @@ fn json_u64(value: &serde_json::Value) -> Option<u64> {
 }
 
 fn normalize_release_date(value: &StoreReleaseDate) -> Option<String> {
+    // Un juego sin publicar no tiene fecha de salida **en la biblioteca**: lo
+    // que anuncie puede cambiar. Los próximos lanzamientos sí guardan la
+    // etiqueta, y para eso usan `exact_release_day` directamente.
     if value.coming_soon {
         return None;
     }
-    let normalized = value.date.as_deref()?.trim().replace(',', " ");
+    exact_release_day(value.date.as_deref()?)
+}
+
+/// El día concreto que declara una etiqueta de la tienda, si lo declara.
+///
+/// Steam escribe «19 AGO 2026» en español y «18 APR 2011» en inglés, pero
+/// también «Q4 2026» o «Próximamente», que no son días. Devuelve la fecha en
+/// ISO sólo cuando la etiqueta nombra un día de verdad; con cualquier otra cosa
+/// devuelve `None`, que es lo que permite no prometer una precisión que la
+/// tienda no ha dado.
+pub fn exact_release_day(label: &str) -> Option<String> {
+    let normalized = label.trim().replace(',', " ");
     let parts = normalized.split_whitespace().collect::<Vec<_>>();
     if parts.len() != 3 {
         return None;
@@ -1787,9 +1801,9 @@ fn classify_store_error(error: reqwest::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        StoreBundleOutcome, StoreMetadataBundle, StoreMetadataOutcome, parse_price_batch,
-        parse_retry_after, parse_store_bundle, parse_store_response, sanitize_hero_url,
-        sanitize_store_text, sanitize_website_url, structure_store_html,
+        StoreBundleOutcome, StoreMetadataBundle, StoreMetadataOutcome, exact_release_day,
+        parse_price_batch, parse_retry_after, parse_store_bundle, parse_store_response,
+        sanitize_hero_url, sanitize_store_text, sanitize_website_url, structure_store_html,
     };
     use crate::db::rich_metadata::{DescriptionBlock, DrmState, GameMediaKind};
     use reqwest::header::HeaderValue;
@@ -1963,6 +1977,29 @@ mod tests {
         assert!(metadata.is_free);
         assert!(metadata.is_early_access);
         assert_eq!(metadata.release_date.as_deref(), Some("2021-02-02"));
+    }
+
+    /// La exactitud de la fecha se lee de la etiqueta, no del campo vacío.
+    ///
+    /// `normalize_release_date` deja `None` para todo lo que aún no ha salido,
+    /// a propósito. Los próximos lanzamientos preguntaban justamente a ese
+    /// campo si su fecha era exacta, así que **todas** salían como aproximadas:
+    /// la pantalla escribía «≈ 19 AGO 2026» sobre un día concreto.
+    #[test]
+    fn una_etiqueta_con_dia_concreto_se_reconoce_aunque_no_haya_salido() {
+        assert_eq!(
+            exact_release_day("19 AGO 2026").as_deref(),
+            Some("2026-08-19")
+        );
+        assert_eq!(
+            exact_release_day("18 APR 2011").as_deref(),
+            Some("2011-04-18")
+        );
+        assert_eq!(exact_release_day("2 FEB 2021").as_deref(), Some("2021-02-02"));
+        // Y lo que no nombra un día sigue sin nombrarlo.
+        for vago in ["Q4 2026", "Próximamente", "2026", "Coming soon", "31 FEB 2026"] {
+            assert_eq!(exact_release_day(vago), None, "{vago}");
+        }
     }
 
     #[test]

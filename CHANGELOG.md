@@ -70,6 +70,16 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   la página que se pidió, no un destino: ahora carga como el marco de la verificación humana,
   sin tocar la barra de direcciones ni el historial, y sólo desde el dominio sin cookies de
   YouTube.
+- **Todas las fechas de los próximos lanzamientos salían como aproximadas.** La exactitud se
+  preguntaba a un campo que se deja vacío a propósito para todo lo que aún no ha salido, así que
+  «19 AGO 2026» —un día concreto— se pintaba «≈ 19 AGO 2026». Ahora se lee la etiqueta: un día se
+  ve como una fecha y un «Q4 2026» se sigue viendo como lo que es.
+- **Nadie retiraba a un candidato que ya había salido.** La pasada de deseados se saltaba los
+  publicados sin borrar los que ya estaban, y un hallazgo del escaparate no está en deseados, así
+  que no se revisaba nunca: la sección se habría llenado de juegos con la fecha pasada afirmando
+  ser próximos. Ahora se vuelve a preguntar por tandas —primero los que anunciaban un día que ya
+  pasó—, los publicados se retiran y los que siguen esperando se refrescan. Retirar no es
+  descartar: descartar enseña al modelo que no te interesa, y salir no dice nada de tu gusto.
 - **«12 candidatos puntuados» era el tope de la lista, no lo que había.** Con cuarenta y cinco
   guardados, esa cifra leída como total es falsa. Ahora dice «12 de 45, los que más encajan», que
   además explica por qué se recortan.

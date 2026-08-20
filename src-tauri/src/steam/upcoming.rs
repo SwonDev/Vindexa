@@ -120,6 +120,11 @@ pub async fn refresh_from_wishlist(database: &Database) -> AppResult<UpcomingRef
                     continue;
                 }
                 let metadata = &bundle.metadata;
+                let dia = bundle
+                    .release
+                    .label
+                    .as_deref()
+                    .and_then(store_api::exact_release_day);
                 items.push(ImportedUpcomingRelease {
                     app_id: *app_id,
                     // El título sale del catálogo de deseados: la ficha de la
@@ -127,10 +132,16 @@ pub async fn refresh_from_wishlist(database: &Database) -> AppResult<UpcomingRef
                     title: fallback_title.clone(),
                     capsule_url: metadata.capsule_url.clone(),
                     header_url: metadata.header_url.clone(),
-                    release_date: bundle.release.label.clone(),
-                    // La etiqueta sólo es una fecha exacta si la propia
-                    // `metadata` supo interpretarla como tal.
-                    release_date_is_exact: metadata.release_date.is_some(),
+                    // «19 AGO 2026» es un día concreto y «Q4 2026» no lo es.
+                    // La exactitud se decide leyendo la etiqueta, no mirando
+                    // `metadata.release_date`: ese campo se deja vacío a
+                    // propósito para todo lo que aún no ha salido, así que
+                    // preguntarle daba «aproximada» siempre, incluso con el día
+                    // delante.
+                    release_date: dia
+                        .clone()
+                        .or_else(|| bundle.release.label.clone()),
+                    release_date_is_exact: dia.is_some(),
                     genres: metadata.genres.clone(),
                     categories: metadata.categories.clone(),
                     developer: metadata.developer.clone(),
@@ -382,13 +393,20 @@ pub async fn refresh_from_showcase(database: &Database) -> AppResult<ShowcaseRep
                     continue;
                 }
                 let metadata = &bundle.metadata;
+                let dia = bundle
+                    .release
+                    .label
+                    .as_deref()
+                    .and_then(store_api::exact_release_day);
                 items.push(ImportedUpcomingRelease {
                     app_id: juego.app_id,
                     title: juego.title.clone(),
                     capsule_url: metadata.capsule_url.clone(),
                     header_url: metadata.header_url.clone(),
-                    release_date: bundle.release.label.clone(),
-                    release_date_is_exact: metadata.release_date.is_some(),
+                    release_date: dia
+                        .clone()
+                        .or_else(|| bundle.release.label.clone()),
+                    release_date_is_exact: dia.is_some(),
                     genres: metadata.genres.clone(),
                     categories: metadata.categories.clone(),
                     developer: metadata.developer.clone(),
@@ -412,7 +430,113 @@ pub async fn refresh_from_showcase(database: &Database) -> AppResult<ShowcaseRep
     Ok(report)
 }
 
-/// Cada cuánto se repasa la lista de deseados por su cuenta.
+/// Cuántos candidatos se vuelven a preguntar como mucho por pasada.
+const MAX_REVISIT_PER_RUN: u32 = 20;
+
+/// Qué dejó la revisión de los candidatos ya guardados.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisitReport {
+    /// Candidatos a los que se volvió a preguntar.
+    pub checked: u32,
+    /// Los que ya han salido y dejan de figurar como próximos.
+    pub retired: u32,
+    /// Los que siguen sin salir y se han refrescado con lo que dice hoy la
+    /// tienda: fecha, géneros y estudio.
+    pub refreshed: u32,
+}
+
+/// Vuelve a preguntar por los candidatos ya guardados.
+///
+/// # Por qué existe
+///
+/// Nadie los revisaba. La pasada de deseados se salta los ya publicados pero no
+/// borraba los que ya estaban, y un hallazgo del escaparate no está en deseados,
+/// así que no se miraba nunca más: ni para retirarlo al salir, ni para
+/// enterarse de que la fecha ha cambiado.
+///
+/// Un juego que sale **no** se descarta: descartar enseña al modelo que no te
+/// interesa, y salir no dice nada de tu gusto. Se retira y ya.
+pub async fn revisit_candidates(database: &Database) -> AppResult<RevisitReport> {
+    let candidatos = crate::db::priority::upcoming_to_revisit(
+        &database.open()?,
+        Utc::now(),
+        MAX_REVISIT_PER_RUN,
+    )?;
+    let mut report = RevisitReport::default();
+    let mut publicados: Vec<u32> = Vec::new();
+    let mut vigentes: Vec<ImportedUpcomingRelease> = Vec::new();
+    let mut preguntados: Vec<(u32, String)> = Vec::new();
+
+    for (indice, app_id) in candidatos.iter().enumerate() {
+        if indice > 0 {
+            sleep(BETWEEN_REQUESTS).await;
+        }
+        report.checked = report.checked.saturating_add(1);
+        match store_api::fetch_bundle_with_retry_hint(*app_id).await {
+            Ok(StoreBundleOutcome::Found(bundle)) => {
+                preguntados.push((*app_id, String::new()));
+                if !bundle.release.coming_soon {
+                    publicados.push(*app_id);
+                    continue;
+                }
+                let metadata = &bundle.metadata;
+                let dia = bundle
+                    .release
+                    .label
+                    .as_deref()
+                    .and_then(store_api::exact_release_day);
+                // El título se conserva: la ficha no lo devuelve en este
+                // paquete y el que ya está guardado es el bueno.
+                let Some(titulo) = titulo_guardado(database, *app_id)? else {
+                    continue;
+                };
+                vigentes.push(ImportedUpcomingRelease {
+                    app_id: *app_id,
+                    title: titulo,
+                    capsule_url: metadata.capsule_url.clone(),
+                    header_url: metadata.header_url.clone(),
+                    release_date: dia.clone().or_else(|| bundle.release.label.clone()),
+                    release_date_is_exact: dia.is_some(),
+                    genres: metadata.genres.clone(),
+                    categories: metadata.categories.clone(),
+                    developer: metadata.developer.clone(),
+                    publisher: metadata.publisher.clone(),
+                    short_description: metadata.short_description.as_deref().map(recortar),
+                    source: SOURCE.to_string(),
+                });
+            }
+            // Una ficha que la tienda ya no devuelve no prueba que haya salido:
+            // también puede estar retirada. No se toca.
+            Ok(StoreBundleOutcome::Unavailable) => {
+                preguntados.push((*app_id, String::new()));
+            }
+            Err(_) => break,
+        }
+    }
+
+    report.retired = crate::db::priority::retire_upcoming(&mut database.open()?, &publicados)?;
+    if !vigentes.is_empty() {
+        let resumen = crate::db::priority::upsert_upcoming(&mut database.open()?, &vigentes)?;
+        report.refreshed = resumen.updated.saturating_add(resumen.inserted);
+    }
+    mark_checked(database, &preguntados)?;
+    Ok(report)
+}
+
+/// El título con el que ya está guardado un candidato.
+fn titulo_guardado(database: &Database, app_id: u32) -> AppResult<Option<String>> {
+    let connection = database.open()?;
+    Ok(connection
+        .query_row(
+            "SELECT title FROM upcoming_releases WHERE app_id = ?1",
+            [app_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// Cada cuánto se repasa la lista de deseados por su cuenta./// Cada cuánto se repasa la lista de deseados por su cuenta.
 ///
 /// Doce horas: los lanzamientos no cambian de fecha cada rato, y cada pasada
 /// son sesenta peticiones a la tienda. Menos sería gastar red para nada; más,
@@ -450,6 +574,9 @@ pub async fn maintain_if_due(database: &Database) -> AppResult<Option<UpcomingRe
     // enseñar algo que no hubieras marcado tú. Si falla, la pasada sigue: los
     // deseados ya están traídos y sería absurdo tirarlos.
     let _ = refresh_from_showcase(database).await;
+    // Y los ya guardados se vuelven a preguntar: los que han salido se retiran
+    // y los que siguen esperando se refrescan con lo que dice hoy la tienda.
+    let _ = revisit_candidates(database).await;
     // Aprender y puntuar son baratos y locales: se hacen aunque la tanda no
     // haya traído nada nuevo, porque el historial de juego sí ha cambiado.
     database.learn_taste()?;

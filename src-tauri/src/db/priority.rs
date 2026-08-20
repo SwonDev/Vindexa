@@ -2396,6 +2396,70 @@ pub fn list_upcoming(connection: &Connection, limit: u32) -> AppResult<Vec<Upcom
     Ok(items)
 }
 
+/// Candidatos a los que conviene volver a preguntar si siguen sin salir.
+///
+/// # Por qué hace falta
+///
+/// Nada retiraba a un candidato que **ya había salido**: la pasada que revisa
+/// los deseados se salta los publicados, pero no borra los que ya estaban, y un
+/// hallazgo del escaparate no está en deseados, así que no se revisaba nunca.
+/// Con el tiempo la sección se llenaría de juegos con la fecha pasada
+/// afirmando que son próximos lanzamientos.
+///
+/// # Por qué el orden es ése
+///
+/// Primero los que anunciaban un día que ya pasó: son los únicos de los que se
+/// sabe que la respuesta puede haber cambiado. Después, por antigüedad de la
+/// última pregunta a la tienda —`upcoming_checks`, no `updated_at`: puntuar
+/// toca `updated_at` en cada recálculo, así que apoyarse en él haría que
+/// «lleva mucho sin mirarse» no llegara nunca.
+pub fn upcoming_to_revisit(
+    connection: &Connection,
+    now: DateTime<Utc>,
+    limit: u32,
+) -> AppResult<Vec<u32>> {
+    let hoy = now.format("%Y-%m-%d").to_string();
+    let mut statement = connection.prepare(
+        "SELECT u.app_id,
+                (u.release_date_is_exact = 1
+                 AND u.release_date IS NOT NULL
+                 AND u.release_date < ?1) AS vencido
+           FROM upcoming_releases u
+           LEFT JOIN upcoming_checks k ON k.app_id = u.app_id
+          WHERE u.dismissed_at IS NULL
+          ORDER BY vencido DESC,
+                   COALESCE(k.checked_at, '') ASC,
+                   u.app_id ASC
+          LIMIT ?2",
+    )?;
+    let ids = statement
+        .query_map(params![hoy, limit], |row| row.get::<_, u32>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
+/// Retira candidatos que ya han salido.
+///
+/// Se borran, no se marcan como descartados: descartar es una decisión tuya y
+/// enseña al modelo que ese juego no te interesa. Que un juego salga no dice
+/// nada sobre tu gusto, así que mezclarlos envenenaría el aprendizaje.
+pub fn retire_upcoming(connection: &mut Connection, app_ids: &[u32]) -> AppResult<u32> {
+    if app_ids.is_empty() {
+        return Ok(0);
+    }
+    let transaction = connection.transaction()?;
+    let mut retirados = 0_u32;
+    {
+        let mut statement =
+            transaction.prepare_cached("DELETE FROM upcoming_releases WHERE app_id = ?1")?;
+        for app_id in app_ids {
+            retirados = retirados.saturating_add(statement.execute([app_id])? as u32);
+        }
+    }
+    transaction.commit()?;
+    Ok(retirados)
+}
+
 /// Descarta un próximo lanzamiento. La decisión se conserva: el candidato deja
 /// de aparecer y sus facetas pasan a contar como evidencia negativa en el
 /// siguiente [`learn_taste`].
@@ -3216,6 +3280,91 @@ mod tests {
             items[0].match_reason,
             "Todavía no hay señales en tu biblioteca que lo relacionen con nada."
         );
+    }
+
+    /// Un juego que ya ha salido deja de ser un próximo lanzamiento.
+    ///
+    /// Nada los retiraba: la pasada de deseados se salta los publicados pero no
+    /// borraba los que ya estaban, y un hallazgo del escaparate no está en
+    /// deseados, así que no se revisaba nunca. La sección se habría llenado de
+    /// juegos con la fecha pasada afirmando ser próximos.
+    #[test]
+    fn se_vuelve_a_preguntar_por_los_que_ya_deberian_haber_salido() {
+        let mut connection = database();
+        let ahora = now();
+        upsert_upcoming(
+            &mut connection,
+            &[
+                candidato(10, "Salió ayer", Some("2026-08-17"), true),
+                candidato(20, "Sale en diciembre", Some("2026-12-24"), true),
+                candidato(30, "Sin día concreto", Some("Q4 2026"), false),
+            ],
+        )
+        .expect("importar");
+
+        // Con todo recién refrescado, sólo entra el de fecha pasada.
+        let a_revisar = upcoming_to_revisit(&connection, ahora, 10).expect("revisar");
+        assert_eq!(a_revisar.first(), Some(&10), "el vencido va primero: {a_revisar:?}");
+
+        // Y detrás, por antigüedad de la última pregunta a la tienda. Los ya
+        // preguntados hace poco van al final aunque su fecha no diga día.
+        connection
+            .execute_batch(
+                "INSERT INTO upcoming_checks(app_id, checked_at) VALUES (30, '2026-08-19T00:00:00.000Z');
+                 INSERT INTO upcoming_checks(app_id, checked_at) VALUES (20, '2026-01-01T00:00:00.000Z');",
+            )
+            .expect("marcar preguntas");
+        let despues = upcoming_to_revisit(&connection, ahora, 10).expect("revisar");
+        assert_eq!(despues[0], 10, "el vencido sigue primero: {despues:?}");
+        assert_eq!(despues[1], 20, "y luego el que hace más que no se pregunta");
+        assert_eq!(despues[2], 30);
+    }
+
+    #[test]
+    fn retirar_un_publicado_no_es_descartarlo() {
+        // Descartar enseña al modelo que no te interesa. Que un juego salga no
+        // dice nada de tu gusto, así que se borra y no deja rastro negativo.
+        let mut connection = database();
+        upsert_upcoming(
+            &mut connection,
+            &[candidato(10, "Ya salió", Some("2026-08-17"), true)],
+        )
+        .expect("importar");
+
+        assert_eq!(retire_upcoming(&mut connection, &[10]).expect("retirar"), 1);
+        assert!(list_upcoming(&connection, 10).expect("listar").is_empty());
+        let descartados: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM upcoming_releases WHERE dismissed_at IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar");
+        assert_eq!(descartados, 0, "retirar no es descartar");
+        // Y retirar lo que no está no es un fallo ni cuenta de más.
+        assert_eq!(retire_upcoming(&mut connection, &[10]).expect("retirar"), 0);
+    }
+
+    fn candidato(
+        app_id: u32,
+        title: &str,
+        release_date: Option<&str>,
+        exact: bool,
+    ) -> ImportedUpcomingRelease {
+        ImportedUpcomingRelease {
+            app_id,
+            title: title.to_string(),
+            capsule_url: None,
+            header_url: None,
+            release_date: release_date.map(str::to_string),
+            release_date_is_exact: exact,
+            genres: vec!["Rol".to_string()],
+            categories: Vec::new(),
+            developer: None,
+            publisher: None,
+            short_description: None,
+            source: "store".to_string(),
+        }
     }
 
     /// De dónde salió cada candidato se calcula, no se guarda.
