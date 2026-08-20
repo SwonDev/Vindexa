@@ -24,6 +24,16 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   visual que el histórico de descartados. Ahora hay *Oportunidades*, *Novedades* y *Avisos*,
   repartidos por lo que se hace con cada cosa. Ninguna pestaña se queda vacía: cada bloque trae
   su propio «aquí no hay nada» y lo explica.
+- **Los juegos regalados van primero y se dicen «Gratis».** Steam y GOG regalan juegos durante
+  unos días modelándolo como un descuento del cien por cien, así que ya entraban en la lista,
+  pero ordenados por afinidad quedaban los últimos y su precio se escribía «0,00 €». Ahora lo
+  que está a cero va por delante de cualquier puntuación.
+- **La lista de ofertas dice cuándo se miró.** Una rebaja que terminó ayer sigue guardada hasta
+  la siguiente tanda; pasadas doce horas la línea cambia de tono y avisa de que algunas pueden
+  haber terminado.
+- **La pantalla de Privacidad dice también qué sale del equipo.** Enumeraba cuatro garantías
+  sobre lo que se queda y ninguna sobre lo que viaja. Ahora están las dos direcciones: qué se
+  pregunta, a dónde, y qué no sale nunca.
 
 ### Corregido
 
@@ -49,9 +59,24 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   la página que se pidió, no un destino: ahora carga como el marco de la verificación humana,
   sin tocar la barra de direcciones ni el historial, y sólo desde el dominio sin cookies de
   YouTube.
+- **⌘5 no hacía nada y Ajustes lo enseñaba «sin asignar».** Deseados tenía dos dueños: el campo
+  que Rust guarda desde siempre y una acción local duplicada, sostenida por un comentario que
+  había dejado de ser verdad. La combinación quedaba ocupada por un enlace que nadie escuchaba.
+  Ahora hay un solo dueño, y una prueba lee la `struct` de Rust para que los dos lados no puedan
+  volver a separarse.
+- **Un anuncio de Steam entero llenaba la bandeja de avisos.** Tres publicaciones ocupaban toda
+  la bandeja y había que desplazarse para saber si quedaba algo más. Se recortan a tres líneas y
+  se despliegan bajo petición, cada una por su cuenta.
+- **El llavero denegado ya no pregunta en bucle, y tiene salida.** La negativa se recuerda
+  mientras corre la aplicación —antes cada refresco abría dos diálogos de contraseña— y la
+  tarjeta ofrece «Volver a intentarlo» para no obligar a reiniciar. itch.io dice ahora lo mismo
+  en vez de pedir que generes otra clave cuando la que había seguía guardada.
+- «Sin coincidencia medida» aparecía sobre ofertas que **sí** se habían medido y daban cero; ya
+  dice lo que ocurre, que es que no hay señales en común.
 - La vista rápida ya no corta la razón de la coincidencia a media palabra, la lista larga de
-  ofertas se puede volver a recoger, y el deslizador de progreso de la ficha deja de montarse
-  sobre su etiqueta al llegar con el teclado.
+  ofertas se puede volver a recoger, el deslizador de progreso de la ficha deja de montarse
+  sobre su etiqueta al llegar con el teclado, y la lista de privacidad deja de partir cada
+  frase en columnas.
 
 ## [0.1.4] · 2026-08-19
 
