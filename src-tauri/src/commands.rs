@@ -1183,6 +1183,11 @@ pub async fn refresh_upcoming_releases(
     state: State<'_, AppState>,
 ) -> AppResult<steam::upcoming::UpcomingRefreshReport> {
     let database = state.database.clone();
+    // Primero, a quién hay que preguntarle: el índice de la tienda contesta por
+    // lotes de doscientos y dice cuáles están por salir, así que la cola que
+    // pide fichas una a una deja de gastarse en juegos ya publicados. Si falla,
+    // la pasada sigue con el orden que tuviera.
+    let _ = steam::release_state::refresh_wishlist_release_state(&database).await;
     let mut report = steam::upcoming::refresh_from_wishlist(&database).await?;
     // Y los que ya salieron dejan de figurar como próximos: nadie los retiraba,
     // así que la lista se habría llenado de fechas pasadas.
