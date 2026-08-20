@@ -859,11 +859,17 @@ function RecommendationResult({
   }
   return (
     <div className="decision-result">
+      {/* Un banner de mil píxeles de ancho pidiendo la cabecera de 460×215:
+          la imagen llegaba ampliada y blanda. Pidiendo la variante grande, el
+          caché busca antes el arte de biblioteca —`library_hero`— derivándolo
+          de esta misma URL, y sólo baja a la cabecera si no lo hay. El hueco no
+          cambia de forma: `.decision-result > .artwork` fija posición y tamaño
+          por encima de la proporción de la variante. */}
       <Artwork
         appId={result.game.appId}
         src={result.game.headerUrl ?? result.game.coverUrl}
         title={result.game.title}
-        kind="header"
+        kind="hero"
         priority
       />
       <div className="decision-result__scrim" />
