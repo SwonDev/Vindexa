@@ -242,6 +242,40 @@ pub fn run() {
                 });
             }
 
+            // La compatibilidad con Steam Deck que falta por preguntar.
+            //
+            // La columna existe desde la primera migración y nunca la escribió
+            // nadie: vacía en los 3.877 juegos, la ficha decía «Sin datos» en
+            // todas y el filtro se ofrecía apagado. El informe es público y no
+            // pide clave, así que se pregunta por tandas, como el DRM.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Cuatro minutos: después del repaso de DRM, para no
+                    // arrancar las dos pasadas a la vez sobre la misma tienda.
+                    tokio::time::sleep(std::time::Duration::from_secs(240)).await;
+                    loop {
+                        match steam::deck_pass::run_if_due(&database).await {
+                            Ok(Some(report)) => {
+                                eprintln!(
+                                    "Vindexa: Steam Deck repasado ({} preguntados, {} resueltos, {} sin informe, {} pendientes).",
+                                    report.checked,
+                                    report.resolved,
+                                    report.without_report,
+                                    report.pending
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudo repasar la compatibilidad con Steam Deck: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;
+                    }
+                });
+            }
+
             // La copia del día.
             //
             // Todo lo que hace valiosa esta base es irrepetible: las notas, los

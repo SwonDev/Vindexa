@@ -18,6 +18,14 @@ use std::time::Duration;
 // créditos se aíslan aquí porque proceden del endpoint público de la tienda,
 // cuyo contrato no forma parte de la Steamworks Web API documentada.
 const STORE_DETAILS_ENDPOINT: &str = "https://store.steampowered.com/api/appdetails";
+/// Informe de compatibilidad con Steam Deck.
+///
+/// No forma parte de la Steamworks Web API documentada —igual que
+/// `featuredcategories`, que ya usa el radar de ofertas—, pero es público, no
+/// pide clave ni sesión y es el único sitio donde Steam publica este dato. La
+/// ficha de `appdetails` no lo trae.
+pub(crate) const DECK_REPORT_ENDPOINT: &str =
+    "https://store.steampowered.com/saleaction/ajaxgetdeckappcompatibilityreport";
 /// País con el que se consulta la tienda. Determina la moneda de
 /// `price_overview`, así que viaja junto al precio observado: sin él, la
 /// moneda guardada no sería reproducible.
@@ -638,6 +646,61 @@ pub async fn fetch_drm_signals(app_id: u32) -> Result<Option<DrmAssessment>, Sto
     )
     .await?;
     parse_drm_signals(app_id, &bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Compatibilidad con Steam Deck de un juego.
+///
+/// `Ok(None)` significa que la tienda contestó sin informe: el juego ya no está
+/// publicado o Steam no ha valorado nada de él. No es un fallo.
+pub async fn fetch_deck_status(app_id: u32) -> Result<Option<&'static str>, StoreMetadataFailure> {
+    if app_id == 0 {
+        return Err(AppError::validation("El AppID de Steam no es válido.").into());
+    }
+    let bytes = descargar(
+        store_client().map_err(StoreMetadataFailure::from)?,
+        DECK_REPORT_ENDPOINT,
+        &[("nAppID", app_id.to_string()), ("l", "spanish".to_string())],
+    )
+    .await?;
+    parse_deck_status(&bytes).map_err(StoreMetadataFailure::from)
+}
+
+/// Traduce el informe a las cuatro palabras que entiende la biblioteca.
+///
+/// Steam numera las categorías: 3 verificado, 2 jugable, 1 no compatible y 0
+/// sin valorar. Un AppID que no existe devuelve `results: []` —un array, no un
+/// objeto—, que es la forma que tiene esta respuesta de decir «nada».
+///
+/// Separado de la red para poder comprobarlo con respuestas guardadas, que es
+/// donde está el riesgo: el formato de la tienda cambia solo.
+pub fn parse_deck_status(bytes: &[u8]) -> AppResult<Option<&'static str>> {
+    let raiz: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+        AppError::new(
+            "steam_deck_invalid_json",
+            "La tienda devolvió un informe de Steam Deck que no se puede leer.",
+        )
+    })?;
+    if raiz.get("success").and_then(serde_json::Value::as_i64) != Some(1) {
+        return Ok(None);
+    }
+    let Some(resultados) = raiz.get("results").and_then(serde_json::Value::as_object) else {
+        return Ok(None);
+    };
+    let Some(categoria) = resultados
+        .get("resolved_category")
+        .and_then(serde_json::Value::as_i64)
+    else {
+        return Ok(None);
+    };
+    Ok(match categoria {
+        3 => Some("verified"),
+        2 => Some("playable"),
+        1 => Some("unsupported"),
+        0 => Some("unknown"),
+        // Una categoría que no existía cuando se escribió esto no se traduce a
+        // la que más se le parezca: se deja sin dato, que es la verdad.
+        _ => None,
+    })
 }
 
 /// Analiza la respuesta filtrada y la convierte en un veredicto.
@@ -1799,12 +1862,56 @@ fn classify_store_error(error: reqwest::Error) -> AppError {
 mod tests {
     use super::{
         StoreBundleOutcome, StoreMetadataBundle, StoreMetadataOutcome, exact_release_day,
-        parse_price_batch, parse_retry_after, parse_store_bundle, parse_store_response,
-        sanitize_hero_url, sanitize_store_text, sanitize_website_url, structure_store_html,
+        parse_deck_status, parse_price_batch, parse_retry_after, parse_store_bundle,
+        parse_store_response, sanitize_hero_url, sanitize_store_text, sanitize_website_url,
+        structure_store_html,
     };
     use crate::db::rich_metadata::{DescriptionBlock, DrmState, GameMediaKind};
     use reqwest::header::HeaderValue;
     use std::time::Duration;
+
+    /// Las cuatro categorías de Steam Deck, tal y como las devuelve la tienda.
+    ///
+    /// Las respuestas son las de verdad, recortadas: Portal 2 sale verificado,
+    /// Destiny 2 no compatible por su anticheat, y un AppID que no existe
+    /// devuelve `results: []` —un array, no un objeto—, que es como esta
+    /// respuesta dice «nada».
+    #[test]
+    fn el_informe_de_steam_deck_se_traduce_a_las_palabras_de_la_biblioteca() {
+        let verificado = br#"{"success":1,"results":{"appid":620,"resolved_category":3}}"#;
+        let jugable = br#"{"success":1,"results":{"appid":10,"resolved_category":2}}"#;
+        let incompatible = br#"{"success":1,"results":{"appid":1085660,"resolved_category":1}}"#;
+        let sin_valorar = br#"{"success":1,"results":{"appid":30,"resolved_category":0}}"#;
+        let sin_informe = br#"{"success":1,"results":[]}"#;
+
+        assert_eq!(
+            parse_deck_status(verificado).expect("leer"),
+            Some("verified")
+        );
+        assert_eq!(parse_deck_status(jugable).expect("leer"), Some("playable"));
+        assert_eq!(
+            parse_deck_status(incompatible).expect("leer"),
+            Some("unsupported")
+        );
+        assert_eq!(
+            parse_deck_status(sin_valorar).expect("leer"),
+            Some("unknown")
+        );
+        assert_eq!(parse_deck_status(sin_informe).expect("leer"), None);
+    }
+
+    /// Una categoría que no existía no se parece a ninguna.
+    ///
+    /// Si Steam añade una quinta, traducirla a la más parecida sería inventarse
+    /// un dato. Sin dato es la verdad, y el juego se vuelve a preguntar.
+    #[test]
+    fn una_categoria_desconocida_no_se_traduce_a_la_mas_parecida() {
+        let futura = br#"{"success":1,"results":{"appid":620,"resolved_category":9}}"#;
+        assert_eq!(parse_deck_status(futura).expect("leer"), None);
+
+        let fallo = br#"{"success":0}"#;
+        assert_eq!(parse_deck_status(fallo).expect("leer"), None);
+    }
 
     fn bundle(app_id: u32, payload: &str) -> StoreMetadataBundle {
         let StoreBundleOutcome::Found(bundle) =

@@ -60,11 +60,18 @@ export function initials(title: string): string {
  * español sin reinterpretarla: un valor desconocido se muestra tal cual en
  * lugar de inventar una traducción.
  */
+/**
+ * Las cuatro palabras del informe de Steam.
+ *
+ * `unknown` es «Steam no lo ha valorado», que no es lo mismo que la columna
+ * vacía: eso es «Vindexa todavía no lo ha preguntado», y se lee «Sin datos».
+ * Antes ponía «Sin comprobar» en los dos casos, que sólo era verdad en uno.
+ */
 const STEAM_DECK_LABELS: Record<string, string> = {
   verified: "Verificado",
   playable: "Jugable",
   unsupported: "No compatible",
-  unknown: "Sin comprobar",
+  unknown: "Steam no lo ha valorado",
 };
 
 export function formatSteamDeckStatus(value?: string): string | undefined {

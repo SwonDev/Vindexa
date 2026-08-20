@@ -331,15 +331,15 @@ export function LibraryFiltersPopover({
                   { id: "verified", name: "Verificado" },
                   { id: "playable", name: "Jugable" },
                   { id: "unsupported", name: "No compatible" },
-                  { id: "unknown", name: "Sin clasificar" },
+                  { id: "unknown", name: "Steam no lo ha valorado" },
                 ]}
                 anyLabel="Cualquier compatibilidad"
                 disabled={!deckAvailable}
               />
               {!deckAvailable && (
                 <AvailabilityNote>
-                  Steam no publica este dato mediante una API Web documentada; el filtro se
-                  habilitará sólo cuando Vindexa tenga datos verificables.
+                  Vindexa lo pregunta al informe público de la tienda por tandas, en segundo
+                  plano; el filtro se habilita en cuanto haya un juego valorado.
                 </AvailabilityNote>
               )}
               <RangeFields

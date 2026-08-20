@@ -44,7 +44,10 @@ describe("formatSteamDeckStatus", () => {
     expect(formatSteamDeckStatus("verified")).toBe("Verificado");
     expect(formatSteamDeckStatus("Playable")).toBe("Jugable");
     expect(formatSteamDeckStatus("unsupported")).toBe("No compatible");
-    expect(formatSteamDeckStatus("unknown")).toBe("Sin comprobar");
+    // `unknown` es «se preguntó y Steam no lo ha valorado». Cuando no se ha
+    // preguntado no hay valor, y la ficha dice «Sin datos» por su cuenta.
+    expect(formatSteamDeckStatus("unknown")).toBe("Steam no lo ha valorado");
+    expect(formatSteamDeckStatus(undefined)).toBeUndefined();
   });
 
   it("no inventa traducciones para valores que no conoce", () => {

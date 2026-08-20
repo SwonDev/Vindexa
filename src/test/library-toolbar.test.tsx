@@ -138,8 +138,12 @@ describe("barra de herramientas de biblioteca", () => {
     render(<ToolbarHarness />);
 
     await user.click(screen.getByRole("button", { name: /Filtros/ }));
+    // La nota decía que Steam no publica el dato y que el filtro se habilitaría
+    // «cuando Vindexa tenga datos verificables», sin decir de dónde iban a
+    // salir: la columna llevaba vacía desde la primera migración porque nadie
+    // la escribía. Ahora hay una pasada que lo pregunta, y la nota lo dice.
     expect(
-      screen.getByText(/Steam no publica este dato mediante una API Web documentada/i),
+      screen.getByText(/lo pregunta al informe público de la tienda por tandas/i),
     ).toBeVisible();
     expect(screen.getByRole("combobox", { name: "Compatibilidad con Steam Deck" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restablecer todos los filtros" })).toBeVisible();

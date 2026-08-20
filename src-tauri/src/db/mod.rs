@@ -25,7 +25,7 @@ pub mod wishlist;
 use crate::error::{AppError, AppResult};
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
-    GameDetail, GameListRequest, LibraryFilterOptions, MetadataEnrichmentStatus,
+    ES_DE_STEAM, GameDetail, GameListRequest, LibraryFilterOptions, MetadataEnrichmentStatus,
     MovePlannerItemInput, PagedGameSessions, PagedGames, PlannerColumn, PlannerOverview,
     PlannerSettings, Recommendation, RecommendationRequest, SaveCollectionInput,
     SavePlannerItemInput, SmartRule, StatusDefinition, SteamConfiguration, SyncRun,
@@ -1056,6 +1056,55 @@ impl Database {
     /// Lo usa la pasada ligera: el resto de la ficha ya está y no se toca.
     /// `drm_checked_at` queda sellado aunque el veredicto siga siendo
     /// desconocido, para no volver a preguntar por lo mismo mañana.
+    /// Guarda la compatibilidad con Steam Deck que publica la tienda.
+    ///
+    /// Las cuatro palabras son las que entiende la biblioteca —`verified`,
+    /// `playable`, `unsupported`, `unknown`— y `unknown` aquí significa «Steam
+    /// no lo ha valorado», que no es lo mismo que la columna vacía: eso es «no
+    /// se ha preguntado».
+    pub fn save_steam_deck_status(&self, app_id: u32, status: &str) -> AppResult<()> {
+        let connection = self.open()?;
+        connection.execute(
+            "UPDATE games SET steam_deck_status = ?2, updated_at = ?3 WHERE app_id = ?1",
+            rusqlite::params![
+                app_id,
+                status,
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Juegos de Steam a los que nunca se les preguntó por Steam Deck.
+    pub fn steam_deck_pending(&self, limit: u32) -> AppResult<Vec<u32>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(&format!(
+            "SELECT g.app_id
+               FROM games g
+              WHERE {ES_DE_STEAM}
+                AND g.steam_deck_status IS NULL
+              ORDER BY g.app_id ASC
+              LIMIT ?1"
+        ))?;
+        let ids = statement
+            .query_map([limit], |row| row.get::<_, u32>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Cuántos quedan por preguntar.
+    pub fn steam_deck_pending_count(&self) -> AppResult<u32> {
+        let connection = self.open()?;
+        let total: i64 = connection.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM games g WHERE {ES_DE_STEAM} AND g.steam_deck_status IS NULL"
+            ),
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(total.max(0) as u32)
+    }
+
     pub fn save_drm_assessment(
         &self,
         app_id: u32,
