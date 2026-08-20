@@ -91,6 +91,7 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<AchievementsPassR
 
     // Sin cuenta no hay a quién preguntarle por «tus» logros.
     let Some(account) = database.get_steam_account()? else {
+        report.pending = database.achievements_pending_count()?;
         return Ok(report);
     };
 
@@ -104,6 +105,10 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<AchievementsPassR
     // recordada y sigue sin preguntar nada a nadie.
     let Some(api_key) = crate::steam::secrets::cached_api_key() else {
         report.waiting_for_key = true;
+        // Y con el recuento de verdad: «quedan 0 por preguntar» al lado de
+        // «esperando la clave» se lee como que ya no hay nada que hacer, que es
+        // lo contrario de lo que pasa.
+        report.pending = database.achievements_pending_count()?;
         return Ok(report);
     };
 
@@ -263,6 +268,34 @@ mod tests {
             .expect("consultar")
             .collect::<Result<Vec<_>, _>>()
             .expect("filas")
+    }
+
+    /// Ninguna salida temprana puede decir «quedan 0».
+    ///
+    /// La primera versión salía sin rellenar el recuento, así que el aviso se
+    /// leía «los logros esperan a que se cargue la clave; quedan 0 juegos por
+    /// preguntar» con tres mil quinientos esperando. Un recuento que no
+    /// coincide con lo que pasa es peor que no darlo.
+    #[test]
+    fn ninguna_salida_temprana_deja_el_recuento_a_cero() {
+        let completo = include_str!("achievements_pass.rs");
+        let cuerpo = completo
+            .split("pub async fn run(")
+            .nth(1)
+            .expect("la función existe")
+            .split("/// Repasa si toca")
+            .next()
+            .expect("hasta la siguiente");
+        for (indice, trozo) in cuerpo.split("return Ok(report);").enumerate() {
+            // El último trozo es lo que va después del último `return`.
+            if indice + 1 == cuerpo.matches("return Ok(report);").count() + 1 {
+                break;
+            }
+            assert!(
+                trozo.contains("report.pending = database.achievements_pending_count()?"),
+                "una salida de `run` no dice cuántos quedan"
+            );
+        }
     }
 
     /// Una tarea de fondo no abre diálogos de contraseña.
