@@ -110,6 +110,9 @@ const sortGroups = [
   {
     label: "ORGANIZACIÓN",
     options: [
+      // La puntuación que la ficha explica juego a juego en «Por qué está
+      // aquí». Se calculaba y se explicaba, pero no ordenaba nada.
+      ["priority", "Prioridad calculada"],
       ["progress", "Mayor progreso"],
       ["rating", "Mejor valoración"],
       ["targetDate", "Fecha objetivo más próxima"],

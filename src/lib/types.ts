@@ -21,6 +21,7 @@ export type GameSort =
   | "progress"
   | "rating"
   | "targetDate"
+  | "priority"
   | "random";
 
 export interface StatusDefinition {

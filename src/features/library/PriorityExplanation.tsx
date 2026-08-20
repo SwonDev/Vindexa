@@ -114,7 +114,7 @@ export function PriorityExplanation({ appId }: Props) {
           <p className="priority-panel__caption">
             {explanation.locked
               ? "Puntuación efectiva: la proyección de tu prioridad manual."
-              : "Puntuación efectiva: la que ordena este juego en tu biblioteca."}
+              : "Puntuación efectiva: la que ordena la biblioteca con el orden «Prioridad calculada»."}
           </p>
         </div>
         <p className="priority-score" data-locked={explanation.locked || undefined}>

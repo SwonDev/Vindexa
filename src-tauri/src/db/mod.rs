@@ -969,6 +969,40 @@ impl Database {
         priority::recompute_priorities(&mut self.open()?, Utc::now())
     }
 
+    /// ¿Hace falta recalcular la prioridad sin que nadie lo pida?
+    ///
+    /// Dos motivos, y los dos son de tiempo. El primero es que **no se haya
+    /// calculado nunca**: el motor existe desde la migración 024 y sólo corría
+    /// si alguien abría una ficha y pulsaba el botón, así que en una
+    /// instalación real llevaba 3.877 juegos con la puntuación a cero y el
+    /// panel de cada ficha diciendo «todavía no se ha calculado». El segundo es
+    /// que las señales dependen del reloj —«llevas X días sin tocarlo», «la
+    /// fecha objetivo es mañana»—, así que una puntuación de hace días describe
+    /// otra biblioteca.
+    pub fn priorities_due(&self, stale_after: chrono::Duration) -> AppResult<bool> {
+        let connection = self.open()?;
+        let sin_calcular: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM game_personal WHERE priority_computed_at IS NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        if sin_calcular > 0 {
+            return Ok(true);
+        }
+        let ultimo: Option<String> = connection.query_row(
+            "SELECT MAX(priority_computed_at) FROM game_personal",
+            [],
+            |row| row.get(0),
+        )?;
+        let Some(ultimo) = ultimo else {
+            return Ok(true);
+        };
+        let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(&ultimo) else {
+            return Ok(true);
+        };
+        Ok(Utc::now() - parsed.with_timezone(&Utc) >= stale_after)
+    }
+
     pub fn explain_priority(&self, app_id: u32) -> AppResult<PriorityExplanation> {
         priority::explain_priority(&self.open()?, app_id)
     }

@@ -2,8 +2,8 @@ use crate::error::{AppError, AppResult};
 use crate::models::RichGameMetadata;
 use crate::models::{
     ActivityItem, BulkUpdateStatusInput, ES_DE_STEAM, GameDetail, GameListRequest, GameSession,
-    GameSummary, LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PagedGames,
-    UpdateGameInput, archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
+    GameSummary, LibraryFilterChoice, LibraryFilterOptions, LibraryStats, PRIORITY_EFFECTIVE_SQL,
+    PagedGames, UpdateGameInput, archive_scope_clause, is_valid_archive_scope, is_valid_game_sort,
 };
 use chrono::NaiveDate;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, Transaction, params, params_from_iter};
@@ -785,6 +785,12 @@ pub fn list_games(
         "sizeAsc" => {
             "i.size_on_disk IS NULL ASC, i.size_on_disk ASC, g.title COLLATE NOCASE ASC, g.app_id ASC".to_string()
         }
+        // La prioridad calculada, que es justo lo que el panel «Por qué está
+        // aquí» explica juego a juego. Sin este orden, la puntuación se
+        // calculaba, se explicaba y no ordenaba nada.
+        "priority" => format!(
+            "{PRIORITY_EFFECTIVE_SQL} DESC, p.pinned DESC, g.title COLLATE NOCASE ASC, g.app_id ASC"
+        ),
         "random" => random_order,
         _ if manual_collection_id.is_some() => {
             "(SELECT cg.position FROM collection_games cg WHERE cg.collection_id = ? AND cg.app_id = g.app_id) ASC, g.app_id ASC".to_string()

@@ -3699,6 +3699,59 @@ mod tests {
         assert_eq!(rows[0].0, "Metroidvania");
     }
 
+    /// El orden de la lista y la explicación de la ficha son el mismo número.
+    ///
+    /// La puntuación efectiva se decide dos veces: en Rust, para explicarla en
+    /// la ficha, y en SQL, para ordenar cuatro mil filas sin traerlas. Si
+    /// dejaran de coincidir, la lista diría un orden y la ficha otro sin que
+    /// fallara nada.
+    #[test]
+    fn la_puntuacion_que_ordena_es_la_misma_que_la_ficha_explica() {
+        let connection = database();
+        insert_game(&connection, 10, "Sin anclar", &[]);
+        insert_game(&connection, 20, "Anclado al cinco", &[]);
+        connection
+            .execute(
+                "UPDATE game_personal SET priority_locked = 1, priority = 5 WHERE app_id = 20",
+                [],
+            )
+            .expect("anclar");
+
+        let mut connection = connection;
+        recompute_priorities(&mut connection, now()).expect("recalcular");
+
+        let mut statement = connection
+            .prepare(&format!(
+                "SELECT g.app_id, {}, p.priority_locked, p.priority, p.priority_score
+                   FROM games g JOIN game_personal p ON p.app_id = g.app_id
+                  ORDER BY g.app_id",
+                crate::models::PRIORITY_EFFECTIVE_SQL
+            ))
+            .expect("preparar");
+        let filas = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, u32>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, i64>(2)? == 1,
+                    row.get::<_, u8>(3)?,
+                    row.get::<_, f64>(4)?,
+                ))
+            })
+            .expect("consultar")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("recoger");
+
+        assert_eq!(filas.len(), 2);
+        for (app_id, en_sql, anclado, manual, score) in filas {
+            let en_rust = effective_score(anclado, manual, score);
+            assert!(
+                (en_sql - en_rust).abs() < 0.0001,
+                "el juego {app_id} ordena por {en_sql} y la ficha explica {en_rust}"
+            );
+        }
+    }
+
     #[test]
     fn a_recompute_does_not_touch_the_personal_edit_marker() {
         let connection = database();

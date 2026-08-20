@@ -276,6 +276,45 @@ pub fn run() {
                 });
             }
 
+            // La prioridad de la biblioteca.
+            //
+            // El motor existe desde la migración 024 y sólo corría si alguien
+            // abría una ficha y pulsaba «Recalcular la biblioteca». En la
+            // instalación real llevaba 3.877 juegos con la puntuación a cero y
+            // el panel de cada ficha diciendo «todavía no se ha calculado». Es
+            // un cálculo local sobre filas que ya están en SQLite: no pide nada
+            // a la red y no toca la prioridad manual, sólo la derivada.
+            //
+            // Se recalcula al arrancar si nunca se hizo, y luego cada doce
+            // horas, porque las señales dependen del reloj: «llevas cuatro
+            // meses sin tocarlo» deja de ser verdad solo.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(45)).await;
+                    loop {
+                        match database.priorities_due(chrono::Duration::hours(12)) {
+                            Ok(true) => match database.recompute_priorities() {
+                                Ok(report) => eprintln!(
+                                    "Vindexa: prioridad recalculada ({} juegos, {} señales).",
+                                    report.evaluated, report.signals_written
+                                ),
+                                Err(error) => eprintln!(
+                                    "Vindexa: no se pudo recalcular la prioridad: {}",
+                                    error.message
+                                ),
+                            },
+                            Ok(false) => {}
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudo saber si tocaba recalcular la prioridad: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(30 * 60)).await;
+                    }
+                });
+            }
+
             // La copia del día.
             //
             // Todo lo que hace valiosa esta base es irrepetible: las notas, los

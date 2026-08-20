@@ -559,6 +559,18 @@ pub fn is_valid_archive_scope(value: &str) -> bool {
 /// La tabla `games` tiene que estar aliasada como `g`.
 pub const ES_DE_STEAM: &str = "(g.external_store IS NULL OR g.external_store = '')";
 
+/// Cómo ordena la puntuación de prioridad, en SQL.
+///
+/// Es la misma decisión que toma `db::priority::effective_score`: con la
+/// prioridad anclada manda la manual proyectada a la escala 0-100; sin anclar,
+/// la que calcularon las señales. Se escribe aquí en SQL porque ordenar cuatro
+/// mil filas en Rust obligaría a traerlas todas, y una prueba comprueba que las
+/// dos formas dan el mismo número —si dejan de coincidir, la lista diría un
+/// orden y la ficha otro—.
+///
+/// Las tablas tienen que estar aliasadas como `g` y `p`.
+pub const PRIORITY_EFFECTIVE_SQL: &str = "(CASE WHEN p.priority_locked = 1 THEN p.priority * 20.0 ELSE COALESCE(p.priority_score, 0) END)";
+
 /// Cláusula que filtra la consulta de biblioteca según el ámbito. `None`
 /// significa «no filtres», que es exactamente lo que pide `all`.
 ///
@@ -591,6 +603,7 @@ pub fn is_valid_game_sort(value: &str) -> bool {
             | "progress"
             | "rating"
             | "targetDate"
+            | "priority"
             | "random"
     )
 }
