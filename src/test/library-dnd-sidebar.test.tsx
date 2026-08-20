@@ -34,7 +34,7 @@ const bootstrap = {
       gameCount: 2,
     },
   ],
-} as AppBootstrap;
+} as unknown as AppBootstrap;
 
 function renderSidebar(onDragEnd = vi.fn<(event: DragEndEvent) => void>(), draggingGames = false) {
   // La barra lateral incluye los menús de acciones rápidas, que hablan con el
@@ -73,7 +73,7 @@ describe("destinos y orden accesible de colecciones", () => {
   it("ofrece el mismo reordenado con Espacio y flechas", async () => {
     const rect = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function () {
+      .mockImplementation(function (this: HTMLElement) {
         const index = Array.from(document.querySelectorAll(".sidebar-collection")).indexOf(this);
         return new DOMRect(0, Math.max(0, index) * 40, 220, 32);
       });

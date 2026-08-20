@@ -63,11 +63,8 @@ const baseDetail = {
   releaseDate: "2011-04-19",
   isEarlyAccess: false,
   steamDeckStatus: "Verificado",
-  achievementsUnlocked: undefined,
   achievementsTotal: 51,
   installed: false,
-  installPath: undefined,
-  sizeOnDisk: undefined,
   statusId: "playing",
   statusName: "Jugando",
   statusColor: "#5CAAC1",
@@ -75,17 +72,15 @@ const baseDetail = {
   priority: 4,
   pinned: false,
   tracking: false,
-  rating: undefined,
   manualPosition: 0,
+  drmState: "unknown",
   shortDescription: "Una aventura cooperativa entre portales.",
   developer: "Valve",
-  publisher: undefined,
   genres: ["Acción"],
   categories: [],
   metadataStatus: "success",
   metadataFetchedAt: "2026-08-14T10:00:00Z",
   achievementsStatus: "pending",
-  achievementsFetchedAt: undefined,
   isFree: false,
   ownershipSource: "owned",
   familyAvailability: "not_applicable",
@@ -93,7 +88,10 @@ const baseDetail = {
   tags: [],
   sessions: [],
   activity: [],
-} as GameDetail;
+  drm: { state: "unknown", evidence: [] },
+  screenshots: [],
+  movies: [],
+} satisfies GameDetail;
 
 /** Metadatos enriquecidos tal y como los serializa `db::rich_metadata`. */
 const enriched = {
@@ -294,12 +292,10 @@ describe("estructura de la descripción de la ficha", () => {
   });
 
   it("omite Metacritic, edad y mando cuando la tienda no los declara", async () => {
-    serveDetail({
-      ...enriched,
-      metacriticScore: undefined,
-      requiredAge: 0,
-      controllerSupport: undefined,
-    } as unknown as GameDetail);
+    // La tienda no declara ni Metacritic ni el soporte de mando: las claves no
+    // llegan. Escribirles `undefined` sería decir que llegan vacías.
+    const { metacriticScore: _sinNota, controllerSupport: _sinMando, ...sinExtras } = enriched;
+    serveDetail({ ...sinExtras, requiredAge: 0 });
     renderSheet();
     await screen.findByRole("heading", { name: "Portal 2", level: 2 });
 

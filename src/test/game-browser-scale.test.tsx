@@ -50,6 +50,11 @@ const games: GameSummary[] = Array.from({ length: 5_000 }, (_, index) => ({
   playtimeMinutes: index * 10,
   playtimeRecentMinutes: index % 120,
   isEarlyAccess: false,
+  isFree: false,
+  ownershipSource: "owned" as const,
+  familyAvailability: "not_applicable" as const,
+  drmState: "unknown",
+  genres: [],
   installed: index % 4 === 0,
   statusId: "unclassified",
   statusName: "Sin clasificar",
@@ -59,6 +64,7 @@ const games: GameSummary[] = Array.from({ length: 5_000 }, (_, index) => ({
   pinned: false,
   tracking: false,
   manualPosition: index,
+  collectionIds: [],
 }));
 
 describe("ventana virtual para bibliotecas grandes", () => {

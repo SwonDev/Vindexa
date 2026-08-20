@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WishlistScreen } from "@/features/wishlist/WishlistScreen";
 import { api } from "@/lib/tauri";
-import type { GameSummary, WishlistBucketId, WishlistEntry, WishlistOverview } from "@/lib/types";
+import type { WishlistBucketId, WishlistEntry, WishlistGame, WishlistOverview } from "@/lib/types";
 
 vi.mock("@/lib/tauri", () => ({
   api: {
@@ -39,26 +39,11 @@ vi.mock("@/components/common/Artwork", () => ({
 
 const mockedApi = api as unknown as { [Key in keyof typeof api]: ReturnType<typeof vi.fn> };
 
-function game(appId: number, title: string): GameSummary {
+function game(appId: number, title: string): WishlistGame {
   return {
     appId,
     title,
-    playtimeMinutes: 0,
-    playtimeRecentMinutes: 0,
-    isEarlyAccess: false,
-    isFree: false,
-    ownershipSource: "owned",
-    familyAvailability: "not_applicable",
-    installed: false,
-    statusId: "backlog",
-    statusName: "Pendiente",
-    statusColor: "#5CAAC1",
-    progress: 0,
-    priority: 0,
-    pinned: false,
-    tracking: false,
-    manualPosition: 0,
-    collectionIds: [],
+    inLibrary: false,
   };
 }
 

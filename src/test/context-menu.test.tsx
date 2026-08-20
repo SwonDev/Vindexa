@@ -22,6 +22,9 @@ const baseGame: GameSummary = {
   pinned: false,
   tracking: false,
   manualPosition: 0,
+  drmState: "unknown",
+  collectionIds: [],
+  genres: [],
 };
 
 const statuses: StatusDefinition[] = [

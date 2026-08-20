@@ -5,7 +5,7 @@ import {
   observedLabel,
   summarizePrices,
 } from "@/features/wishlist/wishlist-model";
-import type { GamePrice, GameSummary, WishlistEntry, WishlistPriceStatus } from "@/lib/types";
+import type { GamePrice, WishlistEntry, WishlistGame, WishlistPriceStatus } from "@/lib/types";
 
 /**
  * Presentación del precio observado en Deseados.
@@ -15,26 +15,11 @@ import type { GamePrice, GameSummary, WishlistEntry, WishlistPriceStatus } from 
  * de honestidad con datos fijos.
  */
 
-function game(appId: number, title: string): GameSummary {
+function game(appId: number, title: string): WishlistGame {
   return {
     appId,
     title,
-    playtimeMinutes: 0,
-    playtimeRecentMinutes: 0,
-    isEarlyAccess: false,
-    isFree: false,
-    ownershipSource: "owned",
-    familyAvailability: "not_applicable",
-    installed: false,
-    statusId: "backlog",
-    statusName: "Pendiente",
-    statusColor: "#5CAAC1",
-    progress: 0,
-    priority: 0,
-    pinned: false,
-    tracking: false,
-    manualPosition: 0,
-    collectionIds: [],
+    inLibrary: false,
   };
 }
 

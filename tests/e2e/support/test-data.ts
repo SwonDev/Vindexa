@@ -1,6 +1,7 @@
 import type {
   AppBootstrap,
   CollectionSummary,
+  DrmState,
   GameDetail,
   GameSummary,
   PlannerOverview,
@@ -86,10 +87,18 @@ const collections: CollectionSummary[] = [
   },
 ];
 
-function game(overrides: Partial<GameDetail> & Pick<GameDetail, "appId" | "title">): GameDetail {
+/**
+ * Como `Partial<T>`, pero admitiendo la clave escrita con el valor perdido.
+ *
+ * Los dobles de estas pruebas se escriben a mano y a veces dicen `rating:
+ * undefined` para señalar «este juego no tiene nota». `sinClavesPerdidas` las
+ * borra antes de mezclar, así que aceptarlas aquí no relaja el contrato de
+ * salida: lo que sale sigue siendo un `GameDetail` completo.
+ */
+type ConHuecos<T> = { [K in keyof T]?: T[K] | undefined };
+
+function game(overrides: ConHuecos<GameDetail> & Pick<GameDetail, "appId" | "title">): GameDetail {
   return {
-    appId: overrides.appId,
-    title: overrides.title,
     playtimeMinutes: 1_860,
     playtimeRecentMinutes: 180,
     lastPlayedAt: "2026-08-13T20:15:00Z",
@@ -118,6 +127,7 @@ function game(overrides: Partial<GameDetail> & Pick<GameDetail, "appId" | "title
     checkpoint: "Campamento del lago, antes de activar el observatorio.",
     notes: "Explorar la ruta norte antes de continuar la historia.",
     manualPosition: 0,
+    drmState: "unknown",
     shortDescription:
       "Una aventura de exploración precisa y atmosférica donde cada ruta descubierta transforma tu mapa personal.",
     developer: "Northstar Workshop",
@@ -141,8 +151,21 @@ function game(overrides: Partial<GameDetail> & Pick<GameDetail, "appId" | "title
         createdAt: "2026-08-13T20:15:00Z",
       },
     ],
-    ...overrides,
-  };
+    ...sinClavesPerdidas(overrides),
+  } as GameDetail;
+}
+
+/**
+ * Quita las claves que llegan con el valor perdido.
+ *
+ * El contrato distingue «no viene» de «viene vacía»: escribir `campo:
+ * undefined` es afirmar que el campo llegó y estaba vacío, que es una respuesta
+ * que la aplicación no recibe nunca. Al mezclar dobles conviene borrarlas.
+ */
+function sinClavesPerdidas<T extends object>(valores: T): T {
+  return Object.fromEntries(
+    Object.entries(valores).filter(([, valor]) => valor !== undefined),
+  ) as T;
 }
 
 const games = [
@@ -239,14 +262,17 @@ function showcasePlannerFor(items: GameSummary[]): PlannerOverview {
   const plan = (index: number, position: number, plannedFor?: string) => {
     const game = items[index];
     if (!game) return undefined;
+    // Las claves opcionales que no tienen valor no se escriben: el contrato
+    // distingue «no viene» de «viene vacía», y el arnés tiene que hablar el
+    // mismo idioma que la aplicación.
     return {
       appId: game.appId,
       title: game.title,
-      coverUrl: game.coverUrl,
+      ...(game.coverUrl ? { coverUrl: game.coverUrl } : {}),
       progress: game.progress,
       position,
       queuePosition: position,
-      plannedFor,
+      ...(plannedFor ? { plannedFor } : {}),
       objective: objectives[index % objectives.length],
       targetDate: `2026-09-${String(4 + position * 3).padStart(2, "0")}`,
       estimatedMinutes: 180 + position * 90,
@@ -377,7 +403,7 @@ function showcaseRichMetadata(entry: ShowcaseEntry) {
           kind: "paragraph" as const,
           text: `Desarrollado por ${entry.developer} y distribuido por ${entry.publisher}. La ficha recoge lo que la tienda oficial declara, sin añadir una sola palabra propia.`,
         },
-        { kind: "heading" as const, level: 3, text: "Lo que encontrarás" },
+        { kind: "heading" as const, level: 3 as const, text: "Lo que encontrarás" },
         {
           kind: "list" as const,
           ordered: false,
@@ -402,10 +428,10 @@ function showcaseRichMetadata(entry: ShowcaseEntry) {
     logoPosition: null,
     drmNotice: null,
     drm: {
-      state: entry.appId % 3 === 0 ? "drm_free" : "steam_drm",
+      state: (entry.appId % 3 === 0 ? "drm_free" : "steam_drm") as DrmState,
       evidence: [
         {
-          source: "categories",
+          source: "categories" as const,
           match:
             entry.appId % 3 === 0
               ? "La ficha oficial no declara ningún aviso de DRM ni de cuenta externa."
@@ -435,13 +461,18 @@ function buildScaleGames(): GameDetail[] {
     const source = base[index % base.length];
     if (!source) throw new Error("El catálogo de vitrina no puede estar vacío.");
     const suffix = Math.floor(index / base.length) + 1;
+    // Sin arte: a esta escala lo que se mide es la lista, no las portadas. Las
+    // claves se quitan, que es como llega un juego que no tiene arte.
+    const {
+      coverUrl: _sinPortada,
+      headerUrl: _sinCabecera,
+      heroUrl: _sinFondo,
+      ...sinArte
+    } = structuredClone(source);
     return {
-      ...structuredClone(source),
+      ...sinArte,
       appId: 900_000 + index,
       title: suffix === 1 ? source.title : `${source.title} ${suffix}`,
-      coverUrl: undefined,
-      headerUrl: undefined,
-      heroUrl: undefined,
       manualPosition: index,
       collectionIds: [],
     };
@@ -527,6 +558,9 @@ export function createTestState(scenario: VindexaScenario): TestBackendState {
       trackedGames: scenarioGames.filter((item) => item.tracking).length,
       familyCatalogGames: 0,
       externalStoreGames: {},
+      drmFreeGames: 0,
+      drmPendingGames: scenarioGames.length,
+      archivedGames: 0,
       totalPlaytimeMinutes: scenarioGames.reduce((sum, item) => sum + item.playtimeMinutes, 0),
     },
     statuses: structuredClone(
@@ -563,12 +597,13 @@ export function createTestState(scenario: VindexaScenario): TestBackendState {
       periodicSyncMinutes: 0,
       confirmUninstall: true,
       librarySort: "manual",
-      artCacheMib: 512,
+      artCacheMib: 0,
       shortcuts: {
         library: "Mod+1",
         planner: "Mod+2",
         collections: "Mod+3",
         tracking: "Mod+4",
+        wishlist: "Mod+5",
         search: "Mod+F",
         sync: "Mod+R",
         closePanel: "Escape",

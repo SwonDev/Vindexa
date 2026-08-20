@@ -51,10 +51,23 @@ const game: GameSummary = {
   pinned: false,
   tracking: true,
   manualPosition: 0,
+  isFree: false,
+  drmState: "unknown",
+  ownershipSource: "owned",
+  familyAvailability: "not_applicable",
+  collectionIds: [],
+  genres: [],
 };
 
 const snapshot: DiscoverySnapshot = {
   reminders: [],
+  totals: {
+    forgotten: 1,
+    almostFinished: 1,
+    upcoming: 0,
+    officialPublications: 0,
+    relatedReleases: 0,
+  },
   forgotten: [{ ...game, appId: 20, title: "Olvidado", tracking: false, progress: 10 }],
   almostFinished: [{ ...game, appId: 30, title: "Casi listo", progress: 92 }],
   upcoming: [],
@@ -79,6 +92,11 @@ const bootstrap: AppBootstrap = {
     backlogGames: 1,
     trackedGames: 1,
     totalPlaytimeMinutes: 180,
+    drmFreeGames: 0,
+    drmPendingGames: 0,
+    archivedGames: 0,
+    familyCatalogGames: 0,
+    externalStoreGames: {},
   },
   statuses: [],
   collections: [],
@@ -94,16 +112,19 @@ const bootstrap: AppBootstrap = {
     periodicSyncMinutes: 60,
     confirmUninstall: true,
     librarySort: "manual",
+    artCacheMib: 0,
     shortcuts: {
       library: "Mod+1",
       planner: "Mod+2",
       collections: "Mod+3",
       tracking: "Mod+4",
+      wishlist: "Mod+5",
       search: "Mod+K",
       sync: "Mod+Shift+S",
       closePanel: "Escape",
     },
   },
+  appVersion: "0.0.0-pruebas",
   databasePath: "/tmp/vindexa.sqlite3",
 };
 
@@ -193,7 +214,7 @@ describe("accesibilidad del radar personal", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    const status = await screen.findByText("1 elementos en esta vista");
+    const status = await screen.findByText("1 elemento en esta vista");
     expect(status).toHaveAttribute("aria-live", "polite");
 
     await user.click(screen.getByRole("tab", { name: /Olvidados/ }));

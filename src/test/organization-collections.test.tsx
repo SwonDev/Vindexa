@@ -66,6 +66,11 @@ const bootstrap: AppBootstrap = {
     backlogGames: 6,
     trackedGames: 3,
     totalPlaytimeMinutes: 840,
+    drmFreeGames: 0,
+    drmPendingGames: 0,
+    archivedGames: 0,
+    familyCatalogGames: 0,
+    externalStoreGames: {},
   },
   statuses: [
     {
@@ -137,16 +142,19 @@ const bootstrap: AppBootstrap = {
     periodicSyncMinutes: 60,
     confirmUninstall: true,
     librarySort: "manual",
+    artCacheMib: 0,
     shortcuts: {
       library: "Mod+1",
       planner: "Mod+2",
       collections: "Mod+3",
       tracking: "Mod+4",
+      wishlist: "Mod+5",
       search: "Mod+K",
       sync: "Mod+Shift+S",
       closePanel: "Escape",
     },
   },
+  appVersion: "0.0.0-pruebas",
   databasePath: "/tmp/vindexa.sqlite3",
 };
 
@@ -188,6 +196,7 @@ describe("organización editable", () => {
       metadataGames: 0,
       achievementGames: 0,
       steamDeckGames: 0,
+      drmGames: 0,
     });
     mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
     mockedApi.listFamilyCatalog.mockResolvedValue({
@@ -416,6 +425,12 @@ describe("organización editable", () => {
           pinned: false,
           tracking: false,
           manualPosition: 0,
+          isFree: false,
+          drmState: "unknown",
+          ownershipSource: "owned",
+          familyAvailability: "not_applicable",
+          collectionIds: [],
+          genres: [],
         },
       ],
       total: 1,
@@ -432,7 +447,12 @@ describe("organización editable", () => {
     );
 
     const game = await screen.findByRole("button", { name: /Portal 2, Pendiente/ });
-    await user.click(game, { ctrlKey: true });
+    // `user.click(elemento, { ctrlKey: true })` no existe: el segundo argumento
+    // se ignoraba y el clic llegaba sin modificador. La selección por control
+    // se pulsa como se pulsa de verdad, con la tecla mantenida.
+    await user.keyboard("{Control>}");
+    await user.click(game);
+    await user.keyboard("{/Control}");
     expect(screen.getByText("1 seleccionado")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /Steam Family/ }));

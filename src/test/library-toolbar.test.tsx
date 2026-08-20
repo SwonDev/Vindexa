@@ -41,6 +41,7 @@ function ToolbarHarness({ note }: { note?: { text: string; detail: string } } = 
             metadataGames: 2_000,
             achievementGames: 180,
             steamDeckGames: 0,
+            drmGames: 0,
           } satisfies LibraryFilterOptions
         }
       />

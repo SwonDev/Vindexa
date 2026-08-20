@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LibraryFilters } from "@/features/library/library-filters";
 import {
   combinedPresentation,
   combineViews,
@@ -103,7 +104,12 @@ describe("intersectFilters", () => {
   });
 
   it("descarta los campos que quedan vacíos", () => {
-    const { filters } = intersectFilters({ genre: "" }, { category: undefined });
+    // El `undefined` explícito llega de una vista guardada en disco, donde el
+    // campo existe con el valor perdido. El tipo no lo admite a propósito; la
+    // función tiene que sobrevivirlo igual.
+    const { filters } = intersectFilters({ genre: "" }, {
+      category: undefined,
+    } as unknown as LibraryFilters);
     expect(filters).toEqual({});
   });
 });
@@ -146,11 +152,11 @@ describe("combineViews", () => {
 describe("combinedPresentation", () => {
   it("la última vista decide orden, agrupación y presentación", () => {
     const result = combinedPresentation([
-      view("A", { sort: "title", grouping: "initial", view: "grid" }),
-      view("B", { sort: "recent" }),
+      view("A", { sort: "alphabetical", grouping: "initial", view: "grid" }),
+      view("B", { sort: "recentlyAdded" }),
       view("C", { view: "list" }),
     ]);
-    expect(result).toEqual({ sort: "recent", grouping: "initial", view: "list" });
+    expect(result).toEqual({ sort: "recentlyAdded", grouping: "initial", view: "list" });
   });
 });
 
@@ -167,14 +173,14 @@ describe("toggleViewInStack", () => {
 describe("queryMatchesView", () => {
   const saved = view("Instalados", {
     search: "elden",
-    sort: "title",
+    sort: "alphabetical",
     filters: { installed: true, minRating: 8 },
   });
 
   it("reconoce la misma consulta aunque cambie el orden de las claves", () => {
     expect(
       queryMatchesView(
-        { search: "elden", sort: "title", filters: { minRating: 8, installed: true } },
+        { search: "elden", sort: "alphabetical", filters: { minRating: 8, installed: true } },
         saved,
       ),
     ).toBe(true);
@@ -183,7 +189,7 @@ describe("queryMatchesView", () => {
   it("ignora los espacios sobrantes de la búsqueda", () => {
     expect(
       queryMatchesView(
-        { search: "  elden  ", sort: "title", filters: { installed: true, minRating: 8 } },
+        { search: "  elden  ", sort: "alphabetical", filters: { installed: true, minRating: 8 } },
         saved,
       ),
     ).toBe(true);
@@ -192,7 +198,7 @@ describe("queryMatchesView", () => {
   it("detecta que la consulta cambió", () => {
     expect(
       queryMatchesView(
-        { search: "elden", sort: "title", filters: { installed: true, minRating: 9 } },
+        { search: "elden", sort: "alphabetical", filters: { installed: true, minRating: 9 } },
         saved,
       ),
     ).toBe(false);

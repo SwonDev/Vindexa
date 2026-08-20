@@ -601,8 +601,23 @@ export interface DiscoveryCapabilities {
   relatedReleasesAvailable: boolean;
 }
 
+/**
+ * Cuántos hay de verdad detrás de cada lista recortada del panorama.
+ *
+ * Las consultas traen unos pocos de cada montón. Sin estas cifras, lo que
+ * llega a la pantalla es el tope de la consulta disfrazado de total.
+ */
+export interface DiscoveryTotals {
+  forgotten: number;
+  almostFinished: number;
+  upcoming: number;
+  officialPublications: number;
+  relatedReleases: number;
+}
+
 export interface DiscoverySnapshot {
   reminders: GameReminder[];
+  totals: DiscoveryTotals;
   forgotten: GameSummary[];
   almostFinished: GameSummary[];
   upcoming: GameSummary[];

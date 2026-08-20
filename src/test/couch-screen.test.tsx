@@ -36,6 +36,7 @@ function game(appId: number, title: string, installed = true): GameSummary {
     title,
     playtimeMinutes: 120,
     playtimeRecentMinutes: 0,
+    drmState: "unknown",
     isEarlyAccess: false,
     isFree: false,
     ownershipSource: "owned",

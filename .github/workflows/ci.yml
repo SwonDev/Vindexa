@@ -50,8 +50,10 @@ jobs:
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # También las pruebas: un doble que dice ser `GameSummary` y no lo es
+      # hace pasar pruebas que en la aplicación fallarían.
       - name: Comprobar tipos
-        run: pnpm exec tsc -b
+        run: pnpm typecheck
 
       - name: Revisar estilo
         run: pnpm lint

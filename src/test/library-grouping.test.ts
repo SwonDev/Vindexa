@@ -25,6 +25,8 @@ function game(overrides: Partial<GameSummary> & Pick<GameSummary, "appId" | "tit
     pinned: false,
     tracking: false,
     manualPosition: 0,
+    drmState: "unknown",
+    genres: [],
     collectionIds: [],
     ...overrides,
   };

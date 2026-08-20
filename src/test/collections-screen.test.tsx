@@ -76,6 +76,8 @@ function game(appId: number, title: string, collectionIds: string[] = []): GameS
     pinned: false,
     tracking: false,
     manualPosition: 0,
+    drmState: "unknown",
+    genres: [],
     collectionIds,
   };
 }
@@ -99,6 +101,11 @@ function makeBootstrap(collections: CollectionSummary[]): AppBootstrap {
       backlogGames: 10,
       trackedGames: 4,
       totalPlaytimeMinutes: 4200,
+      drmFreeGames: 0,
+      drmPendingGames: 0,
+      archivedGames: 0,
+      familyCatalogGames: 0,
+      externalStoreGames: {},
     },
     statuses: [
       {
@@ -131,16 +138,19 @@ function makeBootstrap(collections: CollectionSummary[]): AppBootstrap {
       periodicSyncMinutes: 60,
       confirmUninstall: true,
       librarySort: "manual",
+      artCacheMib: 0,
       shortcuts: {
         library: "Mod+1",
         planner: "Mod+2",
         collections: "Mod+3",
         tracking: "Mod+4",
+        wishlist: "Mod+5",
         search: "Mod+K",
         sync: "Mod+Shift+S",
         closePanel: "Escape",
       },
     },
+    appVersion: "0.0.0-pruebas",
     databasePath: "/tmp/vindexa.sqlite3",
   };
 }
@@ -171,7 +181,7 @@ function renderScreen(bootstrap?: AppBootstrap, loading = false) {
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <CollectionsScreen bootstrap={bootstrap} loading={loading} />
+        <CollectionsScreen {...(bootstrap ? { bootstrap } : {})} loading={loading} />
       </TooltipProvider>
     </QueryClientProvider>,
   );

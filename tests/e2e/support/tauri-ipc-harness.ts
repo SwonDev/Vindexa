@@ -350,6 +350,11 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       playingGames: state.games.filter((game) => game.statusId === "playing").length,
       backlogGames: state.games.filter((game) => game.progress < 100).length,
       trackedGames: state.games.filter((game) => game.tracking).length,
+      drmFreeGames: state.games.filter((game) => game.drmState === "drm_free").length,
+      drmPendingGames: state.games.filter((game) => game.drmState === "unknown").length,
+      archivedGames: 0,
+      familyCatalogGames: state.bootstrap.stats.familyCatalogGames,
+      externalStoreGames: state.bootstrap.stats.externalStoreGames,
       totalPlaytimeMinutes: state.games.reduce((sum, game) => sum + game.playtimeMinutes, 0),
     };
     next.statuses = next.statuses.map((status) => ({
@@ -879,9 +884,14 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       const index = state.games.findIndex((game) => game.appId === Number(input.appId));
       if (index < 0) throw new Error("No se pudo guardar el juego del fixture.");
       const status = state.bootstrap.statuses.find((item) => item.id === input.statusId);
+      // Lo que llega sin valor no se escribe encima de lo que ya había: el
+      // contrato distingue «no lo cambies» de «déjalo vacío».
+      const cambios = Object.fromEntries(
+        Object.entries(input).filter(([, valor]) => valor !== undefined),
+      );
       state.games[index] = {
         ...state.games[index],
-        ...input,
+        ...cambios,
         statusName: status?.name ?? state.games[index].statusName,
         statusColor: status?.color ?? state.games[index].statusColor,
       };
@@ -895,12 +905,13 @@ export function installTauriIpcHarness(seed: TestBackendState) {
         const previous = state.games
           .filter((game) => appIds.includes(game.appId))
           .map((game) => ({ appId: game.appId, statusId: game.statusId }));
-        const status = state.bootstrap.statuses.find((item) => item.id === input.target.id);
+        const destino = input.target;
+        const status = state.bootstrap.statuses.find((item) => item.id === destino.id);
         state.games = state.games.map((game) =>
           appIds.includes(game.appId)
             ? {
                 ...game,
-                statusId: input.target.id,
+                statusId: destino.id,
                 statusName: status?.name ?? game.statusName,
                 statusColor: status?.color ?? game.statusColor,
               }
@@ -1561,8 +1572,15 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       stored.bucket = input.bucket;
       stored.priority = Math.min(5, Math.max(0, Math.trunc(input.priority)));
       stored.note = input.note ?? "";
-      stored.targetPriceCents = input.targetPriceCents;
-      stored.currency = input.targetPriceCents === undefined ? undefined : input.currency;
+      if (input.targetPriceCents === undefined) {
+        // Sin precio objetivo no hay moneda que guardar: las claves se borran,
+        // no se dejan puestas con el valor perdido.
+        delete stored.targetPriceCents;
+        delete stored.currency;
+      } else {
+        stored.targetPriceCents = input.targetPriceCents;
+        if (input.currency !== undefined) stored.currency = input.currency;
+      }
       if (!existing) entries.push(stored);
       return {
         game: { ...summaryOf(state, stored.appId) },

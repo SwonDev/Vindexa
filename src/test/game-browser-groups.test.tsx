@@ -36,7 +36,14 @@ vi.mock("@tanstack/react-virtual", () => ({
     count: number;
     estimateSize: (index: number) => number;
   }) => {
-    const items = [];
+    const items: {
+      key: number;
+      index: number;
+      start: number;
+      size: number;
+      end: number;
+      lane: number;
+    }[] = [];
     let start = 0;
     for (let index = 0; index < count; index += 1) {
       const size = estimateSize(index);
@@ -59,6 +66,11 @@ function game(appId: number, title: string): GameSummary {
     title,
     playtimeMinutes: 0,
     playtimeRecentMinutes: 0,
+    isFree: false,
+    drmState: "unknown",
+    ownershipSource: "owned",
+    familyAvailability: "not_applicable",
+    genres: [],
     isEarlyAccess: false,
     installed: false,
     statusId: "unclassified",

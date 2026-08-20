@@ -178,8 +178,13 @@ describe("qué se pinta como próximo aviso", () => {
   it("distingue pausado de agotado", () => {
     expect(describeNextOccurrence(pausedRule).state).toBe("paused");
     expect(
-      describeNextOccurrence({ ...monthlyRule, repeatRule: "none", nextOccurrence: undefined })
-        .state,
+      // Una regla agotada llega sin próxima fecha: la clave no viene.
+      describeNextOccurrence(
+        (({ nextOccurrence: _sinFecha, ...resto }) => ({
+          ...resto,
+          repeatRule: "none" as const,
+        }))(monthlyRule),
+      ).state,
     ).toBe("finished");
   });
 });

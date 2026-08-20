@@ -130,11 +130,13 @@ describe("contrato frontend de comandos Tauri", () => {
       periodicSyncMinutes: 30,
       confirmUninstall: true,
       librarySort: "lastPlayed",
+      artCacheMib: 0,
       shortcuts: {
         library: "Mod+1",
         planner: "Mod+2",
         collections: "Mod+3",
         tracking: "Mod+4",
+        wishlist: "Mod+5",
         search: "Mod+K",
         sync: "Mod+Shift+S",
         closePanel: "Escape",

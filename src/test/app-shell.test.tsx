@@ -23,6 +23,7 @@ vi.mock("@/lib/tauri", () => ({
     metadataEnrichmentStatus: vi.fn(),
     startMetadataEnrichment: vi.fn(),
     syncSteamLibrary: vi.fn(),
+    savePreferences: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "No se pudo completar la operación.",
@@ -33,6 +34,7 @@ const mockedApi = api as unknown as {
   listGames: ReturnType<typeof vi.fn>;
   importLocalSteam: ReturnType<typeof vi.fn>;
   syncSteamLibrary: ReturnType<typeof vi.fn>;
+  savePreferences: ReturnType<typeof vi.fn>;
   libraryFilterOptions: ReturnType<typeof vi.fn>;
   metadataEnrichmentStatus: ReturnType<typeof vi.fn>;
   startMetadataEnrichment: ReturnType<typeof vi.fn>;
@@ -46,6 +48,11 @@ const emptyBootstrap: AppBootstrap = {
     backlogGames: 0,
     trackedGames: 0,
     totalPlaytimeMinutes: 0,
+    drmFreeGames: 0,
+    drmPendingGames: 0,
+    archivedGames: 0,
+    familyCatalogGames: 0,
+    externalStoreGames: {},
   },
   statuses: [],
   collections: [],
@@ -61,16 +68,19 @@ const emptyBootstrap: AppBootstrap = {
     periodicSyncMinutes: 0,
     confirmUninstall: true,
     librarySort: "manual",
+    artCacheMib: 0,
     shortcuts: {
       library: "Mod+1",
       planner: "Mod+2",
       collections: "Mod+3",
       tracking: "Mod+4",
+      wishlist: "Mod+5",
       search: "Mod+K",
       sync: "Mod+Shift+S",
       closePanel: "Escape",
     },
   },
+  appVersion: "0.0.0-pruebas",
   databasePath: "/Users/prueba/Library/Application Support/Vindexa/vindexa.sqlite3",
 };
 
@@ -113,6 +123,7 @@ const focusedGame: GameSummary = {
   pinned: false,
   tracking: false,
   manualPosition: 0,
+  drmState: "unknown",
   collectionIds: [],
   genres: [],
 };
@@ -171,6 +182,7 @@ describe("ciclo de carga de la aplicación", () => {
       metadataGames: 0,
       achievementGames: 0,
       steamDeckGames: 0,
+      drmGames: 0,
     });
     mockedApi.metadataEnrichmentStatus.mockResolvedValue({
       running: false,
@@ -469,7 +481,10 @@ describe("ciclo de carga de la aplicación", () => {
     fireEvent.keyDown(window, { key: "5", metaKey: true });
 
     await waitFor(() => expect(library).not.toHaveAttribute("aria-current"));
-    expect(mockedApi.savePreferences).toBeUndefined();
+    // El atajo de Deseados es local: mueve la pantalla y no guarda nada. Antes
+    // se comprobaba que el doble no tuviera el método, lo que era cierto
+    // siempre y no probaba nada.
+    expect(mockedApi.savePreferences).not.toHaveBeenCalled();
   });
 
   it("abre la paleta de comandos con Mod+K y la cierra con Escape", async () => {
@@ -678,6 +693,7 @@ describe("el distintivo de Steam", () => {
       metadataGames: 0,
       achievementGames: 0,
       steamDeckGames: 0,
+      drmGames: 0,
     });
   });
 

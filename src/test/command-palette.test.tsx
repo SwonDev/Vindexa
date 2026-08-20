@@ -49,6 +49,7 @@ function game(appId: number, title: string, overrides: Partial<GameSummary> = {}
     pinned: false,
     tracking: false,
     manualPosition: 0,
+    drmState: "unknown",
     collectionIds: [],
     genres: [],
     ...overrides,
@@ -154,7 +155,7 @@ function renderPalette(props: Partial<Parameters<typeof CommandPalette>[0]> = {}
 }
 
 let commands: LibraryCommand[] = [];
-let unsubscribe = noop;
+let unsubscribe: () => void = noop;
 
 beforeEach(() => {
   commands = [];

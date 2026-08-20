@@ -51,10 +51,23 @@ const trackedGame: GameSummary = {
   pinned: false,
   tracking: true,
   manualPosition: 0,
+  isFree: false,
+  drmState: "unknown",
+  ownershipSource: "owned",
+  familyAvailability: "not_applicable",
+  collectionIds: [],
+  genres: [],
 };
 
 const snapshot: DiscoverySnapshot = {
   reminders: [],
+  totals: {
+    forgotten: 1,
+    almostFinished: 1,
+    upcoming: 0,
+    officialPublications: 1,
+    relatedReleases: 1,
+  },
   forgotten: [{ ...trackedGame, appId: 20, title: "Olvidado", tracking: false, progress: 10 }],
   almostFinished: [{ ...trackedGame, appId: 30, title: "Casi listo", progress: 92 }],
   upcoming: [],
@@ -102,6 +115,11 @@ const bootstrap: AppBootstrap = {
     backlogGames: 1,
     trackedGames: 1,
     totalPlaytimeMinutes: 180,
+    drmFreeGames: 0,
+    drmPendingGames: 0,
+    archivedGames: 0,
+    familyCatalogGames: 0,
+    externalStoreGames: {},
   },
   statuses: [],
   collections: [],
@@ -117,16 +135,19 @@ const bootstrap: AppBootstrap = {
     periodicSyncMinutes: 60,
     confirmUninstall: true,
     librarySort: "manual",
+    artCacheMib: 0,
     shortcuts: {
       library: "Mod+1",
       planner: "Mod+2",
       collections: "Mod+3",
       tracking: "Mod+4",
+      wishlist: "Mod+5",
       search: "Mod+K",
       sync: "Mod+Shift+S",
       closePanel: "Escape",
     },
   },
+  appVersion: "0.0.0-pruebas",
   databasePath: "/tmp/vindexa.sqlite3",
 };
 
@@ -219,11 +240,14 @@ describe("seguimiento y descubrimiento", () => {
     mockedApi.discoverySnapshot.mockResolvedValue({
       ...snapshot,
       officialPublications: publicaciones,
+      // La consulta trae veinte como mucho; detrás hay treinta y una. Ni la
+      // lista que llega ni las cuatro que se pintan son el total.
+      totals: { ...snapshot.totals, officialPublications: 31 },
     });
     renderScreen();
 
     await user.click(await screen.findByRole("tab", { name: "Novedades" }));
-    expect(await screen.findByText("4 de 7 publicaciones verificadas")).toBeVisible();
+    expect(await screen.findByText("4 de 31 publicaciones verificadas")).toBeVisible();
     // Y lo que se ve son cuatro, no siete.
     const lista = screen.getByRole("list", { name: "Publicaciones verificadas de Steam" });
     expect(within(lista).getAllByRole("listitem")).toHaveLength(4);

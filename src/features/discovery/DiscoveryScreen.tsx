@@ -262,11 +262,24 @@ export function DiscoveryScreen({
   const activeView = radarViews.find((item) => item.id === radarView) ?? radarViews[0];
   const radarBusy = discovery.isPending || tracked.isPending;
   const radarFailed = discovery.isError || tracked.isError;
+  /**
+   * Lo que se ve, y cuántos hay.
+   *
+   * Las consultas del panorama traen doce de cada montón. Decir «12 elementos
+   * en esta vista» con doscientos ochenta olvidados detrás es el mismo recuento
+   * que contestó «20» cuando había 215: el tope de la consulta contado como si
+   * fuera el total.
+   */
+  const radarShown =
+    radarView === "reminders" ? (discovery.data?.reminders.length ?? 0) : currentItems.length;
+  const radarTotal = radarCount(radarView, discovery.data, trackedTotal);
   const radarCountLabel = radarBusy
     ? "Contrastando datos locales"
     : radarFailed
       ? "Datos no disponibles"
-      : `${radarCount(radarView, discovery.data, trackedTotal)} elementos en esta vista`;
+      : radarShown < radarTotal
+        ? `${radarShown} de ${radarTotal} en esta vista`
+        : `${radarTotal} ${radarTotal === 1 ? "elemento" : "elementos"} en esta vista`;
 
   if (loading && !bootstrap) return <LoadingState label="Cargando descubrimiento" />;
   if (!activeView) return null;
@@ -365,8 +378,8 @@ export function DiscoveryScreen({
               counts={{
                 tracking: trackedTotal,
                 reminders: discovery.data?.reminders.length ?? 0,
-                forgotten: discovery.data?.forgotten.length ?? 0,
-                almost: discovery.data?.almostFinished.length ?? 0,
+                forgotten: discovery.data?.totals.forgotten ?? 0,
+                almost: discovery.data?.totals.almostFinished ?? 0,
               }}
               busy={radarBusy}
               onSelect={setRadarView}
@@ -446,16 +459,19 @@ export function DiscoveryScreen({
               <>
                 <PublicationsBlock
                   items={discovery.data?.officialPublications ?? []}
+                  total={discovery.data?.totals.officialPublications ?? 0}
                   trackedGames={discovery.data?.capabilities.trackedNewsGames ?? 0}
                   refresh={newsRefresh}
                   loading={discovery.isPending}
                 />
                 <RelatedReleasesBlock
                   items={discovery.data?.relatedReleases ?? []}
+                  total={discovery.data?.totals.relatedReleases ?? 0}
                   loading={discovery.isPending}
                 />
                 <UpcomingBlock
                   items={discovery.data?.upcoming ?? []}
+                  total={discovery.data?.totals.upcoming ?? 0}
                   loading={discovery.isPending}
                 />
                 <EarlyAccessBlock
@@ -558,8 +574,9 @@ const signalGroups = [
  */
 const SIGNAL_VISIBLE = 4;
 
-function signalCount(total: number, singular: string, plural: string): string {
-  if (total > SIGNAL_VISIBLE) return `${SIGNAL_VISIBLE} de ${total} ${plural}`;
+function signalCount(shown: number, total: number, singular: string, plural: string): string {
+  const vistos = Math.min(shown, SIGNAL_VISIBLE);
+  if (total > vistos) return `${vistos} de ${total} ${plural}`;
   return `${total} ${total === 1 ? singular : plural}`;
 }
 
@@ -1064,11 +1081,13 @@ function SignalBlock({
 
 function PublicationsBlock({
   items,
+  total,
   trackedGames,
   refresh,
   loading,
 }: {
   items: OfficialPublication[];
+  total: number;
   trackedGames: number;
   refresh: UseQueryResult<NewsRefreshReport, Error>;
   loading: boolean;
@@ -1085,7 +1104,12 @@ function PublicationsBlock({
         : refresh.data?.failedGames
           ? `${refresh.data.failedGames} juegos pendientes · caché local`
           : items.length
-            ? signalCount(items.length, "publicación verificada", "publicaciones verificadas")
+            ? signalCount(
+                items.length,
+                total,
+                "publicación verificada",
+                "publicaciones verificadas",
+              )
             : "Sin publicaciones recientes";
   return (
     <SignalBlock
@@ -1148,7 +1172,15 @@ function PublicationsBlock({
   );
 }
 
-function RelatedReleasesBlock({ items, loading }: { items: RelatedRelease[]; loading: boolean }) {
+function RelatedReleasesBlock({
+  items,
+  total,
+  loading,
+}: {
+  items: RelatedRelease[];
+  total: number;
+  loading: boolean;
+}) {
   return (
     <SignalBlock
       icon={IconSparkles}
@@ -1158,7 +1190,7 @@ function RelatedReleasesBlock({ items, loading }: { items: RelatedRelease[]; loa
         loading
           ? "Contrastando cambios"
           : items.length
-            ? signalCount(items.length, "relación verificada", "relaciones verificadas")
+            ? signalCount(items.length, total, "relación verificada", "relaciones verificadas")
             : "Sin coincidencias"
       }
       state={items.length ? "ready" : "unavailable"}
@@ -1192,7 +1224,15 @@ function RelatedReleasesBlock({ items, loading }: { items: RelatedRelease[]; loa
   );
 }
 
-function UpcomingBlock({ items, loading }: { items: GameSummary[]; loading: boolean }) {
+function UpcomingBlock({
+  items,
+  total,
+  loading,
+}: {
+  items: GameSummary[];
+  total: number;
+  loading: boolean;
+}) {
   return (
     <SignalBlock
       icon={IconCalendarEvent}
@@ -1202,7 +1242,7 @@ function UpcomingBlock({ items, loading }: { items: GameSummary[]; loading: bool
         loading
           ? "Contrastando cambios"
           : items.length
-            ? signalCount(items.length, "fecha real", "fechas reales")
+            ? signalCount(items.length, total, "fecha real", "fechas reales")
             : "Sin fechas futuras"
       }
       state={items.length ? "ready" : "unavailable"}
@@ -1354,8 +1394,8 @@ function RecoverableError({ message, onRetry }: { message: string; onRetry: () =
 function radarCount(view: RadarView, data: DiscoverySnapshot | undefined, tracked: number): number {
   if (view === "tracking") return tracked;
   if (view === "reminders") return data?.reminders.length ?? 0;
-  if (view === "forgotten") return data?.forgotten.length ?? 0;
-  return data?.almostFinished.length ?? 0;
+  if (view === "forgotten") return data?.totals.forgotten ?? 0;
+  return data?.totals.almostFinished ?? 0;
 }
 
 function radarMetadata(game: GameSummary, view: Exclude<RadarView, "reminders">): string {

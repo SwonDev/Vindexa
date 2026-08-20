@@ -62,6 +62,12 @@ const game: GameSummary = {
   pinned: false,
   tracking: false,
   manualPosition: 0,
+  isFree: false,
+  drmState: "unknown",
+  ownershipSource: "owned",
+  familyAvailability: "not_applicable",
+  collectionIds: [],
+  genres: [],
 };
 
 /** Reproduce exactamente los sensores que monta `LibraryScreen`: el umbral de

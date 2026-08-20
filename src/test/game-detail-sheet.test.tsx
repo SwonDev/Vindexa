@@ -64,7 +64,6 @@ const detail = {
   releaseDate: "2011-04-19",
   isEarlyAccess: false,
   steamDeckStatus: "Verificado",
-  achievementsUnlocked: undefined,
   achievementsTotal: 51,
   installed: true,
   installPath: "/Games/Portal 2",
@@ -78,6 +77,7 @@ const detail = {
   tracking: true,
   rating: 10,
   manualPosition: 0,
+  drmState: "unknown",
   shortDescription: "Una aventura cooperativa entre portales.",
   developer: "Valve",
   publisher: "Valve",
@@ -86,7 +86,6 @@ const detail = {
   metadataStatus: "success",
   metadataFetchedAt: "2026-08-14T10:00:00Z",
   achievementsStatus: "pending",
-  achievementsFetchedAt: undefined,
   isFree: false,
   ownershipSource: "owned",
   familyAvailability: "not_applicable",
@@ -94,7 +93,10 @@ const detail = {
   tags: [],
   sessions: [],
   activity: [],
-} as GameDetail;
+  drm: { state: "unknown", evidence: [] },
+  screenshots: [],
+  movies: [],
+} satisfies GameDetail;
 
 /** Los paneles nuevos de la ficha piden estos datos nada más abrirse. */
 const emptyDlcSummary = {
@@ -390,11 +392,10 @@ describe("ficha inmersiva de juego", () => {
 
   it("permite forzar un reintento explícito cuando la ficha de Steam falló", async () => {
     const user = userEvent.setup();
-    const failedDetail = {
-      ...detail,
-      metadataStatus: "failed",
-      shortDescription: undefined,
-    } as GameDetail;
+    // Sin descripción corta: el campo no viene, que no es lo mismo que venir
+    // vacío. Se quita la clave en vez de escribirle `undefined`.
+    const { shortDescription: _sinDescripcion, ...resto } = detail;
+    const failedDetail: GameDetail = { ...resto, metadataStatus: "failed" };
     mockedApi.gameDetail.mockResolvedValueOnce(failedDetail);
     mockedApi.refreshGameMetadata.mockResolvedValueOnce(failedDetail).mockResolvedValueOnce(detail);
     renderSheet();
@@ -416,7 +417,8 @@ describe("ficha inmersiva de juego", () => {
     expect(getComputedStyle(overview as HTMLElement).flexShrink).toBe("0");
     expect(getComputedStyle(tabs as HTMLElement).flexShrink).toBe("0");
     expect(
-      overview?.compareDocumentPosition(tabs as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+      (overview as HTMLElement).compareDocumentPosition(tabs as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

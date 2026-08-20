@@ -25,6 +25,8 @@ function game(appId: number): GameSummary {
     pinned: false,
     tracking: false,
     manualPosition: appId,
+    drmState: "unknown",
+    genres: [],
     collectionIds: [],
   };
 }

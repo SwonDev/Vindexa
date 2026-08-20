@@ -13,6 +13,81 @@ const RECENT_RECOMMENDATION_WINDOW: usize = 24;
 const NEWS_LIST_LIMIT: usize = 20;
 const RELATED_RELEASES_LIMIT: usize = 8;
 
+/// Una lista del radar: la condición que la define y el orden en que se lee.
+///
+/// Van juntas y por separado del `SELECT` porque de la misma condición salen
+/// dos consultas: la que trae los primeros —los que caben en la pantalla— y la
+/// que cuenta cuántos hay en total. Escribir la condición dos veces es
+/// asegurarse de que un día dejen de coincidir, y un recuento que no cuadra
+/// con la lista que tiene debajo es peor que no dar ninguno.
+struct RadarList {
+    desde: &'static str,
+    orden: &'static str,
+}
+
+const OLVIDADOS: RadarList = RadarList {
+    desde: "FROM games g
+            JOIN game_personal p ON p.app_id = g.app_id
+           WHERE p.status_id NOT IN ('completed', 'abandoned')
+             AND p.progress < 100
+             AND (
+                 (g.last_played_at IS NOT NULL
+                  AND julianday('now') - julianday(g.last_played_at) >= 365)
+                 OR
+                 (g.last_played_at IS NULL
+                  AND julianday('now') - julianday(g.imported_at) >= 180)
+             )",
+    orden: "ORDER BY g.last_played_at IS NULL ASC,
+                     g.last_played_at ASC,
+                     g.imported_at ASC,
+                     g.title COLLATE NOCASE ASC,
+                     g.app_id ASC",
+};
+
+const CASI_TERMINADOS: RadarList = RadarList {
+    desde: "FROM games g
+            JOIN game_personal p ON p.app_id = g.app_id
+           WHERE p.progress BETWEEN 75 AND 99
+             AND p.status_id NOT IN ('completed', 'abandoned')",
+    orden: "ORDER BY p.progress DESC,
+                     g.last_played_at IS NULL ASC,
+                     g.last_played_at DESC,
+                     g.title COLLATE NOCASE ASC,
+                     g.app_id ASC",
+};
+
+const PROXIMOS_DE_LA_BIBLIOTECA: RadarList = RadarList {
+    desde: "FROM games g
+            JOIN game_personal p ON p.app_id = g.app_id
+           WHERE g.release_date IS NOT NULL
+             AND date(g.release_date) > date('now')
+             AND p.status_id <> 'abandoned'",
+    orden: "ORDER BY date(g.release_date) ASC,
+                     g.title COLLATE NOCASE ASC,
+                     g.app_id ASC",
+};
+
+/// De dónde salen las publicaciones oficiales, para la lista y para el recuento.
+const PUBLICACIONES_DESDE: &str = "FROM steam_news_items n
+      JOIN games g ON g.app_id = n.app_id
+      JOIN game_personal p ON p.app_id = n.app_id
+     WHERE p.tracking = 1";
+
+/// Cuántos hay de verdad detrás de cada lista recortada del panorama.
+///
+/// La pantalla enseña unos pocos de cada montón. Sin estas cifras, lo que
+/// llega es el tope de la consulta disfrazado de total: doce olvidados cuando
+/// hay doscientos ochenta.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryTotals {
+    pub forgotten: u32,
+    pub almost_finished: u32,
+    pub upcoming: u32,
+    pub official_publications: u32,
+    pub related_releases: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameReminder {
@@ -129,6 +204,7 @@ pub struct DiscoveryCapabilities {
 #[serde(rename_all = "camelCase")]
 pub struct DiscoverySnapshot {
     pub reminders: Vec<GameReminder>,
+    pub totals: DiscoveryTotals,
     pub forgotten: Vec<GameSummary>,
     pub almost_finished: Vec<GameSummary>,
     pub upcoming: Vec<GameSummary>,
@@ -141,60 +217,15 @@ pub struct DiscoverySnapshot {
 
 pub fn snapshot(connection: &Connection) -> AppResult<DiscoverySnapshot> {
     let reminders = list_reminders(connection)?;
-    let forgotten = summaries_for_query(
-        connection,
-        "SELECT g.app_id
-           FROM games g
-           JOIN game_personal p ON p.app_id = g.app_id
-          WHERE p.status_id NOT IN ('completed', 'abandoned')
-            AND p.progress < 100
-            AND (
-                (g.last_played_at IS NOT NULL
-                 AND julianday('now') - julianday(g.last_played_at) >= 365)
-                OR
-                (g.last_played_at IS NULL
-                 AND julianday('now') - julianday(g.imported_at) >= 180)
-            )
-          ORDER BY g.last_played_at IS NULL ASC,
-                   g.last_played_at ASC,
-                   g.imported_at ASC,
-                   g.title COLLATE NOCASE ASC,
-                   g.app_id ASC
-          LIMIT ?1",
-        DISCOVERY_LIST_LIMIT,
-    )?;
-    let almost_finished = summaries_for_query(
-        connection,
-        "SELECT g.app_id
-           FROM games g
-           JOIN game_personal p ON p.app_id = g.app_id
-          WHERE p.progress BETWEEN 75 AND 99
-            AND p.status_id NOT IN ('completed', 'abandoned')
-          ORDER BY p.progress DESC,
-                   g.last_played_at IS NULL ASC,
-                   g.last_played_at DESC,
-                   g.title COLLATE NOCASE ASC,
-                   g.app_id ASC
-          LIMIT ?1",
-        DISCOVERY_LIST_LIMIT,
-    )?;
-    let upcoming = summaries_for_query(
-        connection,
-        "SELECT g.app_id
-           FROM games g
-           JOIN game_personal p ON p.app_id = g.app_id
-          WHERE g.release_date IS NOT NULL
-            AND date(g.release_date) > date('now')
-            AND p.status_id <> 'abandoned'
-          ORDER BY date(g.release_date) ASC,
-                   g.title COLLATE NOCASE ASC,
-                   g.app_id ASC
-          LIMIT ?1",
-        DISCOVERY_LIST_LIMIT,
-    )?;
+    let (forgotten, forgotten_total) = summaries_and_total(connection, &OLVIDADOS)?;
+    let (almost_finished, almost_finished_total) =
+        summaries_and_total(connection, &CASI_TERMINADOS)?;
+    let (upcoming, upcoming_total) =
+        summaries_and_total(connection, &PROXIMOS_DE_LA_BIBLIOTECA)?;
     let events = list_events(connection)?;
-    let official_publications = list_official_publications(connection)?;
-    let related_releases = list_related_releases(connection)?;
+    let (official_publications, official_publications_total) =
+        list_official_publications(connection)?;
+    let (related_releases, related_releases_total) = list_related_releases(connection)?;
     let dismissed_recommendations = list_dismissed_recommendations(connection)?;
     let metadata_observations = connection.query_row(
         "SELECT COUNT(*) FROM game_metadata_observations",
@@ -237,6 +268,13 @@ pub fn snapshot(connection: &Connection) -> AppResult<DiscoverySnapshot> {
 
     Ok(DiscoverySnapshot {
         reminders,
+        totals: DiscoveryTotals {
+            forgotten: forgotten_total,
+            almost_finished: almost_finished_total,
+            upcoming: upcoming_total,
+            official_publications: official_publications_total,
+            related_releases: related_releases_total,
+        },
         forgotten,
         almost_finished,
         upcoming,
@@ -639,19 +677,18 @@ fn validate_cached_news(item: &CachedNewsInput) -> AppResult<()> {
     Ok(())
 }
 
-fn list_official_publications(connection: &Connection) -> AppResult<Vec<OfficialPublication>> {
-    let mut statement = connection.prepare(
+fn list_official_publications(
+    connection: &Connection,
+) -> AppResult<(Vec<OfficialPublication>, u32)> {
+    let mut statement = connection.prepare(&format!(
         "SELECT n.gid, n.app_id, g.title, g.icon_url, n.title, n.content_preview,
                 n.published_at, n.feed_label, n.feed_name
-           FROM steam_news_items n
-           JOIN games g ON g.app_id = n.app_id
-           JOIN game_personal p ON p.app_id = n.app_id
-          WHERE p.tracking = 1
+           {PUBLICACIONES_DESDE}
           ORDER BY datetime(n.published_at) DESC, g.title COLLATE NOCASE ASC,
                    n.gid ASC
-          LIMIT ?1",
-    )?;
-    statement
+          LIMIT ?1"
+    ))?;
+    let items = statement
         .query_map([NEWS_LIST_LIMIT as i64], |row| {
             Ok(OfficialPublication {
                 gid: row.get(0)?,
@@ -665,8 +702,11 @@ fn list_official_publications(connection: &Connection) -> AppResult<Vec<Official
                 feed_name: row.get(8)?,
             })
         })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(Into::into)
+        .collect::<Result<Vec<_>, _>>()?;
+    let total = connection.query_row(&format!("SELECT COUNT(*) {PUBLICACIONES_DESDE}"), [], |row| {
+        row.get::<_, u32>(0)
+    })?;
+    Ok((items, total))
 }
 
 #[derive(Debug)]
@@ -681,7 +721,7 @@ struct RelatedGameFacts {
     engagement: i64,
 }
 
-fn list_related_releases(connection: &Connection) -> AppResult<Vec<RelatedRelease>> {
+fn list_related_releases(connection: &Connection) -> AppResult<(Vec<RelatedRelease>, u32)> {
     let mut statement = connection.prepare(
         "SELECT g.app_id, g.title, g.icon_url, g.cover_url, g.release_date,
                 g.developer, g.publisher,
@@ -753,6 +793,7 @@ fn list_related_releases(connection: &Connection) -> AppResult<Vec<RelatedReleas
     }
 
     let mut related = Vec::new();
+    let mut total = 0u32;
     for future in future_games {
         let mut seen = HashSet::new();
         let mut matches = Vec::new();
@@ -779,6 +820,12 @@ fn list_related_releases(connection: &Connection) -> AppResult<Vec<RelatedReleas
         let Some((source, criterion, criterion_value)) = matches.into_iter().next() else {
             continue;
         };
+        total += 1;
+        if related.len() >= RELATED_RELEASES_LIMIT {
+            // Se sigue recorriendo sin pintar: lo que se enseña cabe en la
+            // pantalla, pero cuántos hay tiene que poder decirse.
+            continue;
+        }
         related.push(RelatedRelease {
             app_id: future.app_id,
             title: future.title.clone(),
@@ -790,11 +837,8 @@ fn list_related_releases(connection: &Connection) -> AppResult<Vec<RelatedReleas
             criterion: criterion.to_string(),
             criterion_value,
         });
-        if related.len() >= RELATED_RELEASES_LIMIT {
-            break;
-        }
     }
-    Ok(related)
+    Ok((related, total))
 }
 
 fn normalize_company(value: &str) -> Option<String> {
@@ -816,6 +860,25 @@ fn normalize_companies(value: Option<&str>) -> Vec<String> {
 
 fn parse_iso_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+}
+
+/// Los primeros de una lista del radar, y cuántos hay detrás.
+///
+/// Las dos consultas salen de la misma condición, así que no pueden dejar de
+/// hablar del mismo conjunto.
+fn summaries_and_total(
+    connection: &Connection,
+    lista: &RadarList,
+) -> AppResult<(Vec<GameSummary>, u32)> {
+    let items = summaries_for_query(
+        connection,
+        &format!("SELECT g.app_id {} {} LIMIT ?1", lista.desde, lista.orden),
+        DISCOVERY_LIST_LIMIT,
+    )?;
+    let total = connection.query_row(&format!("SELECT COUNT(*) {}", lista.desde), [], |row| {
+        row.get::<_, u32>(0)
+    })?;
+    Ok((items, total))
 }
 
 fn summaries_for_query(
@@ -1143,6 +1206,49 @@ mod tests {
             )
             .expect("preparar juegos");
         connection
+    }
+
+    /// Doce era el tope de la consulta, no cuántos había.
+    ///
+    /// Con doscientos ochenta juegos parados, la pantalla decía «12 elementos
+    /// en esta vista» porque contaba las filas que le llegaban. Es el mismo
+    /// recuento que contestó «20» cuando había 215.
+    #[test]
+    fn el_panorama_dice_cuantos_hay_detras_del_recorte() {
+        let connection = database();
+        // Treinta juegos importados hace más de ciento ochenta días y nunca
+        // jugados: todos «olvidados», y la lista sólo trae doce.
+        for app_id in 100..130u32 {
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, genres_json, categories_json, imported_at)
+                     VALUES (?1, ?2, '[]', '[]', '2020-01-01T00:00:00Z')",
+                    params![app_id, format!("Parado {app_id}")],
+                )
+                .expect("insertar juego");
+            connection
+                .execute(
+                    "INSERT INTO game_personal(app_id, status_id, progress, priority)
+                     VALUES (?1, 'unclassified', 0, 3)",
+                    params![app_id],
+                )
+                .expect("insertar ficha");
+        }
+
+        let vista = snapshot(&connection).expect("snapshot");
+        assert_eq!(
+            vista.forgotten.len(),
+            DISCOVERY_LIST_LIMIT,
+            "la lista sigue recortada: es lo que cabe en la pantalla"
+        );
+        assert_eq!(
+            vista.totals.forgotten, 33,
+            "los treinta nuevos más los tres de la base de pruebas, que tampoco se han tocado"
+        );
+        assert!(
+            vista.totals.forgotten > vista.forgotten.len() as u32,
+            "si el total coincidiera con el recorte, el recorte estaría contándose como total"
+        );
     }
 
     #[test]

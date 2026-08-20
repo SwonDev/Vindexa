@@ -163,7 +163,13 @@ test.describe("separación de la rejilla", () => {
  * ningún elemento de estado queda tapado por el contenido que viene detrás.
  */
 test.describe("los avisos de estado se leen", () => {
-  const PANTALLAS = ["Biblioteca", "Planificador", "Colecciones", "Seguimiento", "Deseados"];
+  const PANTALLAS = [
+    "Biblioteca",
+    "Planificador",
+    "Colecciones",
+    "Seguimiento",
+    "Deseados",
+  ] as const;
 
   test("ninguna pantalla esconde su propio aviso bajo el contenido", async ({ app, page }) => {
     await app.goto();

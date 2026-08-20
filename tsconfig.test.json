@@ -1,0 +1,24 @@
+{
+  // Las pruebas también tienen tipos, y hasta ahora nadie los miraba.
+  //
+  // `tsconfig.json` deja fuera `src/test` porque el `build` no empaqueta las
+  // pruebas. El efecto colateral era que un doble podía declararse
+  // `DiscoverySnapshot` y no serlo: se añadió un campo obligatorio al contrato
+  // y ni `tsc` ni Vitest —que no comprueba tipos— dijeron nada. Un doble que
+  // miente sobre la forma del dato hace pasar pruebas que en la aplicación
+  // fallarían.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // El ruido que no es deriva: indexar un array en una prueba y afirmar sobre
+    // el resultado es idiomático aquí, y `noUncheckedIndexedAccess` obligaría a
+    // un `?? throw` en cada línea sin proteger de nada. Lo que sí se mira es la
+    // forma de los datos: que un doble que dice ser `GameSummary` lo sea.
+    "noUncheckedIndexedAccess": false,
+    // Las pruebas leen el repositorio (contratos entre Rust y TypeScript, hojas
+    // de estilo sin dueño), así que necesitan los tipos de Node.
+    "types": ["node"],
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig-test.tsbuildinfo"
+  },
+  "include": ["src", "tests"],
+  "exclude": []
+}
