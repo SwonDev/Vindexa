@@ -155,12 +155,53 @@ const detailSchema = z.object({
   pinned: z.boolean(),
   tracking: z.boolean(),
   rating: z.number().int().min(1).max(10).optional(),
-  estimatedMinutes: z.number().int().positive().optional(),
+  /**
+   * Cero es una respuesta: «no queda nada».
+   *
+   * Exigía un número positivo, así que escribir `0` en un juego terminado
+   * dejaba el formulario sin guardar con un «revisa los campos marcados» que no
+   * decía cuál ni por qué. SQLite acepta cero desde la primera migración
+   * —`estimated_minutes >= 0`—; era la interfaz la que lo prohibía.
+   */
+  estimatedMinutes: z.number().int().min(0).optional(),
   targetDate: z.string().optional(),
   nextAction: z.string().max(NEXT_ACTION_MAX).optional(),
   checkpoint: z.string().max(2_000).optional(),
   notes: z.string().max(NOTES_MAX).optional(),
 });
+
+/**
+ * Cómo se llama cada campo en la pantalla.
+ *
+ * El aviso de «sin guardar» decía «revisa los campos marcados» y no marcaba
+ * ninguno. Nombrarlos es la diferencia entre un formulario que no se guarda y
+ * uno que dice por qué.
+ */
+const NOMBRE_DE_CAMPO: Record<string, string> = {
+  statusId: "el estado",
+  progress: "el progreso",
+  priority: "la prioridad",
+  rating: "la valoración",
+  estimatedMinutes: "la duración restante",
+  targetDate: "la fecha objetivo",
+  nextAction: "la próxima acción",
+  checkpoint: "por dónde lo dejaste",
+  notes: "las notas privadas",
+};
+
+function camposConProblema(error: z.ZodError): string {
+  const nombres = [
+    ...new Set(
+      error.issues.map((issue) => {
+        const campo = String(issue.path[0] ?? "");
+        return NOMBRE_DE_CAMPO[campo] ?? campo;
+      }),
+    ),
+  ].filter(Boolean);
+  if (nombres.length === 0) return "los campos marcados";
+  if (nombres.length === 1) return nombres[0] as string;
+  return `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
+}
 
 interface Props {
   appId?: number;
@@ -207,7 +248,14 @@ export function GameDetailSheet({
   const heroMediaRef = useRef<HTMLDivElement | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice>();
   const [achievementError, setAchievementError] = useState<string>();
-  const [invalidDraft, setInvalidDraft] = useState(false);
+  /**
+   * Qué campo impide guardar, con su nombre.
+   *
+   * Antes era un `true` y el aviso decía «revisa los campos marcados» sin decir
+   * cuál: quien escribía algo que el formulario no admitía se quedaba mirando
+   * un formulario que no se guardaba y sin pista de dónde estaba el problema.
+   */
+  const [invalidDraft, setInvalidDraft] = useState<string>();
   const [descExpanded, setDescExpanded] = useState(false);
   const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [mediaExpanded, setMediaExpanded] = useState(false);
@@ -290,10 +338,10 @@ export function GameDetailSheet({
     (input: UpdateGameInput, force = false) => {
       const parsed = detailSchema.safeParse(input);
       if (!parsed.success) {
-        setInvalidDraft(true);
+        setInvalidDraft(camposConProblema(parsed.error));
         return Promise.resolve();
       }
-      setInvalidDraft(false);
+      setInvalidDraft(undefined);
       const fingerprint = saveFingerprint(parsed.data);
       if (
         !force &&
@@ -314,7 +362,7 @@ export function GameDetailSheet({
       if (current.success) {
         void queueSave(current.data, force);
       } else {
-        setInvalidDraft(true);
+        setInvalidDraft(camposConProblema(current.error));
       }
     },
     [form, queueSave],
@@ -358,7 +406,7 @@ export function GameDetailSheet({
     initializedId.current = detailQuery.data.appId;
     const values = detailToForm(detailQuery.data);
     lastPersistedFingerprintRef.current = saveFingerprint(values);
-    setInvalidDraft(false);
+    setInvalidDraft(undefined);
     setDescExpanded(false);
     setCategoriesExpanded(false);
     setMediaExpanded(false);
@@ -371,7 +419,7 @@ export function GameDetailSheet({
     metadataAttemptedId.current = undefined;
     setActionNotice(undefined);
     setAchievementError(undefined);
-    setInvalidDraft(false);
+    setInvalidDraft(undefined);
   }, [open]);
   useEffect(() => {
     return () => {
@@ -687,7 +735,7 @@ export function GameDetailSheet({
                     <IconLoader2 className="is-spinning" /> Guardando
                   </>
                 ) : invalidDraft ? (
-                  "Sin guardar: revisa los campos marcados"
+                  `Sin guardar: revisa ${invalidDraft}`
                 ) : mutation.isError ? (
                   getErrorMessage(mutation.error)
                 ) : form.formState.isDirty ? (
@@ -1295,7 +1343,7 @@ function DetailForm({
               <Input
                 id="game-estimated-minutes"
                 type="number"
-                min={1}
+                min={0}
                 step={15}
                 placeholder="Minutos"
                 aria-describedby="game-estimated-minutes-hint"

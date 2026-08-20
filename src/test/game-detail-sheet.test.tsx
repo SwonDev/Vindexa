@@ -428,14 +428,40 @@ describe("ficha inmersiva de juego", () => {
     fireEvent.change(screen.getByLabelText("Próxima acción"), {
       target: { value: "x".repeat(501) },
     });
+    // El aviso nombra el campo: «revisa los campos marcados» no marcaba
+    // ninguno y dejaba mirando un formulario que no se guardaba.
     expect(
-      await screen.findByText("Sin guardar: revisa los campos marcados", undefined, {
+      await screen.findByText("Sin guardar: revisa la próxima acción", undefined, {
         timeout: 2000,
       }),
     ).toBeVisible();
     expect(screen.queryByText("Guardado")).not.toBeInTheDocument();
     expect(mockedApi.updateGame).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("máximo de 500 caracteres");
+  });
+
+  /**
+   * Cero minutos restantes es una respuesta, no un campo mal puesto.
+   *
+   * El formulario exigía un número positivo, así que escribir `0` en un juego
+   * terminado lo dejaba sin guardar con un aviso que ni decía cuál era el campo
+   * ni por qué. SQLite acepta cero desde la primera migración: era la interfaz
+   * la que lo prohibía.
+   */
+  it("guarda cero minutos restantes en vez de rechazar el formulario", async () => {
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    fireEvent.change(screen.getByLabelText(/Duración restante/), { target: { value: "0" } });
+
+    await waitFor(
+      () =>
+        expect(mockedApi.updateGame).toHaveBeenCalledWith(
+          expect.objectContaining({ estimatedMinutes: 0 }),
+        ),
+      { timeout: 2_000 },
+    );
+    expect(screen.queryByText(/Sin guardar/)).not.toBeInTheDocument();
   });
 
   it("muestra contadores de caracteres en próxima acción y notas privadas", async () => {

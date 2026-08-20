@@ -14,6 +14,7 @@ pub mod metadata_enrichment;
 pub mod news_api;
 pub mod openid;
 pub mod prices;
+pub mod release_state;
 pub mod secrets;
 pub mod store_api;
 pub mod store_assets;

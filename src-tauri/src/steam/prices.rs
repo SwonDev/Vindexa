@@ -111,6 +111,27 @@ pub async fn refresh(database: &Database, limit: u32) -> AppResult<PriceRefreshR
             }
         }
     }
+
+    // Y por qué no hay precio, cuando no lo hay.
+    //
+    // «No se vende» y «aún no ha salido» llegan igual por aquí —la tienda
+    // simplemente no trae bloque de precio—, y la lista de deseados decía
+    // «retirado o sin publicar» en trescientos cincuenta y cuatro juegos que
+    // sólo estaban esperando su fecha. El índice sí lo distingue, y va por
+    // lotes: preguntarlo por los cuatrocientos cincuenta son tres peticiones.
+    //
+    // Nunca tumba la tanda: los precios ya están guardados y esto sólo afina la
+    // explicación de los que faltan.
+    match crate::steam::release_state::refresh_absences(database).await {
+        Ok(estado) => {
+            report.coming_soon = estado.coming_soon as u32;
+        }
+        Err(error) => eprintln!(
+            "Vindexa no pudo saber cuáles de los deseados sin precio están por salir: {}",
+            error.code
+        ),
+    }
+
     Ok(report)
 }
 
@@ -172,6 +193,9 @@ mod tests {
             changed: 3,
             alerts: 1,
             without_price: 59,
+            // De los cincuenta y nueve sin precio, cuarenta aún no han salido.
+            // No cambia el recuento de lo sabido: de los dos se sabe algo.
+            coming_soon: 40,
             failed: 7,
         };
         assert_eq!(report.resolved(), 100);

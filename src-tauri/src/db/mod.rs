@@ -535,6 +535,24 @@ impl Database {
         library::store_metadata_refresh_due(&self.open()?, app_id)
     }
 
+    /// Ausencias de precio que dicen «no se vende» y podrían ser «aún no ha
+    /// salido».
+    ///
+    /// Sólo las apuntadas como `no_price`: una que la tienda no reconoce no es
+    /// un juego por salir, y una con precio no es una ausencia.
+    pub fn price_absences_to_classify(&self) -> AppResult<Vec<u32>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(
+            "SELECT app_id FROM game_price_checks
+              WHERE outcome = ?1
+              ORDER BY app_id ASC",
+        )?;
+        let ids = statement
+            .query_map([pricing::ABSENCE_NO_PRICE], |row| row.get::<_, u32>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
     pub fn is_steam_game(&self, app_id: u32) -> AppResult<bool> {
         library::is_steam_game(&self.open()?, app_id)
     }

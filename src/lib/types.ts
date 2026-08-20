@@ -1532,7 +1532,12 @@ export interface WishlistPriceStatus {
    * Ausente: no se ha preguntado nunca. Los tres casos son distintos y la
    * pantalla los dice distinto.
    */
-  absence?: "no_price" | "unavailable" | null;
+  /**
+   * Por qué no hay precio, cuando no lo hay. Las tres respuestas son distintas:
+   * `no_price` es «la tienda respondió y no lo pone a la venta», `unavailable`
+   * es «no reconoce el juego» y `coming_soon` es «aún no ha salido».
+   */
+  absence?: "no_price" | "unavailable" | "coming_soon" | null;
   /** Cuándo llegó esa respuesta. */
   absenceCheckedAt?: string | null;
   /**

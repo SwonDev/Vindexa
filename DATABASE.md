@@ -1,7 +1,7 @@
 # Esquema y persistencia de Vindexa
 
 SQLite es la fuente de verdad de Vindexa. Este documento describe el esquema vigente de la
-migración **50** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
+migración **51** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
 normativa ejecutable.
 
 ## Índice
@@ -202,6 +202,7 @@ actual. Todas las ordenaciones añaden título/AppID como desempate determinista
 | 48 | `drm_evidence_in_words` | La evidencia del DRM decía el nombre interno de dos campos de la API. |
 | 49 | `library_hero_for_everyone` | El banner de la ficha se veía apagado en casi toda la biblioteca. |
 | 50 | `art_index_learns_the_banner` | El índice de arte ya sabe traer el banner: hay que volver a preguntárselo. |
+| 51 | `coming_soon_is_an_answer` | «Aún no ha salido» es una respuesta, y se estaba leyendo como «retirado». |
 
 > [!WARNING]
 > Una migración ya publicada o aplicada es inmutable: no se edita su SQL. Una corrección se
@@ -228,6 +229,12 @@ formato exacto; el frontend jamás concatena esa dirección.
 `priority_signals` y `taste_weights` se calculan en local a partir del comportamiento propio
 y no salen del equipo. Una prioridad manual anclada (`priority_locked = 1`) nunca la pisa el
 cálculo derivado.
+
+`game_price_checks` admite tres respuestas y ninguna se deduce de las otras: `no_price` es «la
+tienda respondió y no lo pone a la venta», `unavailable` es «no reconoce el AppID» y
+`coming_soon` es «aún no se ha publicado». La tercera la da el índice de la tienda para
+cualquier juego; antes sólo se sabía de los que estaban en `upcoming_releases`, la lista curada
+de candidatos puntuados —112 de 453—, y a los otros 354 se les llamaba retirados sin serlo.
 
 `game_price_checks` guarda **la respuesta**, no el precio: cuándo se preguntó y qué contestó
 la tienda cuando no publicó ninguno (`no_price` para lo que no está a la venta —sin fecha de

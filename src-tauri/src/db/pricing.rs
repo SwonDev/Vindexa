@@ -77,6 +77,12 @@ pub const ABSENCE_HOURS: i64 = 24;
 /// Qué contestó la tienda cuando no hubo precio.
 pub const ABSENCE_NO_PRICE: &str = "no_price";
 pub const ABSENCE_UNAVAILABLE: &str = "unavailable";
+/// La tienda respondió y el juego **aún no se ha publicado**.
+///
+/// Es distinto de `no_price`: uno es «no se vende» y el otro es «todavía no».
+/// Se leían igual, y la lista de deseados decía «retirado o sin publicar» en
+/// trescientos cincuenta y cuatro juegos que sólo estaban esperando su fecha.
+pub const ABSENCE_COMING_SOON: &str = "coming_soon";
 
 /// Vigencia de una observación. Es una palabra, no un booleano, porque la
 /// interfaz necesita distinguir «recién mirado» de «hace días» sin inventarse
@@ -234,6 +240,9 @@ pub struct PriceRefreshReport {
     /// Juegos que la tienda no devolvió con bloque de precio. No se cuentan
     /// como cero: se cuentan como desconocidos.
     pub without_price: u32,
+    /// De los anteriores, cuántos no tienen precio porque **aún no han salido**.
+    /// Es una espera, no una retirada, y sólo el índice de la tienda lo dice.
+    pub coming_soon: u32,
     pub failed: u32,
 }
 
@@ -870,7 +879,10 @@ pub fn record_absences(
     outcome: &str,
     now: DateTime<Utc>,
 ) -> AppResult<usize> {
-    if !matches!(outcome, ABSENCE_NO_PRICE | ABSENCE_UNAVAILABLE) {
+    if !matches!(
+        outcome,
+        ABSENCE_NO_PRICE | ABSENCE_UNAVAILABLE | ABSENCE_COMING_SOON
+    ) {
         return Err(AppError::validation(
             "Esa no es una respuesta de precio que se pueda guardar.",
         ));

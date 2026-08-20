@@ -109,6 +109,17 @@ describe("precio observado en la tarjeta", () => {
     const retirado = describePrice(entry(), status({ absence: "unavailable" }));
     expect(retirado.missingLabel).toBe("no está en la tienda");
     expect(retirado.verdict).toContain("no reconoce este juego");
+
+    // La tercera respuesta la da el índice de la tienda para cualquier juego,
+    // no sólo para los de la lista curada de próximos lanzamientos. Sin ella,
+    // trescientos cincuenta y cuatro deseados que sólo estaban esperando su
+    // fecha se leían como retirados.
+    const porSalir = describePrice(
+      entry(),
+      status({ absence: "coming_soon", absenceCheckedAt: "2026-08-20T10:00:00Z" }),
+    );
+    expect(porSalir.missingLabel).toBe("aún no ha salido");
+    expect(porSalir.verdict).toContain("todavía no se ha publicado");
   });
 
   it("un objetivo en euros y un precio en dólares no se comparan", () => {

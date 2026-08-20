@@ -294,10 +294,21 @@ export function describeMissingPrice(status?: WishlistPriceStatus): {
   label: string;
   detail: string;
 } {
+  const cuandoSeConsulto = status?.absenceCheckedAt
+    ? ` Consultado ${formatRelativeDate(status.absenceCheckedAt)}.`
+    : "";
+  // El índice de la tienda distingue lo que aún no ha salido de lo que no se
+  // vende, y lo dice para cualquier juego: antes sólo se sabía de los que
+  // estaban en la lista curada de próximos lanzamientos —112 de 453—, y a los
+  // otros 354 se les llamaba «retirados» sin serlo.
+  if (status?.absence === "coming_soon") {
+    return {
+      label: "aún no ha salido",
+      detail: `La tienda confirma que este juego todavía no se ha publicado, así que no tiene precio.${cuandoSeConsulto}`,
+    };
+  }
   if (status?.absence === "no_price") {
-    const cuando = status.absenceCheckedAt
-      ? ` Consultado ${formatRelativeDate(status.absenceCheckedAt)}.`
-      : "";
+    const cuando = cuandoSeConsulto;
     // «Todavía no ha salido» y «ya no se vende» llegan igual desde la tienda,
     // pero sólo uno de los dos es una espera.
     if (status.upcoming) {
@@ -423,12 +434,19 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
   // había contestado, y lo que contestó es que esos juegos no publican precio.
   // Y de esos, los que aún no han salido son una espera, no una ausencia.
   const porSalir = statuses.filter(
-    (status) => !status.price && status.absence === "no_price" && status.upcoming,
+    (status) =>
+      !status.price &&
+      // El índice de la tienda lo dice de cualquier juego; la lista curada de
+      // próximos lanzamientos sólo de los que puntúa —112 de 453—.
+      (status.absence === "coming_soon" || (status.absence === "no_price" && status.upcoming)),
   ).length;
   const sinPublicar =
     statuses.filter(
       (status) =>
-        !status.price && (status.absence === "no_price" || status.absence === "unavailable"),
+        !status.price &&
+        (status.absence === "no_price" ||
+          status.absence === "unavailable" ||
+          status.absence === "coming_soon"),
     ).length - porSalir;
   const sinPreguntar = total - withPrice - sinPublicar - porSalir;
 
