@@ -13,8 +13,8 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   es justo lo que esta biblioteca mira— y entrega el género y el estudio con la propia oferta,
   así que sus rebajas se puntúan en el acto contra tu modelo de gustos sin una petición por
   juego. Cada fila dice de qué tienda es, y pulsarla abre esa tienda: el mismo juego no cuesta
-  lo mismo en las dos. Medido en una instalación real: 32 ofertas guardadas —24 de GOG y 8 de
-  Steam—, las 32 puntuadas.
+  lo mismo en las dos. Medido en una instalación real: 30 ofertas guardadas —24 de GOG y 6 de
+  Steam—, todas puntuadas.
 - **Un botón para preguntar ahora.** Las tiendas se repasan solas cada seis horas, que es el
   ritmo al que cambian las rebajas, pero una que se acaba no espera. El informe dice lo que
   trajo y, sobre todo, **qué tienda no respondió**: una lista corta con pinta de completa es
