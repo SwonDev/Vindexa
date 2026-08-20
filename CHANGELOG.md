@@ -31,6 +31,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **La lista de ofertas dice cuándo se miró.** Una rebaja que terminó ayer sigue guardada hasta
   la siguiente tanda; pasadas doce horas la línea cambia de tono y avisa de que algunas pueden
   haber terminado.
+- **Copias automáticas de tu base.** Todo lo que hace valiosa esta base es irrepetible —notas,
+  checkpoints, estados, colecciones, el modelo de gustos— y no está en ningún servidor: el
+  catálogo se puede volver a bajar, eso no. Sólo había exportación manual, que es lo mismo que no
+  tener copias, porque nadie pulsa un botón todos los días. Ahora Vindexa guarda una copia al día
+  en una carpeta propia junto a la base, conserva las tres últimas y borra las anteriores; usa la
+  misma exportación que el botón, así que **valida** la copia después de escribirla. Ajustes →
+  Datos dice cuándo fue la última, cuántas hay, cuánto ocupan y dónde están, y si alguna falló lo
+  enseña: una copia que dejó de hacerse en silencio sólo se descubre el día que se necesita.
 - **Los próximos lanzamientos por fin descubren algo.** Salían sólo de tu lista de deseados, así
   que la sección recordaba juegos que ya habías marcado tú y no enseñaba nada nuevo. Ahora mira
   también la sección «próximamente» del escaparate público de Steam —la misma petición sin clave

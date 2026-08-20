@@ -946,6 +946,10 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
     queryFn: api.diagnostics,
     enabled: true,
   });
+  const backups = useQuery({
+    queryKey: ["backup-status"],
+    queryFn: api.backupStatus,
+  });
   const backup = useMutation({
     mutationFn: api.exportBackup,
     onSuccess: (completed) => {
@@ -1042,6 +1046,47 @@ function DataSettings({ bootstrap }: { bootstrap?: AppBootstrap | undefined }) {
         respeta el presupuesto en disco configurado en Apariencia; vaciar obliga a descargarlo todo
         de nuevo bajo demanda.
       </p>
+      <SettingsDivider />
+      {/* Lo que hace valiosa esta base es irrepetible —notas, checkpoints,
+          estados, modelo de gustos— y no está en ningún servidor. La copia
+          diaria la hace Vindexa sola; aquí se ve que se está haciendo, porque
+          una copia que dejó de hacerse en silencio sólo se descubre el día que
+          hace falta. */}
+      <SettingsHeading
+        title="Copias automáticas"
+        description="Vindexa guarda una copia al día y conserva las tres últimas."
+      />
+      {backups.data?.lastError ? (
+        <InlineNotice
+          kind="error"
+          message={`La última copia automática no se pudo hacer: ${backups.data.lastError}`}
+        />
+      ) : null}
+      <dl className="diagnostics-grid">
+        <div>
+          <dt>Última copia</dt>
+          <dd>
+            {backups.data?.lastAt ? formatRelativeDate(backups.data.lastAt) : "Todavía ninguna"}
+          </dd>
+        </div>
+        <div>
+          <dt>Guardadas</dt>
+          <dd>{backups.data ? `${backups.data.kept} de 3` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Ocupan</dt>
+          <dd>{formatBytes(backups.data?.totalBytes)}</dd>
+        </div>
+      </dl>
+      <label className="path-field" htmlFor="backup-directory">
+        <span>Dónde se guardan</span>
+        <Input id="backup-directory" value={backups.data?.directory ?? ""} readOnly />
+      </label>
+      <p className="settings-hint">
+        No se cifran —la base tampoco lo está— y no salen de este equipo. Si quieres una copia fuera
+        del ordenador, cópialas tú a donde quieras: son archivos SQLite normales.
+      </p>
+
       <SettingsDivider />
       <SettingsHeading
         title="Diagnóstico local"

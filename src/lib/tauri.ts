@@ -29,6 +29,7 @@ import type {
   ArtCacheMaintenanceReport,
   ArtCacheUsage,
   ArtworkTarget,
+  BackupStatus,
   BulkUpdateStatusInput,
   CachedArtwork,
   CuratedList,
@@ -377,6 +378,7 @@ export const api = {
   restoreRecommendation: (historyId: string) =>
     invoke<void>("restore_recommendation", { historyId }),
   diagnostics: () => invoke<DatabaseDiagnostics>("get_database_diagnostics"),
+  backupStatus: () => invoke<BackupStatus>("backup_status"),
   exportBackup: () => invoke<boolean>("export_backup"),
   importBackup: () => invoke<boolean>("import_backup"),
   launchGame: (appId: number) => invoke<void>("launch_game", { appId }),

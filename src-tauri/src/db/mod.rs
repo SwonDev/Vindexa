@@ -1,4 +1,5 @@
 pub mod archive;
+pub mod backups;
 mod catalog;
 pub mod curated;
 pub mod deals;
@@ -183,6 +184,57 @@ impl Database {
             preferences,
             database_path: self.path.display().to_string(),
         })
+    }
+
+    /// Hace la copia automática del día si toca, y limpia las que sobran.
+    ///
+    /// Devuelve `None` cuando todavía no toca, para que quien llama distinga
+    /// «no había nada que hacer» de «se hizo».
+    pub fn auto_backup_if_due(
+        &self,
+        now: DateTime<Utc>,
+    ) -> AppResult<Option<backups::BackupOutcome>> {
+        {
+            let connection = self.open()?;
+            if !backups::is_due(&connection, now)? {
+                return Ok(None);
+            }
+        }
+        let directorio = backups::directory(&self.path);
+        // El directorio se crea antes de validar la ruta: la comprobación
+        // resuelve el padre de verdad y, sin él, rechazaría su propio destino.
+        if let Err(error) = std::fs::create_dir_all(&directorio) {
+            let mensaje = format!("No se pudo crear el directorio de copias: {error}");
+            let connection = self.open()?;
+            backups::mark_failed(&connection, &mensaje)?;
+            return Err(AppError::new("backup_directory", mensaje));
+        }
+        let destino = directorio.join(backups::file_name(now));
+        match self.export_backup(&destino) {
+            Ok(()) => {
+                let bytes = std::fs::metadata(&destino).map(|meta| meta.len()).unwrap_or(0);
+                let pruned = backups::prune(&directorio, backups::KEEP);
+                let connection = self.open()?;
+                backups::mark_done(&connection, now)?;
+                Ok(Some(backups::BackupOutcome {
+                    path: destino.to_string_lossy().into_owned(),
+                    bytes,
+                    pruned,
+                }))
+            }
+            Err(error) => {
+                // Lo que falla se dice: una copia que dejó de hacerse en
+                // silencio sólo se descubre el día que se necesita.
+                let connection = self.open()?;
+                backups::mark_failed(&connection, &error.message)?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Qué copias automáticas hay, dónde y de cuándo.
+    pub fn backup_status(&self) -> AppResult<backups::BackupStatus> {
+        backups::status(&self.open()?, &self.path)
     }
 
     pub fn export_backup(&self, destination: &Path) -> AppResult<()> {

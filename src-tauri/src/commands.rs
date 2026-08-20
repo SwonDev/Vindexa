@@ -2394,6 +2394,17 @@ pub async fn get_database_diagnostics(
     database_read(&state, move |database| database.diagnostics()).await
 }
 
+/// Qué copias automáticas hay, dónde y de cuándo.
+///
+/// Incluye el último fallo si lo hubo: una copia que dejó de hacerse en
+/// silencio sólo se descubre el día que se necesita.
+#[tauri::command]
+pub async fn backup_status(
+    state: State<'_, AppState>,
+) -> AppResult<crate::db::backups::BackupStatus> {
+    database_read(&state, move |database| database.backup_status()).await
+}
+
 #[tauri::command]
 pub async fn export_backup(app: AppHandle, state: State<'_, AppState>) -> AppResult<bool> {
     let selected = blocking(move || {

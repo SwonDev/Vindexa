@@ -1275,6 +1275,25 @@ export interface TasteReport {
  * lista, no lo que había: con cuarenta y cinco guardados, leerla como total es
  * leer algo falso.
  */
+/** Qué copias automáticas hay, dónde y de cuándo. */
+export interface BackupStatus {
+  /** Dónde están, para poder copiarlas fuera. */
+  directory: string;
+  /** Cuántas hay ahora mismo. */
+  kept: number;
+  /** Lo que ocupan entre todas. */
+  totalBytes: number;
+  /** Cuándo se hizo la última. Ausente es «todavía ninguna». */
+  lastAt?: string | null;
+  /**
+   * Qué falló la última vez.
+   *
+   * Una copia que dejó de hacerse en silencio sólo se descubre el día que se
+   * necesita, así que el fallo se guarda y la pantalla lo enseña.
+   */
+  lastError?: string | null;
+}
+
 export interface UpcomingReleasesView {
   items: UpcomingRelease[];
   total: number;

@@ -239,6 +239,39 @@ pub fn run() {
                 });
             }
 
+            // La copia del día.
+            //
+            // Todo lo que hace valiosa esta base es irrepetible: las notas, los
+            // checkpoints, los estados y el modelo de gustos no están en ningún
+            // servidor. Había exportación manual, que es lo mismo que no tener
+            // copias: nadie pulsa un botón todos los días.
+            {
+                let database = database.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Un minuto después de abrir: primero que la aplicación
+                    // esté usable, que copiar bloquea el mantenimiento.
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    loop {
+                        match database.auto_backup_if_due(chrono::Utc::now()) {
+                            Ok(Some(copia)) => eprintln!(
+                                "Vindexa: copia del día en {} ({} KiB, {} antiguas borradas).",
+                                copia.path,
+                                copia.bytes / 1024,
+                                copia.pruned
+                            ),
+                            Ok(None) => {}
+                            // Lo que falla se dice, y además queda guardado
+                            // para que la pantalla de Datos pueda enseñarlo.
+                            Err(error) => eprintln!(
+                                "Vindexa: no se pudo hacer la copia del día: {}",
+                                error.message
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(60 * 60)).await;
+                    }
+                });
+            }
+
             // Las rebajas de la tienda que aún no son tuyas.
             //
             // Traerlas es una petición; entenderlas —géneros, categorías,
@@ -528,6 +561,7 @@ pub fn run() {
             commands::restore_recommendation,
             commands::get_database_diagnostics,
             commands::export_backup,
+            commands::backup_status,
             commands::import_backup,
             commands::launch_game,
             commands::install_game,

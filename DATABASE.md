@@ -220,6 +220,17 @@ Key ni mensajes remotos. Un éxito reemplaza atómicamente el lote del juego y p
 horas de caché. Las relaciones entre lanzamientos no se guardan: se recalculan desde
 `games.release_date`, `developer` y `publisher` para no quedar obsoletas.
 
+## Copias automáticas
+
+Vindexa guarda **una copia al día** en `copias/`, junto al archivo de la base, y conserva las
+tres últimas. Se hacen con la misma exportación que el botón manual, así que cada copia se
+**valida** después de escribirse: una copia que no se puede abrir es peor que no tener ninguna,
+porque parece una copia.
+
+Sólo se borran los archivos que empiezan por `vindexa-auto-`: lo que hayas guardado tú en esa
+carpeta no se toca. Cuándo fue la última y qué falló la última vez viven en `app_settings`
+(`backups.last_auto` y `backups.last_error`), y se enseñan en **Ajustes → Datos y copias**.
+
 ## Copia y restauración
 
 La exportación usa SQLite Online Backup y no copia la caché ni la Web API Key. La

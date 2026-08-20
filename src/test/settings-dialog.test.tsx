@@ -18,6 +18,7 @@ vi.mock("@/lib/tauri", () => {
     unlinkSteam: vi.fn(),
     savePreferences: vi.fn(),
     diagnostics: vi.fn(),
+    backupStatus: vi.fn(),
     exportBackup: vi.fn(),
     importBackup: vi.fn(),
     clearArtCache: vi.fn(),
@@ -113,6 +114,13 @@ describe("ajustes y secretos", () => {
     mockedApi.deleteStatus.mockResolvedValue(undefined);
     mockedApi.deletePlannerColumn.mockResolvedValue(undefined);
     mockedApi.importBackup.mockResolvedValue(false);
+    mockedApi.backupStatus.mockResolvedValue({
+      directory: "/Users/prueba/Library/Application Support/io.vindexa.desktop/copias",
+      kept: 3,
+      totalBytes: 54_000_000,
+      lastAt: "2026-08-20T03:00:00Z",
+      lastError: null,
+    });
     mockedApi.diagnostics.mockResolvedValue({
       path: bootstrap.databasePath,
       sizeBytes: 4_096,
@@ -609,5 +617,50 @@ describe("privacidad", () => {
       );
       expect(sueltos).toHaveLength(0);
     }
+  });
+});
+
+/**
+ * Las copias automáticas.
+ *
+ * Lo que hace valiosa esta base es irrepetible y no está en ningún servidor.
+ * Había exportación manual, que es lo mismo que no tener copias: nadie pulsa un
+ * botón todos los días. Y una copia que dejó de hacerse **en silencio** sólo se
+ * descubre el día que se necesita, así que el fallo tiene que verse.
+ */
+describe("copias automáticas", () => {
+  it("dice cuándo fue la última, cuántas hay y dónde están", async () => {
+    const user = userEvent.setup();
+    mockedApi.backupStatus.mockResolvedValue({
+      directory: "/Users/prueba/Library/Application Support/io.vindexa.desktop/copias",
+      kept: 3,
+      totalBytes: 54_000_000,
+      lastAt: "2026-08-20T03:00:00Z",
+      lastError: null,
+    });
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Datos y copias" }));
+
+    expect(await screen.findByText("Copias automáticas")).toBeVisible();
+    expect(await screen.findByText("3 de 3")).toBeVisible();
+    expect(screen.getByLabelText("Dónde se guardan")).toHaveValue(
+      "/Users/prueba/Library/Application Support/io.vindexa.desktop/copias",
+    );
+  });
+
+  it("un fallo de la última copia no se calla", async () => {
+    const user = userEvent.setup();
+    mockedApi.backupStatus.mockResolvedValue({
+      directory: "/tmp/copias",
+      kept: 1,
+      totalBytes: 1_024,
+      lastAt: "2026-08-18T03:00:00Z",
+      lastError: "No queda espacio en el disco.",
+    });
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Datos y copias" }));
+    expect(await screen.findByText(/No queda espacio en el disco/)).toBeVisible();
   });
 });
