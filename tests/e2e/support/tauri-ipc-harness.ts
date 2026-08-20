@@ -524,7 +524,19 @@ export function installTauriIpcHarness(seed: TestBackendState) {
         targetPriceCents: 1500,
         currency: "USD",
       },
-      { appId: ids[3] ?? 4, bucket: "considering", priority: 0, position: 0, note: "" },
+      // Sólo los que existan: pedir un cuarto juego a un escenario de tres
+      // hacía que el arnés devolviera el primero por segunda vez.
+      ...(ids[3] === undefined
+        ? []
+        : [
+            {
+              appId: ids[3],
+              bucket: "considering" as const,
+              priority: 0,
+              position: 0,
+              note: "",
+            },
+          ]),
     ];
     return wishlist;
   };
@@ -612,8 +624,25 @@ export function installTauriIpcHarness(seed: TestBackendState) {
     return curated;
   };
 
-  const summaryOf = (state: TestBackendState, appId: number) =>
-    state.games.find((game) => game.appId === appId) ?? state.games[0];
+  /**
+   * El juego que pide el arnés, o un fallo ruidoso.
+   *
+   * Antes devolvía `state.games[0]` cuando no encontraba el AppID, que es
+   * inventarse un dato dentro del doble. Costó un fallo real: la siembra de
+   * deseados pedía cuatro juegos de un escenario que sólo tiene tres, el cuarto
+   * salía siendo el primero y la pantalla de Deseados renderizaba dos entradas
+   * con la misma clave de React —«dos hijos con la misma clave, 101»—, con lo
+   * que eso significa: una de las dos puede desaparecer.
+   */
+  const summaryOf = (state: TestBackendState, appId: number) => {
+    const encontrado = state.games.find((game) => game.appId === appId);
+    if (!encontrado) {
+      throw new Error(
+        `El arnés no tiene ningún juego con AppID ${appId}: revisa la siembra del escenario.`,
+      );
+    }
+    return encontrado;
+  };
 
   const renumber = <T extends { position: number }>(items: T[]) => {
     items.forEach((item, index) => {
@@ -1372,6 +1401,17 @@ export function installTauriIpcHarness(seed: TestBackendState) {
       if (state.scenario !== "showcase") {
         return {
           reminders: [],
+          // Cuántos hay detrás de cada lista recortada. Sin esto, el arnés
+          // devolvía un panorama sin `totals` y la pantalla se caía al leerlo:
+          // un doble que miente sobre la forma del dato no prueba nada, y aquí
+          // además tumbaba la pantalla entera.
+          totals: {
+            forgotten: 0,
+            almostFinished: 0,
+            upcoming: 0,
+            officialPublications: 0,
+            relatedReleases: 0,
+          },
           forgotten: [],
           almostFinished: [],
           upcoming: [],
@@ -1394,6 +1434,13 @@ export function installTauriIpcHarness(seed: TestBackendState) {
         return item ? { ...item } : undefined;
       };
       return {
+        totals: {
+          forgotten: 4,
+          almostFinished: 3,
+          upcoming: 3,
+          officialPublications: 4,
+          relatedReleases: 3,
+        },
         reminders: [0, 4, 8].map((index, position) => {
           const item = pick(index);
           return {

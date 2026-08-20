@@ -28,13 +28,11 @@ test("la biblioteca sigue siendo utilizable con 1.500 juegos", async ({ app, pag
   const mounted = await page.locator(".game-card").count();
   expect(mounted, "el virtualizador monta solo lo visible").toBeLessThan(60);
 
-  // La barra de estado y el contador de la barra de herramientas deben reflejar
-  // el tamaño real, no la página cargada.
-  // La barra de estado refleja el tamaño real de la biblioteca, no la página.
-  // La barra de estado refleja el tamaño real de la biblioteca, no la página
-  // cargada. Sin separador de millares: en español, cuatro cifras no lo llevan,
-  // y `toLocaleString("es-ES")` lo respeta.
-  await expect(page.locator(".statusbar")).toContainText("1500 juegos");
+  // El recuento refleja el tamaño real de la biblioteca, no la página cargada.
+  // Vive en la barra lateral desde que la de estado dejó de repetir lo que ya
+  // se ve en otro sitio. Sin separador de millares: en español, cuatro cifras
+  // no lo llevan, y `toLocaleString("es-ES")` lo respeta.
+  await expect(page.getByRole("button", { name: /^Todos los juegos/ })).toContainText("1500");
 
   // Desplazarse muy lejos no puede degradar: se mide el salto al fondo.
   const scrollStarted = Date.now();
@@ -65,7 +63,9 @@ test("agrupar 1.500 juegos por inicial sigue respondiendo", async ({ app, page }
   await app.goto();
   await app.waitForShell();
 
-  await page.getByRole("button", { name: "Vista de lista" }).click();
+  // El conmutador de vista es un grupo de radios nativo, no tres botones: así
+  // el lector de pantalla dice «1 de 3» y las flechas funcionan solas.
+  await page.getByRole("radio", { name: "Vista de lista" }).click();
   const started = Date.now();
   await page.getByRole("combobox", { name: "Agrupar biblioteca" }).click();
   await page.getByRole("option", { name: "Inicial" }).click();

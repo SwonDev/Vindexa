@@ -672,8 +672,12 @@ function OffersStrip({
         )}
       </div>
       <ul className="wishlist-offers__list" id={listId}>
+        {/* La clave lleva la moneda: dos ofertas del mismo juego no pueden
+            ocurrir —la tabla tiene el AppID como clave primaria—, pero si
+            ocurrieran, React se quedaría con una y la otra desaparecería sin
+            decirlo. */}
         {visible.map((offer) => (
-          <li key={offer.appId}>
+          <li key={`${offer.appId}-${offer.currency}`}>
             {/* La razón de mirar una lista de ofertas es saber qué es cada
                 juego; el título no lo dice y la carátula tampoco. */}
             <GamePreviewCard
@@ -813,7 +817,7 @@ function WishlistLane({
             {lane.items.length ? (
               visibles.map((entry, index) => (
                 <WishlistCard
-                  key={entry.game.appId}
+                  key={`${entry.bucket}-${entry.game.appId}`}
                   entry={entry}
                   index={index}
                   total={lane.items.length}

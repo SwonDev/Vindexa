@@ -2,7 +2,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 
-const port = 4173;
+/**
+ * El puerto del servidor de pruebas.
+ *
+ * Fijo por omisión para que la orden sea siempre la misma, pero configurable:
+ * un `vite preview` olvidado en 4173 —o cualquier otra cosa escuchando ahí—
+ * dejaba la suite sin poder arrancar, y matar procesos ajenos para correr unas
+ * pruebas no es una opción.
+ */
+const port = Number(process.env.VINDEXA_E2E_PORT ?? 4173);
 
 export default defineConfig({
   testDir: "./tests/e2e",

@@ -50,6 +50,15 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **Los regalos de Epic también tienen vista rápida.** Guardaban su imagen desde el principio y
   no se pintaba en ninguna parte: ahora, al pasar el ratón, se enseña con lo que Vindexa sabe
   —si ya lo tienes, cuánto queda y de qué va—.
+- **El banner de la ficha se veía apagado en casi toda la biblioteca.** `hero_url` guarda el
+  fondo de la página de tienda —un degradado oscuro que Steam pinta detrás de su texto—, y el
+  arte de biblioteca a todo color viaja en otra columna que sólo tenían 161 de 3.877 juegos: los
+  enriquecidos después del 18 de agosto. Y no era sólo que la ficha eligiera la imagen peor:
+  **impedía encontrar la buena**, porque el caché de arte sólo prueba candidatos que superen lo
+  que la interfaz pidió y el fondo de tienda entraba como la mejor posible. Ahora la ficha pide
+  `library_hero` primero y la migración 049 lo deriva para los 1.786 que se quedaron sin él, sin
+  gastar una sola petición. De diez juegos al azar que se veían apagados, nueve lo tienen
+  publicado; el décimo sigue viéndose como antes, que es lo único que había para él.
 - **La prioridad calculada por fin calcula y ordena.** El motor existe desde la migración 024
   —determinista, explicable, con sus señales y su prueba de que la suma cuadra— y sólo corría si
   alguien abría una ficha y pulsaba «Recalcular la biblioteca». En una instalación real llevaba

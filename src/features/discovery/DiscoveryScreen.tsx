@@ -408,8 +408,8 @@ export function DiscoveryScreen({
               counts={{
                 tracking: trackedTotal,
                 reminders: discovery.data?.reminders.length ?? 0,
-                forgotten: discovery.data?.totals.forgotten ?? 0,
-                almost: discovery.data?.totals.almostFinished ?? 0,
+                forgotten: radarCount("forgotten", discovery.data, trackedTotal),
+                almost: radarCount("almost", discovery.data, trackedTotal),
               }}
               busy={radarBusy}
               onSelect={setRadarView}
@@ -509,19 +509,27 @@ export function DiscoveryScreen({
               <>
                 <PublicationsBlock
                   items={discovery.data?.officialPublications ?? []}
-                  total={discovery.data?.totals.officialPublications ?? 0}
+                  total={
+                    discovery.data?.totals?.officialPublications ??
+                    discovery.data?.officialPublications.length ??
+                    0
+                  }
                   trackedGames={discovery.data?.capabilities.trackedNewsGames ?? 0}
                   refresh={newsRefresh}
                   loading={discovery.isPending}
                 />
                 <RelatedReleasesBlock
                   items={discovery.data?.relatedReleases ?? []}
-                  total={discovery.data?.totals.relatedReleases ?? 0}
+                  total={
+                    discovery.data?.totals?.relatedReleases ??
+                    discovery.data?.relatedReleases.length ??
+                    0
+                  }
                   loading={discovery.isPending}
                 />
                 <UpcomingBlock
                   items={discovery.data?.upcoming ?? []}
-                  total={discovery.data?.totals.upcoming ?? 0}
+                  total={discovery.data?.totals?.upcoming ?? discovery.data?.upcoming.length ?? 0}
                   loading={discovery.isPending}
                 />
                 <EarlyAccessBlock
@@ -1444,8 +1452,11 @@ function RecoverableError({ message, onRetry }: { message: string; onRetry: () =
 function radarCount(view: RadarView, data: DiscoverySnapshot | undefined, tracked: number): number {
   if (view === "tracking") return tracked;
   if (view === "reminders") return data?.reminders.length ?? 0;
-  if (view === "forgotten") return data?.totals.forgotten ?? 0;
-  return data?.totals.almostFinished ?? 0;
+  // El total llega del panorama; si por lo que sea no viniera, se cae al largo
+  // de la lista en vez de tumbar la pantalla: decir de menos es un fallo, pero
+  // dejar la sección en blanco es otro peor.
+  if (view === "forgotten") return data?.totals?.forgotten ?? data?.forgotten.length ?? 0;
+  return data?.totals?.almostFinished ?? data?.almostFinished.length ?? 0;
 }
 
 function radarMetadata(game: GameSummary, view: Exclude<RadarView, "reminders">): string {

@@ -25,7 +25,7 @@ test("la vista ultracompacta mantiene varias filas legibles a 960x700", async ({
   await page.setViewportSize({ width: 960, height: 700 });
   await app.goto();
   await app.waitForShell();
-  const compactView = page.getByRole("button", { name: "Vista ultracompacta" });
+  const compactView = page.getByRole("radio", { name: "Vista ultracompacta" });
   await compactView.click();
   await expect(compactView).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".game-browser--compact")).toBeVisible();
@@ -95,7 +95,7 @@ test("Steam Family conserva controles y filas densas a 960x700", async ({ app, p
   expect(controlsRemainTopmost).toBe(true);
   await expect(page).toHaveScreenshot("family-grid-scrolled-960x700.png", { fullPage: true });
 
-  await page.getByRole("button", { name: "Vista familiar ultracompacta" }).click();
+  await page.getByRole("radio", { name: "Vista familiar ultracompacta" }).click();
   await expect(page.locator(".family-catalog-browser--compact")).toBeVisible();
   await expect(page.locator(".family-game-row")).toHaveCount(12);
   await expect(page.getByRole("button", { name: "Abrir ficha de Aurora Assembly" })).toBeVisible();

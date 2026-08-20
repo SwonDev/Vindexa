@@ -507,11 +507,29 @@ export function GameDetailSheet({
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
               <div className="detail-hero__media" ref={heroMediaRef}>
+                {/* El arte de biblioteca primero, y el fondo de la tienda sólo
+                    si no hay otra cosa.
+
+                    `heroUrl` es el fondo que Steam pinta detrás del texto de su
+                    página: casi siempre un degradado oscuro. El arte de
+                    biblioteca —`library_hero`, 1920×620 y a todo color— es lo
+                    que se quiere ver aquí, y pedirlo primero no sólo elige la
+                    imagen buena: deja que el caché **busque** una mejor. Ordena
+                    los candidatos por calidad y sólo prueba los que superan lo
+                    que la interfaz pidió, así que una URL desconocida —el fondo
+                    de tienda lo es— entra como la mejor posible y corta la
+                    búsqueda. Con `library_hero` delante, antes prueba
+                    `library_hero_2x` y después baja hasta el fondo de tienda.
+
+                    Medido sobre esta biblioteca: de diez juegos que se veían
+                    apagados, nueve tienen `library_hero` publicado. */}
                 <Artwork
                   appId={detail.appId}
-                  src={detail.heroUrl ?? detail.headerUrl ?? detail.coverUrl}
+                  src={
+                    detail.libraryHeroUrl ?? detail.heroUrl ?? detail.headerUrl ?? detail.coverUrl
+                  }
                   title={detail.title}
-                  kind={detail.heroUrl ? "hero" : "header"}
+                  kind={detail.libraryHeroUrl || detail.heroUrl ? "hero" : "header"}
                   priority
                 />
               </div>

@@ -61,11 +61,11 @@ test("vitrina · biblioteca en lista y ultracompacta", async ({ app, page }) => 
   await app.goto();
   await app.waitForShell();
 
-  await page.getByRole("button", { name: "Vista de lista" }).click();
+  await page.getByRole("radio", { name: "Vista de lista" }).click();
   await settleArtwork(page);
   await page.screenshot({ path: join(OUT, "biblioteca-lista-1440x900.png") });
 
-  await page.getByRole("button", { name: "Vista ultracompacta" }).click();
+  await page.getByRole("radio", { name: "Vista ultracompacta" }).click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: join(OUT, "biblioteca-ultracompacta-1440x900.png") });
 });
@@ -146,7 +146,7 @@ test("vitrina · biblioteca agrupada por estado", async ({ app, page }) => {
   await app.goto();
   await app.waitForShell();
 
-  await page.getByRole("button", { name: "Vista de lista" }).click();
+  await page.getByRole("radio", { name: "Vista de lista" }).click();
   await page.getByRole("combobox", { name: "Agrupar biblioteca" }).click();
   await page.getByRole("option", { name: "Estado" }).click();
   await expect(page.locator(".library-group-header").first()).toBeVisible();

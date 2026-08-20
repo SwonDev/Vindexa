@@ -497,6 +497,36 @@ describe("tratamiento del banner", () => {
     expect(rule).toContain("rgb(10 14 19 / 0%) 44%");
   });
 
+  /**
+   * El banner pide el arte de biblioteca, no el fondo de la página de tienda.
+   *
+   * `heroUrl` es el fondo que Steam pinta detrás del texto de su página: casi
+   * siempre un degradado oscuro. Pasárselo al caché de arte no sólo elegía esa
+   * imagen apagada, sino que **impedía** encontrar la buena: el caché ordena
+   * los candidatos por calidad y sólo prueba los que mejoran lo que la interfaz
+   * pidió, y una URL que no es ninguno de los peldaños conocidos entra como la
+   * mejor posible y corta la búsqueda. Sin fuente explícita recorre la escalera
+   * entera y encuentra `library_hero`, que es el arte a todo color.
+   *
+   * Medido sobre la biblioteca real: de diez juegos que se veían apagados,
+   * nueve tienen `library_hero` publicado.
+   */
+  it("no le pasa al caché el fondo de la página de tienda como banner", async () => {
+    const fuente = readFileSync(
+      resolve(process.cwd(), "src/features/library/GameDetailSheet.tsx"),
+      "utf8",
+    );
+    const banner = fuente.slice(fuente.indexOf("detail-hero__media"));
+    const artwork = banner.slice(banner.indexOf("<Artwork"), banner.indexOf("/>") + 2);
+    // El orden importa: `libraryHeroUrl` antes que `heroUrl`. Al revés, el
+    // caché recibe una URL que no reconoce, la toma por la mejor posible y no
+    // busca el arte de biblioteca.
+    const posicionBiblioteca = artwork.indexOf("detail.libraryHeroUrl");
+    const posicionFondo = artwork.indexOf("detail.heroUrl");
+    expect(posicionBiblioteca).toBeGreaterThanOrEqual(0);
+    expect(posicionFondo).toBeGreaterThan(posicionBiblioteca);
+  });
+
   it("realza el color del arte en vez de desaturarlo", () => {
     const media = css.slice(css.indexOf(".detail-hero .detail-hero__media .artwork"));
     const rule = media.slice(0, media.indexOf("}"));

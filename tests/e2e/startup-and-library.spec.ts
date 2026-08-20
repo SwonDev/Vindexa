@@ -12,7 +12,9 @@ test.describe("arranque aislado y estados de biblioteca", () => {
 
     await expect(page.getByRole("heading", { name: "Construye tu biblioteca real" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Importar Steam local" })).toBeVisible();
-    await expect(page.getByText("0 juegos · 0 instalados")).toBeVisible();
+    // El recuento vive en la barra lateral desde que la barra de estado dejó de
+    // repetirlo: «lo que ya se ve en otro sitio no vuelve a ocupar sitio».
+    await expect(page.getByRole("button", { name: /^Todos los juegos/ })).toContainText("0");
     await app.expectNoHorizontalOverflow();
   });
 });
@@ -24,7 +26,8 @@ test.describe("biblioteca poblada", () => {
 
     await expect(app.gameButton("Nebula Frontier")).toBeVisible();
     await expect(app.gameButton("Clockwork Harbor")).toBeVisible();
-    await expect(page.getByText("3 juegos · 2 instalados")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Todos los juegos/ })).toContainText("3");
+    await expect(page.getByRole("button", { name: /^Instalados/ })).toContainText("2");
     await app.expectNoHorizontalOverflow();
   });
 });
