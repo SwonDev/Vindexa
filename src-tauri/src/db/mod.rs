@@ -2703,6 +2703,42 @@ mod pruebas_de_recuentos_y_origenes {
         );
     }
 
+    /// Las dos maneras de decir «esto no es de Steam» dicen lo mismo.
+    ///
+    /// Hay dos: la columna `external_store`, que dice de qué tienda vino, y la
+    /// frontera `LOCAL_APP_ID_BASE`, que dice que el identificador se lo
+    /// inventó Vindexa. El arte usa la segunda; la ficha, los logros y el
+    /// contenido adicional usan la primera. Si alguna vez dejaran de coincidir,
+    /// la mitad de las consultas volvería a salir hacia Steam con un
+    /// identificador que allí no significa nada.
+    #[test]
+    fn la_frontera_y_la_columna_hablan_del_mismo_juego() {
+        let connection = base();
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source, external_store)
+                 VALUES (2000000055, 'De Epic', 'owned', 'epic')",
+                [],
+            )
+            .expect("insertar el de Epic");
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source)
+                 VALUES (620, 'De Steam', 'owned')",
+                [],
+            )
+            .expect("insertar el de Steam");
+
+        for app_id in [2_000_000_055_u32, 620] {
+            let por_la_columna = library::is_steam_game(&connection, app_id).expect("consultar");
+            let por_la_frontera = !crate::models::is_local_app_id(app_id);
+            assert_eq!(
+                por_la_columna, por_la_frontera,
+                "el juego {app_id} es de Steam según una y no según la otra"
+            );
+        }
+    }
+
     /// A un AppID inventado no se le pregunta.
     ///
     /// Los juegos de otras tiendas llevan un identificador que se inventó
