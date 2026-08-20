@@ -591,6 +591,43 @@ export function resolveShortcuts(
   return resolved as ShortcutMap;
 }
 
+/**
+ * Acciones que siguen funcionando con el cursor dentro de un campo de texto.
+ *
+ * # Por qué existe la lista
+ *
+ * Escribiendo en el buscador, **ningún** atajo llegaba: se escribía la
+ * búsqueda y para ir a Deseados había que soltar el teclado y coger el ratón.
+ * Eso es justo lo que los modificadores existen para evitar.
+ *
+ * # Por qué sólo con un número
+ *
+ * Dentro de un campo, casi toda combinación con modificador **ya significa
+ * algo**: `Mod+A` selecciona el texto, `Mod+C` lo copia, `Mod+Z` deshace, y en
+ * macOS `Ctrl+K` corta hasta el final de la línea —y `Ctrl` cuenta como `Mod`
+ * aquí—. Secuestrar cualquiera de ésas rompería algo que ya funciona.
+ *
+ * Un dígito no es ninguna de ellas. Por eso pasa `Mod+1`…`Mod+9` y nada más:
+ * resuelve la fricción real —cambiar de sección sin soltar el teclado— sin
+ * tocar un solo gesto de edición.
+ */
+const DISPONIBLES_ESCRIBIENDO: readonly AnyShortcutAction[] = [
+  "library",
+  "planner",
+  "wishlist",
+  "collections",
+  "tracking",
+];
+
+/** Combinación de modificador y un dígito, que dentro de un campo no es nada. */
+const MOD_Y_DIGITO = /^(Mod\+|Alt\+|Shift\+)+[0-9]$/;
+
+/** ¿Este atajo puede dispararse aunque se esté escribiendo? */
+export function worksWhileTyping(descriptor: ShortcutDescriptor, shortcut: string): boolean {
+  if (!DISPONIBLES_ESCRIBIENDO.includes(descriptor.action)) return false;
+  return MOD_Y_DIGITO.test(shortcut);
+}
+
 /** Primera acción cuyo atajo coincide con el evento, en orden de catálogo. */
 export function resolveShortcutEvent(
   event: KeyboardEvent,

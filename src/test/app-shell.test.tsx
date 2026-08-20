@@ -359,6 +359,36 @@ describe("ciclo de carga de la aplicación", () => {
     input.remove();
   });
 
+  /**
+   * Escribiendo, un número con modificador sí cambia de sección.
+   *
+   * Antes no pasaba **ningún** atajo con el cursor dentro de un campo: se
+   * escribía la búsqueda y para ir a Deseados había que soltar el teclado y
+   * coger el ratón. Un dígito con modificador no significa nada dentro de un
+   * campo —a diferencia de `Mod+A`, `Mod+C` o `Ctrl+K`—, así que pasa.
+   */
+  it("con el cursor en un campo, ⌘5 lleva a Deseados y ⌘A no se secuestra", async () => {
+    mockedApi.bootstrap.mockResolvedValue(emptyBootstrap);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    await screen.findByRole("heading", { name: "Construye tu biblioteca real" });
+    const deseados = await screen.findByRole("button", { name: "Deseados" });
+    const input = document.createElement("input");
+    document.body.append(input);
+
+    fireEvent.keyDown(input, { key: "5", metaKey: true });
+    await waitFor(() => expect(deseados).toHaveAttribute("aria-current", "page"));
+
+    // Y lo que dentro de un campo ya significa algo se queda como estaba:
+    // `Mod+A` es seleccionar el texto, no «seleccionar todos los juegos».
+    const seleccionar = vi.fn();
+    window.addEventListener("vindexa:library-command", seleccionar);
+    fireEvent.keyDown(input, { key: "a", metaKey: true });
+    expect(seleccionar).not.toHaveBeenCalled();
+    window.removeEventListener("vindexa:library-command", seleccionar);
+    input.remove();
+  });
+
   it("el atajo de sincronización ejecuta la operación real y anuncia el resultado", async () => {
     mockedApi.bootstrap.mockResolvedValue(bootstrapWithSteamSync("success"));
     mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });

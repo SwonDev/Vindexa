@@ -109,6 +109,10 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   llamada terminara bien no dice nada de lo que ha pasado en tu biblioteca desde entonces, y menos
   con la sincronización periódica en «sólo manual». Pasado un día, el distintivo dice **cuándo**
   fue; sin fecha guardada no afirma ninguna de las dos cosas.
+- **Escribiendo en el buscador no funcionaba ningún atajo.** Para ir a otra sección había que
+  soltar el teclado y coger el ratón. Ahora pasa el número con modificador —⌘1 a ⌘5—, que dentro
+  de un campo no significa nada, y sigue sin pasar lo que sí significa algo: `⌘A` selecciona el
+  texto, `⌘C` lo copia y `Ctrl+K` corta hasta el final de la línea.
 - **⌘5 no hacía nada y Ajustes lo enseñaba «sin asignar».** Deseados tenía dos dueños: el campo
   que Rust guarda desde siempre y una acción local duplicada, sostenida por un comentario que
   había dejado de ser verdad. La combinación quedaba ocupada por un enlace que nadie escuchaba.

@@ -35,6 +35,7 @@ import {
   resolveShortcuts,
   SHORTCUTS_CHANGED_EVENT,
   shortcutLabel,
+  worksWhileTyping,
 } from "@/features/shell/shortcuts";
 import { ToastProvider } from "@/features/shell/toasts";
 import {
@@ -258,7 +259,13 @@ export function AppShell() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isEditableShortcutTarget(event.target)) return;
+      if (event.repeat) return;
+      // Escribiendo, sólo pasan las de navegación con modificador: dentro de un
+      // campo, `Mod+A` es seleccionar el texto y una tecla desnuda es texto.
+      // Antes no pasaba ninguna, así que había que soltar el teclado y usar el
+      // ratón para salir del buscador.
+      const escribiendo = isEditableShortcutTarget(event.target);
+      if (escribiendo && !(event.metaKey || event.ctrlKey || event.altKey)) return;
       // Con la paleta abierta manda la paleta: es un diálogo modal.
       if (paletteOpen) return;
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
@@ -268,6 +275,7 @@ export function AppShell() {
       }
       const descriptor = resolveShortcutEvent(event, shortcuts);
       if (!descriptor) return;
+      if (escribiendo && !worksWhileTyping(descriptor, shortcuts[descriptor.action])) return;
       switch (descriptor.action) {
         case "library":
         case "planner":
