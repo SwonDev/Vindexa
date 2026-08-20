@@ -298,9 +298,17 @@ export function describeMissingPrice(status?: WishlistPriceStatus): {
     const cuando = status.absenceCheckedAt
       ? ` Consultado ${formatRelativeDate(status.absenceCheckedAt)}.`
       : "";
+    // «Todavía no ha salido» y «ya no se vende» llegan igual desde la tienda,
+    // pero sólo uno de los dos es una espera.
+    if (status.upcoming) {
+      return {
+        label: "aún no ha salido",
+        detail: `Está entre los próximos lanzamientos: la tienda todavía no publica su precio.${cuando}`,
+      };
+    }
     return {
       label: "no a la venta",
-      detail: `La tienda respondió y no publica precio: sin fecha de salida, gratuito o retirado.${cuando}`,
+      detail: `La tienda respondió y no publica precio: gratuito, retirado o sin publicar.${cuando}`,
     };
   }
   if (status?.absence === "unavailable") {
@@ -386,8 +394,10 @@ export interface PriceCoverage {
   caveat: string;
   /** Juegos con descuento vigente según el último precio observado. */
   onSale: number;
-  /** Preguntados, y la tienda no publica precio: sin fecha, gratuitos o retirados. */
+  /** Preguntados, y la tienda no publica precio: gratuitos o retirados. */
   unlisted: number;
+  /** Preguntados, y todavía no han salido: están entre los próximos. */
+  upcoming: number;
   /** Ni preguntados todavía. Es lo único que un repaso puede arreglar. */
   unasked: number;
 }
@@ -408,16 +418,28 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
   const meetingTarget = statuses.filter((status) => status.comparable && status.meetsTarget).length;
   const onSale = statuses.filter((status) => (status.price?.discountPercent ?? 0) > 0).length;
 
-  // Sin precio hay tres motivos distintos y decirlos como uno solo era acusar
+  // Sin precio hay cuatro motivos distintos y decirlos como uno solo era acusar
   // a la aplicación de no haber mirado cuatrocientas cincuenta veces: la tienda
   // había contestado, y lo que contestó es que esos juegos no publican precio.
-  const sinPublicar = statuses.filter(
-    (status) =>
-      !status.price && (status.absence === "no_price" || status.absence === "unavailable"),
+  // Y de esos, los que aún no han salido son una espera, no una ausencia.
+  const porSalir = statuses.filter(
+    (status) => !status.price && status.absence === "no_price" && status.upcoming,
   ).length;
-  const sinPreguntar = total - withPrice - sinPublicar;
+  const sinPublicar =
+    statuses.filter(
+      (status) =>
+        !status.price && (status.absence === "no_price" || status.absence === "unavailable"),
+    ).length - porSalir;
+  const sinPreguntar = total - withPrice - sinPublicar - porSalir;
 
   const caveats: string[] = [];
+  if (porSalir > 0) {
+    caveats.push(
+      porSalir === 1
+        ? "1 juego que todavía no ha salido"
+        : `${porSalir.toLocaleString("es-ES")} juegos que todavía no han salido`,
+    );
+  }
   if (sinPublicar > 0) {
     caveats.push(
       sinPublicar === 1
@@ -449,6 +471,7 @@ export function summarizePrices(statuses: readonly WishlistPriceStatus[]): Price
     caveat: caveats.length ? `${caveats.join("; ")}.` : "",
     onSale,
     unlisted: sinPublicar,
+    upcoming: porSalir,
     unasked: sinPreguntar,
   };
 }

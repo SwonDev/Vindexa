@@ -60,6 +60,9 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   de Steam mezcla rebajas con precios normales, y ahí estaba *Mortal Shell II* a 49,99 € sin
   descuento. Una oferta ahora exige un precio de referencia **mayor** que el vigente: sin eso no
   hay rebaja que comprobar.
+- **«No a la venta» juntaba lo retirado con lo que aún no ha salido.** Los dos llegan igual desde
+  la tienda —«no publica precio»—, pero sólo uno de los dos es una espera. Ahora un deseado que
+  está entre los próximos lanzamientos dice «aún no ha salido», y la cobertura los cuenta aparte.
 - **«451 juegos sin precio consultado» eran 451 juegos consultados.** La tienda había respondido
   por todos: no publica precio para juegos sin fecha de salida, gratuitos o retirados. Esa
   respuesta ahora se guarda, se cuenta aparte —«no pone a la venta» frente a «sin consultar»—,

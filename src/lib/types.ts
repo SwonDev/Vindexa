@@ -1505,6 +1505,13 @@ export interface WishlistPriceStatus {
   absence?: "no_price" | "unavailable" | null;
   /** Cuándo llegó esa respuesta. */
   absenceCheckedAt?: string | null;
+  /**
+   * Está entre los próximos lanzamientos: no es que lo hayan retirado, es que
+   * **todavía no ha salido**.
+   *
+   * Se calcula al leer: en cuanto salga dejará de ser verdad.
+   */
+  upcoming?: boolean;
 }
 
 /**

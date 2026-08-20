@@ -215,6 +215,13 @@ pub struct WishlistPriceStatus {
     pub absence: Option<String>,
     /// Cuándo se recibió esa respuesta.
     pub absence_checked_at: Option<String>,
+    /// El juego está entre los próximos lanzamientos: no es que la tienda lo
+    /// haya retirado, es que **todavía no ha salido**.
+    ///
+    /// Se calcula al leer, no se guarda: en cuanto salga dejará de ser verdad.
+    /// Sin esto, «no a la venta» juntaba dos cosas distintas —lo que ya no se
+    /// vende y lo que aún no se vende— y sólo una de ellas es una espera.
+    pub upcoming: bool,
 }
 
 /// Recuento de lo que hizo un barrido de precios.
@@ -809,6 +816,7 @@ pub fn wishlist_price_statuses(
         } else {
             absence_of(connection, app_id)?
         };
+        let upcoming = absence.is_some() && is_upcoming(connection, app_id)?;
         statuses.push(WishlistPriceStatus {
             app_id,
             target_cents,
@@ -820,9 +828,20 @@ pub fn wishlist_price_statuses(
             meets_target: difference_cents.is_some_and(|difference| difference <= 0),
             absence,
             absence_checked_at,
+            upcoming,
         });
     }
     Ok(statuses)
+}
+
+/// ¿Está entre los próximos lanzamientos vivos?
+fn is_upcoming(connection: &Connection, app_id: u32) -> AppResult<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM upcoming_releases
+                        WHERE app_id = ?1 AND dismissed_at IS NULL)",
+        [app_id],
+        |row| row.get::<_, i64>(0).map(|value| value != 0),
+    )?)
 }
 
 /// Lo que contestó la tienda la última vez que no hubo precio.
@@ -1427,6 +1446,39 @@ mod tests {
         assert_eq!(despues[0].absence.as_deref(), Some(ABSENCE_NO_PRICE));
         assert!(despues[0].absence_checked_at.is_some());
         assert!(despues[0].price.is_none(), "sigue sin haber precio que enseñar");
+    }
+
+    /// «Todavía no ha salido» y «ya no se vende» no son lo mismo.
+    ///
+    /// Los dos llegan como «la tienda no publica precio», pero sólo uno es una
+    /// espera: el otro es un juego retirado. La diferencia se sabe mirando si
+    /// está entre los próximos lanzamientos.
+    #[test]
+    fn un_deseado_que_aun_no_ha_salido_no_se_confunde_con_uno_retirado() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Sale en diciembre");
+        catalog_wish(&connection, 20, "Retirado de la tienda");
+        record_absences(&mut connection, &[10, 20], ABSENCE_NO_PRICE, at(1, 12)).expect("guardar");
+        connection
+            .execute(
+                "INSERT INTO upcoming_releases(app_id, title, release_date, release_date_is_exact, source)
+                 VALUES (10, 'Sale en diciembre', '2026-12-24', 1, 'store')",
+                [],
+            )
+            .expect("sembrar próximo");
+
+        let estados = wishlist_price_statuses(&connection, at(1, 13)).expect("estados");
+        let futuro = estados.iter().find(|e| e.app_id == 10).expect("está");
+        let retirado = estados.iter().find(|e| e.app_id == 20).expect("está");
+        assert!(futuro.upcoming, "el que sale en diciembre está por salir");
+        assert!(!retirado.upcoming, "el retirado no está por salir");
+        // Y con precio delante, lo de la ausencia deja de contarse.
+        record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 14))
+            .expect("registrar");
+        let despues = wishlist_price_statuses(&connection, at(1, 15)).expect("estados");
+        let ya_a_la_venta = despues.iter().find(|e| e.app_id == 10).expect("está");
+        assert!(!ya_a_la_venta.upcoming);
+        assert_eq!(ya_a_la_venta.absence, None);
     }
 
     #[test]

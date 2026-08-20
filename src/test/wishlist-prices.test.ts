@@ -112,6 +112,15 @@ describe("precio observado en la tarjeta", () => {
     expect(noVenta.observed).toBe("Consultado, sin precio");
     expect(noVenta.verdict).toContain("no publica precio");
 
+    // Y lo que aún no ha salido no se dice igual que lo retirado: sólo uno de
+    // los dos es una espera.
+    const futuro = describePrice(
+      entry(),
+      status({ absence: "no_price", upcoming: true, absenceCheckedAt: "2026-08-19T10:00:00Z" }),
+    );
+    expect(futuro.missingLabel).toBe("aún no ha salido");
+    expect(futuro.verdict).toContain("próximos lanzamientos");
+
     const retirado = describePrice(entry(), status({ absence: "unavailable" }));
     expect(retirado.missingLabel).toBe("no está en la tienda");
     expect(retirado.verdict).toContain("no reconoce este juego");
@@ -259,10 +268,13 @@ describe("cobertura de precios de la lista", () => {
       status({ appId: 2, absence: "no_price", absenceCheckedAt: "2026-08-19T10:00:00Z" }),
       status({ appId: 3, absence: "unavailable" }),
       status({ appId: 4 }),
+      status({ appId: 5, absence: "no_price", upcoming: true }),
     ]);
     expect(resumen.unlisted).toBe(2);
+    expect(resumen.upcoming).toBe(1);
     expect(resumen.unasked).toBe(1);
     expect(resumen.caveat).toContain("2 juegos que la tienda no pone a la venta");
+    expect(resumen.caveat).toContain("1 juego que todavía no ha salido");
     expect(resumen.caveat).toContain("1 juego sin precio consultado");
   });
 
