@@ -400,7 +400,9 @@ Consulta [STEAM_SETUP.md](./STEAM_SETUP.md) para los límites.
 - La desinstalación solo entrega una solicitud al cliente Steam; no borra archivos ni conoce
   el resultado final.
 - Metadatos de tienda proceden de una fuente pública no contractual y logros requieren una
-  acción expresa, clave y privacidad suficientes. Steam Deck queda desconocido.
+  acción expresa, clave y privacidad suficientes. La compatibilidad con Steam Deck sale de
+  otra fuente pública no contractual —el informe de la propia tienda— que se pregunta por
+  tandas: mientras no le toque a un juego, su compatibilidad se desconoce.
 - Steam Family depende de señal local y visibilidad; Vindexa no puede certificar licencia o
   elegibilidad de lanzamiento.
 - La ventana de tienda no es un navegador general. El bloqueo acotado de macOS/Linux no

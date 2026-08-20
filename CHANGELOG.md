@@ -50,6 +50,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **Los regalos de Epic también tienen vista rápida.** Guardaban su imagen desde el principio y
   no se pintaba en ninguna parte: ahora, al pasar el ratón, se enseña con lo que Vindexa sabe
   —si ya lo tienes, cuánto queda y de qué va—.
+- **La compatibilidad con Steam Deck deja de estar vacía.** La columna existe desde la primera
+  migración, tiene índice, viaja en la ficha, se puede filtrar y hasta sirve para una regla de
+  colección inteligente. Nunca la escribió nadie: vacía en los 3.877 juegos, la ficha decía «Sin
+  datos» en todas y el filtro se ofrecía apagado con una nota diciendo que Steam no publica el
+  dato «mediante una API Web documentada». La nota era cierta y estaba incompleta: no hay API
+  documentada, pero sí un informe público —el que la tienda pinta en la página de cada juego—
+  que no pide clave ni sesión. Ahora una pasada de fondo lo pregunta por tandas, como la del
+  DRM. Comprobado contra la tienda: Portal 2 sale verificado y Destiny 2 no compatible.
 - **La pantalla de Privacidad dice también qué sale del equipo.** Enumeraba cuatro garantías
   sobre lo que se queda y ninguna sobre lo que viaja. Ahora están las dos direcciones: qué se
   pregunta, a dónde, y qué no sale nunca.

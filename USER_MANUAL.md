@@ -94,8 +94,11 @@ volver a elegirlo genera otra mezcla.
 - seguimiento, Steam Deck y duración estimada de sesión.
 
 Los chips superiores muestran filtros activos y permiten quitarlos individualmente. Un
-filtro basado en metadatos solo puede encontrar juegos cuyo dato exista. Steam Deck aparece
-deshabilitado o sin resultados cuando no hay una fuente fiable.
+filtro basado en metadatos solo puede encontrar juegos cuyo dato exista. La compatibilidad
+con Steam Deck se pregunta al informe público de la tienda por tandas y en segundo plano, así
+que el filtro se habilita en cuanto hay un juego valorado y la lista sigue creciendo mientras
+la aplicación esté abierta. «Steam no lo ha valorado» es una respuesta; «Sin datos» significa
+que todavía no se ha preguntado.
 
 ### Seleccionar y actuar en lote
 

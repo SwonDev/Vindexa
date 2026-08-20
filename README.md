@@ -324,8 +324,10 @@ descubras.
 - **Buscar actualizaciones** comprueba qué versión hay publicada, pero **no
   descarga ni instala nada**: hacerlo exigiría firmar los instaladores y llevar
   la clave pública dentro de la aplicación.
-- Steam Deck aparece como **Sin datos** mientras no exista una API pública
-  documentada que se pueda consumir de forma fiable.
+- La compatibilidad con Steam Deck sale del informe público de la tienda —el
+  mismo que se pinta en la página de cada juego—, que no es una API documentada
+  y puede cambiar sin aviso. Se pregunta por tandas en segundo plano: hasta que
+  le toque, un juego aparece como **Sin datos**.
 - Los instaladores no están firmados ni notarizados.
 - La compatibilidad con Bazzite existe en el código pero no está certificada en
   una máquina Bazzite real.
