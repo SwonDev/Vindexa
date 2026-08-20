@@ -181,6 +181,13 @@ export interface AppPreferences {
 export type ShortcutAction =
   | "library"
   | "planner"
+  /**
+   * Deseados. Vive aquí, con el resto de la navegación, porque la `struct` de
+   * Rust **sí** tiene este campo desde que existe la sección. Tenerlo además
+   * como acción local duplicada dejaba «Mod+5» ocupado por un enlace que nadie
+   * escuchaba: el atajo no hacía nada y Ajustes lo enseñaba «sin asignar».
+   */
+  | "wishlist"
   | "collections"
   | "tracking"
   | "search"

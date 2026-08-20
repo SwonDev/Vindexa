@@ -225,9 +225,30 @@ describe("catálogo de acciones", () => {
     expect(sectionShortcut(bindings, "tracking")).toBe("Mod+4");
     expect(sectionShortcut(bindings, "wishlist")).toBe("Mod+5");
     // Una sección que se queda sin combinación se declara sin atajo, no rompe.
+    // Con dos guardadas compartiendo combinación gana la primera del catálogo,
+    // y la otra se queda sin asignar en vez de dejar de responder en silencio.
     expect(
-      sectionShortcut(resolveShortcuts({ ...DEFAULT_SHORTCUTS, sync: "Mod+5" }), "wishlist"),
+      sectionShortcut(resolveShortcuts({ ...DEFAULT_SHORTCUTS, library: "Mod+5" }), "wishlist"),
     ).toBeUndefined();
+  });
+
+  /**
+   * Deseados tenía dos dueños.
+   *
+   * La `struct` de Rust ya guardaba `wishlist: "Mod+5"`, y el frente mantenía
+   * además una acción local `gotoWishlist` con la misma combinación. La
+   * navegación ganaba el reparto, así que la local se quedaba sin asignar —y la
+   * de navegación no estaba en el catálogo, así que **nadie escuchaba ⌘5**:
+   * Ajustes decía «sin asignar» y pulsarlo no hacía nada.
+   */
+  it("⌘5 lleva a Deseados y el catálogo lo reconoce", () => {
+    const bindings = resolveShortcuts();
+    expect(bindings.wishlist).toBe("Mod+5");
+    const descriptor = resolveShortcutEvent(keyboardEvent("5", { metaKey: true }), bindings);
+    expect(descriptor?.action).toBe("wishlist");
+    expect(descriptor?.scope).toBe("navigation");
+    // Y una sola entrada en el catálogo: dos dueños era el fallo.
+    expect(SHORTCUT_CATALOGUE.filter((entry) => entry.label === "Deseados")).toHaveLength(1);
   });
 
   it("reparte las acciones entre los tres ámbitos", () => {

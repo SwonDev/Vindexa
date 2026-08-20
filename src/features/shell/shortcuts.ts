@@ -33,6 +33,7 @@ import type {
 export const DEFAULT_SHORTCUTS: ShortcutBindings = {
   library: "Mod+1",
   planner: "Mod+2",
+  wishlist: "Mod+5",
   collections: "Mod+3",
   tracking: "Mod+4",
   search: "Mod+F",
@@ -50,6 +51,7 @@ export const LEGACY_SEARCH_SHORTCUT = "Mod+K";
 export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   "library",
   "planner",
+  "wishlist",
   "collections",
   "tracking",
   "search",
@@ -61,15 +63,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
 
 export type LocalShortcutAction =
   /**
-   * Navegar a Deseados. Es la única acción de navegación que no viaja a SQLite:
-   * `ShortcutBindings` es una `struct` de siete campos en Rust y añadir un
-   * octavo sin migrar el backend rompería *todos* los guardados de preferencias,
-   * no sólo el de atajos. Vive aquí hasta que se aplique el diff del informe.
-   */
-  | "gotoWishlist"
-  /**
-   * Entrar al modo sofá. Es navegación, pero se guarda en el navegador por el
-   * mismo motivo que `gotoWishlist`: la `struct` de Rust no tiene ese campo.
+   * Entrar al modo sofá. Es navegación, pero se guarda en el navegador porque
+   * la `struct` de preferencias de Rust no tiene ese campo. Deseados **sí** lo
+   * tiene, así que vive con el resto de la navegación: tenerlo en los dos
+   * sitios dejaba «Mod+5» ocupado por un enlace que nadie escuchaba.
    */
   | "couchMode"
   | "commandPalette"
@@ -112,7 +109,6 @@ export type AnyShortcutAction = ShortcutAction | LocalShortcutAction;
 export type ShortcutMap = Record<AnyShortcutAction, string>;
 
 export const DEFAULT_LOCAL_SHORTCUTS: Record<LocalShortcutAction, string> = {
-  gotoWishlist: "Mod+5",
   couchMode: "Mod+Shift+M",
   commandPalette: "Mod+K",
   primaryAction: "Enter",
@@ -192,7 +188,7 @@ export const SHORTCUT_CATALOGUE: readonly ShortcutDescriptor[] = [
   { action: "planner", scope: "navigation", label: "Planificador", persistence: "backend" },
   { action: "collections", scope: "navigation", label: "Colecciones", persistence: "backend" },
   { action: "tracking", scope: "navigation", label: "Seguimiento", persistence: "backend" },
-  { action: "gotoWishlist", scope: "navigation", label: "Deseados", persistence: "local" },
+  { action: "wishlist", scope: "navigation", label: "Deseados", persistence: "backend" },
   { action: "couchMode", scope: "navigation", label: "Modo sofá", persistence: "local" },
   {
     action: "search",
@@ -305,7 +301,7 @@ export const SHORTCUT_CATALOGUE: readonly ShortcutDescriptor[] = [
 const SECTION_SHORTCUT_ACTIONS: Record<AppSection, AnyShortcutAction | undefined> = {
   library: "library",
   planner: "planner",
-  wishlist: "gotoWishlist",
+  wishlist: "wishlist",
   collections: "collections",
   tracking: "tracking",
   couch: "couchMode",
@@ -565,9 +561,22 @@ export function resolveShortcuts(
 ): ShortcutMap {
   const navigation: ShortcutBindings = { ...DEFAULT_SHORTCUTS, ...backend };
   if (navigation.search === LEGACY_SEARCH_SHORTCUT) navigation.search = DEFAULT_SHORTCUTS.search;
-  const taken = new Set(Object.values(navigation));
+  const taken = new Set<string>();
+  const resolved: Record<string, string> = {};
+  // La misma regla que abajo, también entre las de navegación: si dos guardadas
+  // comparten combinación —Ajustes lo rechaza al grabar, pero una base vieja
+  // puede traerlo—, se queda la primera del catálogo y la otra sin asignar, en
+  // vez de que una de las dos deje de responder sin decir por qué.
+  for (const action of SHORTCUT_ACTIONS) {
+    const shortcut = navigation[action];
+    if (!shortcut || taken.has(shortcut)) {
+      resolved[action] = "";
+      continue;
+    }
+    taken.add(shortcut);
+    resolved[action] = shortcut;
+  }
   const library = { ...DEFAULT_LOCAL_SHORTCUTS, ...local };
-  const resolved: Record<string, string> = { ...navigation };
   for (const action of LOCAL_SHORTCUT_ACTIONS) {
     const shortcut = library[action];
     // La cadena vacía significa «sin asignar»: no coincide con ningún evento y

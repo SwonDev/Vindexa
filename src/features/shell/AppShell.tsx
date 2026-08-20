@@ -270,14 +270,11 @@ export function AppShell() {
       switch (descriptor.action) {
         case "library":
         case "planner":
+        case "wishlist":
         case "collections":
         case "tracking":
           event.preventDefault();
           setSection(descriptor.action);
-          return;
-        case "gotoWishlist":
-          event.preventDefault();
-          setSection("wishlist");
           return;
         case "couchMode":
           event.preventDefault();
