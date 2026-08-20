@@ -50,8 +50,26 @@ use uuid::Uuid;
 pub const MAX_PRICE_CENTS: i64 = 100_000_000;
 /// Procedencias admitidas por el `CHECK` de la migración 029.
 pub const PRICE_SOURCES: [&str; 2] = ["steam_store", "manual"];
-/// Horas durante las que una observación se considera vigente.
+/// Horas durante las que una observación se considera vigente **al contarla**.
+///
+/// Es la palabra que se usa en pantalla —«consultado hace poco»—, no el ritmo
+/// al que se vuelve a preguntar: para eso está [`REFRESH_AFTER_HOURS`].
 pub const FRESH_HOURS: i64 = 24;
+
+/// Horas tras las que un precio vuelve a la cola.
+///
+/// La pasada automática corre cada seis horas, pero pedía sólo lo que llevara
+/// **un día** sin mirarse, así que tres de cada cuatro pasadas no traían ni un
+/// precio: medido en una biblioteca real, la pasada de las 08:59 no refrescó
+/// ninguno de los 957 precios guardados, todos de la tarde anterior.
+///
+/// Y las rebajas de Steam empiezan y terminan a hora fija: con un día de
+/// espera, una que empieza por la tarde podía no verse hasta la tarde
+/// siguiente, que es justo cuando ya no sirve. Mil cuatrocientos deseados son
+/// catorce peticiones por pasada, de cien en cien: el coste de mirarlo cada
+/// seis horas es despreciable y la diferencia se nota en lo único que importa
+/// aquí, que es enterarse a tiempo.
+pub const REFRESH_AFTER_HOURS: i64 = 6;
 /// Horas a partir de las cuales una observación se considera caducada.
 pub const STALE_HOURS: i64 = 24 * 7;
 /// Puntos que devuelve como máximo una serie histórica.
@@ -926,8 +944,8 @@ pub fn stale_wishlist_app_ids(
     } else {
         limit.min(MAX_REFRESH_BATCH)
     };
-    let cutoff =
-        (now - chrono::Duration::hours(FRESH_HOURS)).to_rfc3339_opts(SecondsFormat::Millis, true);
+    let cutoff = (now - chrono::Duration::hours(REFRESH_AFTER_HOURS))
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
     // Lo que la tienda contestó hace poco que no tiene precio se deja en paz
     // hasta mañana: preguntarlo otra vez a las seis horas gasta la cola en lo
     // único que se sabe que no va a contestar.
@@ -1527,6 +1545,30 @@ mod tests {
             stale_wishlist_app_ids(&connection, at(1, 12), 0).expect("cola"),
             vec![10],
             "el de la tienda ajena no se le pregunta a Steam"
+        );
+    }
+
+    /// La cola vuelve al ritmo de la pasada, no al de la palabra «reciente».
+    ///
+    /// Pedía sólo lo que llevara un día sin mirarse mientras la pasada corría
+    /// cada seis horas: tres de cada cuatro no traían nada. Medido en una
+    /// biblioteca real, la pasada de las 08:59 no refrescó ninguno de los 957
+    /// precios guardados, todos de la tarde anterior.
+    #[test]
+    fn un_precio_de_hace_ocho_horas_vuelve_a_la_cola_y_uno_de_hace_dos_no() {
+        let mut connection = database();
+        catalog_wish(&connection, 10, "Mirado hace ocho horas");
+        catalog_wish(&connection, 20, "Mirado hace dos");
+
+        record_observation(&mut connection, &observation(10, "EUR", 1999), at(1, 4))
+            .expect("registrar");
+        record_observation(&mut connection, &observation(20, "EUR", 2999), at(1, 10))
+            .expect("registrar");
+
+        assert_eq!(
+            stale_wishlist_app_ids(&connection, at(1, 12), 0).expect("cola"),
+            vec![10],
+            "a las ocho horas se vuelve a preguntar; a las dos, no"
         );
     }
 

@@ -17,6 +17,15 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   regla es la que debía ser desde el principio: **con una capa modal delante, la ayuda para
   decidir no se enseña**, ni al abrirla ni si la ficha llega después desde el teclado o la
   paleta. Tres pruebas de extremo a extremo cubren los tres caminos.
+- **Los precios se miraban una vez al día aunque la pasada corriera cada seis horas.** La cola
+  pedía sólo lo que llevara **un día** sin mirarse, así que tres de cada cuatro pasadas
+  automáticas no traían ni un precio: medido en una biblioteca real, la de las 08:59 no refrescó
+  ninguno de los 957 precios guardados, todos de la tarde anterior. Y las rebajas de Steam
+  empiezan y terminan a hora fija, así que una que empezaba por la tarde podía no verse hasta la
+  tarde siguiente, que es justo cuando ya no sirve. Ahora el ritmo de la cola es el de la pasada
+  —seis horas—, que en mil cuatrocientos deseados son catorce peticiones de cien en cien. La
+  palabra «consultado hace poco» sigue significando lo mismo: son dos cosas distintas y ahora
+  están separadas.
 - **Un regalo de Epic que empieza hoy decía «Desde el 20 ago».** Epic cambia el regalo los
   jueves a media tarde, así que lo anunciado empieza hoy la mitad de las veces y había que
   mirar el calendario para entenderlo. Hoy y mañana se dicen por su nombre, y con la hora.
