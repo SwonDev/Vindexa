@@ -252,6 +252,29 @@ describe("estructura de la descripción de la ficha", () => {
     expect(screen.getByText(/Este juego viene de GOG/)).toBeVisible();
   });
 
+  /**
+   * Y mil quinientos ochenta y tres más, por el mismo motivo.
+   *
+   * El catálogo de Steam Family tampoco se pregunta a Steam mientras no conste
+   * que se puede jugar. Es la misma espera eterna que la de las otras tiendas,
+   * en cinco veces más juegos.
+   */
+  it("no finge que está cargando la ficha de un juego familiar sin confirmar", async () => {
+    const { detailedDescription: _sinDescripcion, ...sinTexto } = enriched;
+    serveDetail({
+      ...sinTexto,
+      shortDescription: "",
+      metadataStatus: "pending",
+      ownershipSource: "family_shared",
+      familyAvailability: "unknown",
+    });
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    expect(screen.queryByText(/Cargando la descripción desde Steam/)).toBeNull();
+    expect(screen.getByText(/catálogo de Steam Family/)).toBeVisible();
+  });
+
   it("maqueta los bloques seguros como encabezados, párrafos y listas reales sin inyectar HTML", async () => {
     renderSheet();
     await screen.findByRole("heading", { name: "Portal 2", level: 2 });

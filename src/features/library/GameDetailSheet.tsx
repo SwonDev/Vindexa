@@ -459,6 +459,15 @@ export function GameDetailSheet({
   const hasProse = Boolean(detail?.shortDescription) || longBlocks.length > 0;
   const needsClamp = proseOverflows ?? proseLength > DESCRIPTION_CLAMP_CHARS;
   const proseCollapsed = hasProse && needsClamp && !descExpanded;
+  /**
+   * Su ficha no se ha pedido, y no por casualidad.
+   *
+   * La cola de metadatos deja fuera el catálogo compartido mientras no conste
+   * que se puede jugar. Sin esto, la pantalla leía su «pending» como trabajo en
+   * curso y enseñaba un girador que no iba a pararse nunca.
+   */
+  const esperaConfirmacionFamiliar =
+    detail?.ownershipSource === "family_shared" && detail.familyAvailability !== "confirmed";
   const submitAction = (request: ActionRequest) => {
     if (!actionMutation.isPending) actionMutation.mutate(request);
   };
@@ -826,6 +835,16 @@ export function GameDetailSheet({
                     Este juego viene de {storeLabel(detail.externalStore)}, que no publica una
                     descripción que Vindexa pueda leer. Lo que se ve de él —lo instalado, lo jugado
                     y tu organización— es local.
+                  </p>
+                ) : esperaConfirmacionFamiliar ? (
+                  /* Lo mismo, y en mil quinientos ochenta y tres juegos: el
+                     catálogo compartido no se pregunta a Steam hasta que consta
+                     que se puede jugar, para no gastar mil seiscientas
+                     peticiones en fichas que quizá no hagan falta. */
+                  <p className="detail-about__state">
+                    Está en el catálogo de Steam Family y todavía no consta que puedas jugarlo.
+                    Vindexa no pide su ficha hasta que se confirme, para no gastar la conexión en
+                    juegos que quizá no estén disponibles.
                   </p>
                 ) : metadataMutation.isPending || detail.metadataStatus === "pending" ? (
                   <p className="detail-about__state">
