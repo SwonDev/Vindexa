@@ -196,13 +196,51 @@ pub fn list(connection: &Connection, now: DateTime<Utc>) -> AppResult<Vec<EpicFr
 
     Ok(filas
         .into_iter()
-        .map(|(game, dismissed_at)| EpicFreeOffer {
-            owned: owned_index.contains(&normalize_title(&game.title)),
-            hours_left: game.hours_left(now),
-            dismissed: dismissed_at.is_some(),
-            game,
+        .map(|(mut game, dismissed_at)| {
+            game.state = estado_segun_el_reloj(&game, now);
+            EpicFreeOffer {
+                owned: owned_index.contains(&normalize_title(&game.title)),
+                hours_left: game.hours_left(now),
+                dismissed: dismissed_at.is_some(),
+                game,
+            }
         })
         .collect())
+}
+
+/// Qué es este regalo **ahora**, no cuando se preguntó.
+///
+/// Epic cambia el regalo a hora fija y a Vindexa se le pregunta cada seis
+/// horas, así que entre una pasada y la siguiente lo guardado envejece en las
+/// dos direcciones, y una de ellas hace daño: un regalo que terminó a las cinco
+/// seguía diciendo «Gratis ahora» con su botón de reclamar hasta seis horas
+/// después, y pulsarlo llevaba a una página donde ya cuesta dinero.
+///
+/// Con las fechas delante no hace falta esperar a preguntar: se leen. Sin
+/// fechas se respeta lo que dijo la tienda, porque entonces no se sabe nada
+/// mejor.
+fn estado_segun_el_reloj(game: &EpicFreeGame, now: DateTime<Utc>) -> FreeGameState {
+    let momento = |iso: &Option<String>| {
+        iso.as_deref()
+            .and_then(|valor| DateTime::parse_from_rfc3339(valor).ok())
+            .map(|fecha| fecha.with_timezone(&Utc))
+    };
+    let empieza = momento(&game.starts_at);
+    let acaba = momento(&game.ends_at);
+
+    // Ya terminó: ni vigente ni anunciado.
+    if acaba.is_some_and(|fin| fin <= now) {
+        return FreeGameState::Expired;
+    }
+    // Ya empezó y no ha terminado: es reclamable, lo diga o no la fila.
+    if empieza.is_some_and(|inicio| inicio <= now) {
+        return FreeGameState::Current;
+    }
+    // Todavía no empieza: anunciado, aunque se guardara como vigente.
+    if empieza.is_some_and(|inicio| inicio > now) {
+        return FreeGameState::Upcoming;
+    }
+    game.state
 }
 
 /// Descarta un regalo para que deje de aparecer y de avisar.
@@ -227,10 +265,15 @@ fn owned_titles(connection: &Connection) -> AppResult<std::collections::HashSet<
     Ok(titulos.iter().map(|title| normalize_title(title)).collect())
 }
 
+/// Cómo se guarda un estado en la tabla.
+///
+/// Sólo hay dos columnas posibles: `Expired` se deriva al leer y nunca llega
+/// aquí desde la tienda, pero si algún día llegara se guarda como anunciado,
+/// que es lo que era antes de su ventana.
 fn state_label(state: FreeGameState) -> &'static str {
     match state {
         FreeGameState::Current => "current",
-        FreeGameState::Upcoming => "upcoming",
+        FreeGameState::Upcoming | FreeGameState::Expired => "upcoming",
     }
 }
 
@@ -294,6 +337,49 @@ mod tests {
             .expect("consultar")
             .filter_map(|clave| clave.ok().flatten())
             .collect()
+    }
+
+    /// Un regalo que terminó no puede seguir diciendo «Gratis ahora».
+    ///
+    /// Epic cambia el regalo a hora fija y a Vindexa se le pregunta cada seis
+    /// horas: entre una pasada y la siguiente, lo guardado envejece. En una
+    /// dirección es cosmético —tarda en aparecer lo nuevo—; en la otra hace
+    /// daño, porque el botón de reclamar lleva a una página donde ya cuesta
+    /// dinero. Con las fechas delante no hace falta esperar a preguntar.
+    #[test]
+    fn la_ventana_manda_sobre_lo_que_se_guardo() {
+        let mut connection = database();
+        // La ventana del ayudante va del 14 al 21 de agosto a las 15:00.
+        let juegos = [regalo("of-1", "Caravan SandWitch", FreeGameState::Current)];
+        sync(&mut connection, &juegos, at(19, 10)).expect("guardar");
+
+        // Dentro de la ventana, vigente.
+        let dentro = list(&connection, at(20, 10)).expect("listar");
+        assert_eq!(dentro[0].game.state, FreeGameState::Current);
+
+        // Pasada la hora de cierre deja de serlo, sin esperar a la próxima
+        // pasada de la tienda.
+        let despues = list(&connection, at(21, 16)).expect("listar");
+        assert_eq!(despues[0].game.state, FreeGameState::Expired);
+        assert_eq!(
+            despues[0].hours_left, None,
+            "y no queda cuenta atrás que dar"
+        );
+    }
+
+    #[test]
+    fn y_lo_anunciado_pasa_a_reclamable_en_cuanto_llega_su_hora() {
+        let mut connection = database();
+        let juegos = [regalo("of-2", "Cardpocalypse", FreeGameState::Upcoming)];
+        sync(&mut connection, &juegos, at(13, 10)).expect("guardar");
+
+        // Antes de las 15:00 del día 14 sigue siendo un anuncio.
+        let antes = list(&connection, at(14, 9)).expect("listar");
+        assert_eq!(antes[0].game.state, FreeGameState::Upcoming);
+
+        // Después, se puede reclamar aunque la fila siga diciendo «upcoming».
+        let despues = list(&connection, at(14, 16)).expect("listar");
+        assert_eq!(despues[0].game.state, FreeGameState::Current);
     }
 
     #[test]

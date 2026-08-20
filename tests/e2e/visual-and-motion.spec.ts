@@ -102,14 +102,35 @@ test("la ficha desactiva por completo el parallax con movimiento reducido", asyn
   await expect(page.locator(".detail-hero__media")).toHaveCSS("opacity", "1");
 });
 
-test("la biblioteca no contiene violaciones axe serias o críticas", async ({ app, page }) => {
-  await app.goto();
-  await app.waitForShell();
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  const blocking = results.violations.filter(
-    (violation) => violation.impact === "serious" || violation.impact === "critical",
-  );
-  expect(blocking).toEqual([]);
-});
+/**
+ * Accesibilidad en **todas** las pantallas, no sólo en la que se mira primero.
+ *
+ * Se comprobaba la biblioteca y nada más, así que un contraste flojo o un
+ * control sin nombre en el planificador, en deseados o en seguimiento no lo
+ * veía nadie. Es la misma clase de agujero que dejó media aplicación sin menú
+ * contextual: una decisión que vale para toda la aplicación comprobada en una
+ * sola pantalla.
+ */
+const PANTALLAS = ["Biblioteca", "Planificador", "Colecciones", "Seguimiento", "Deseados"] as const;
+
+for (const pantalla of PANTALLAS) {
+  test(`${pantalla} no contiene violaciones axe serias o críticas`, async ({ app, page }) => {
+    await app.goto();
+    await app.waitForShell();
+    if (pantalla !== "Biblioteca") {
+      await app.navigate(pantalla);
+    }
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === "serious" || violation.impact === "critical",
+    );
+    // El mensaje lleva la regla y el primer elemento: un array vacío contra uno
+    // lleno no dice qué hay que arreglar.
+    expect(
+      blocking.map((v) => `${v.id} · ${v.nodes[0]?.target.join(" ")}`),
+      `violaciones en ${pantalla}`,
+    ).toEqual([]);
+  });
+}

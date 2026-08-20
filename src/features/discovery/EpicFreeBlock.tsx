@@ -60,7 +60,13 @@ export function EpicFreeBlock() {
     onError: (cause) => setError(getErrorMessage(cause)),
   });
 
-  const visibles = (offers.data ?? []).filter((offer) => !offer.dismissed);
+  // Lo caducado no se enseña. Sigue guardado —la tienda no lo retira hasta la
+  // siguiente vuelta y borrarlo perdería el «ya te avisé de éste»—, pero un
+  // regalo que terminó a las cinco no es una oportunidad a las seis: ofrecer
+  // reclamarlo lleva a una página donde ya cuesta dinero.
+  const visibles = (offers.data ?? []).filter(
+    (offer) => !offer.dismissed && offer.state !== "expired",
+  );
   const vigentes = visibles.filter((offer) => offer.state === "current");
   const anunciados = visibles.filter((offer) => offer.state === "upcoming");
 

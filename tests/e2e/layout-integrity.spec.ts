@@ -282,7 +282,7 @@ test.describe("capas que se pisan", () => {
     // Radix marca el disparador con el estado del emergente, y el contenido
     // vive en un portal fuera del diálogo: se comprueban los dos.
     await expect(carátula.locator('[data-state="open"]')).toHaveCount(0);
-    const emergentes = page.locator('[data-radix-popper-content-wrapper]');
+    const emergentes = page.locator("[data-radix-popper-content-wrapper]");
     await expect(emergentes).toHaveCount(0);
   });
 
@@ -336,4 +336,39 @@ test.describe("capas que se pisan", () => {
 
     await expect(page.locator(".game-preview")).toHaveCount(0);
   });
+});
+
+/**
+ * Nada se sale por el lado, en ninguna pantalla y a los anchos que aprietan.
+ *
+ * La barra de deseados se salía de su columna a 1180 px y se pintaba encima del
+ * editor; no lo vio ninguna prueba porque el desbordamiento sólo se comprobaba
+ * en la biblioteca, y a un ancho cómodo. La lección es la de siempre: lo que
+ * vale para toda la aplicación se comprueba en toda la aplicación.
+ */
+test.describe("nada se sale por el lado", () => {
+  const PANTALLAS = [
+    "Biblioteca",
+    "Planificador",
+    "Colecciones",
+    "Seguimiento",
+    "Deseados",
+  ] as const;
+  // 1180 es donde apareció el fallo; 1024 es la ventana mínima que la
+  // aplicación declara soportar.
+  const ANCHOS = [1024, 1180, 1440];
+
+  for (const ancho of ANCHOS) {
+    test(`a ${ancho} px ninguna pantalla desborda`, async ({ app, page }) => {
+      await page.setViewportSize({ width: ancho, height: 820 });
+      await app.goto();
+      await app.waitForShell();
+      for (const pantalla of PANTALLAS) {
+        if (pantalla !== "Biblioteca") {
+          await app.navigate(pantalla);
+        }
+        await app.expectNoHorizontalOverflow();
+      }
+    });
+  }
 });

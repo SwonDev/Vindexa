@@ -1637,7 +1637,8 @@ export interface EpicFreeOffer {
   description: string;
   storeUrl: string;
   imageUrl?: string | null;
-  state: "current" | "upcoming";
+  /** `expired` no viene de la tienda: se deriva de la ventana y el reloj. */
+  state: "current" | "upcoming" | "expired";
   startsAt?: string | null;
   endsAt?: string | null;
   /** En la unidad mínima de la moneda; `null` si Epic no lo publica. */

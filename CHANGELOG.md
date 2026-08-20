@@ -26,6 +26,12 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   —seis horas—, que en mil cuatrocientos deseados son catorce peticiones de cien en cien. La
   palabra «consultado hace poco» sigue significando lo mismo: son dos cosas distintas y ahora
   están separadas.
+- **Un regalo de Epic que ya había terminado seguía diciendo «Gratis ahora».** Epic cambia el
+  regalo a hora fija y a la tienda se le pregunta cada seis horas, así que entre una pasada y la
+  siguiente lo guardado envejece en las dos direcciones. Una es cosmética —lo nuevo tarda en
+  aparecer—; la otra hace daño, porque el botón «Reclamar» llevaba a una página donde ya cuesta
+  dinero. Ahora la ventana manda sobre lo que se guardó: con las fechas delante no hace falta
+  esperar a preguntar, lo que ya empezó se puede reclamar y lo que terminó desaparece del bloque.
 - **Un regalo de Epic que empieza hoy decía «Desde el 20 ago».** Epic cambia el regalo los
   jueves a media tarde, así que lo anunciado empieza hoy la mitad de las veces y había que
   mirar el calendario para entenderlo. Hoy y mañana se dicen por su nombre, y con la hora.

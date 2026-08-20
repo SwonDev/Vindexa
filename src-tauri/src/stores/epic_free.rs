@@ -49,6 +49,14 @@ pub enum FreeGameState {
     Current,
     /// Anunciado: será gratis más adelante.
     Upcoming,
+    /// Su ventana ya pasó.
+    ///
+    /// La tienda no devuelve esto: sale de comparar la ventana guardada con el
+    /// reloj, y existe para no llamar «anunciado» a lo que ya terminó ni
+    /// ofrecer reclamar algo que hoy cuesta dinero. En la tabla no se guarda
+    /// nunca —ahí sólo hay dos estados—, así que el `CHECK` de la migración
+    /// sigue valiendo tal cual.
+    Expired,
 }
 
 /// Un juego regalado por Epic, tal y como Vindexa lo enseña.

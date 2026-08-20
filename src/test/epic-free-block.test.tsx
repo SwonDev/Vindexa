@@ -181,6 +181,23 @@ describe("gratis en Epic", () => {
     expect(within(fila).getByText(/^Mañana a las \d{2}:\d{2}$/)).toBeVisible();
   });
 
+  /**
+   * Un regalo que terminó no es una oportunidad: es una página donde ya cuesta
+   * dinero. Se sigue guardando —para no volver a avisar del mismo— pero no se
+   * enseña.
+   */
+  it("lo que ya terminó no se enseña ni ofrece reclamarse", async () => {
+    mockedApi.epicFreeGames.mockResolvedValue([
+      offer({ offerId: "of-viejo", title: "Lo de la semana pasada", state: "expired" }),
+    ]);
+    const { container } = renderBlock();
+
+    // Sin nada que enseñar, el bloque entero desaparece: un recuadro vacío en
+    // una columna ya larga es ruido.
+    await waitFor(() => expect(container.querySelector(".epic-free")).toBeNull());
+    expect(screen.queryByText("Lo de la semana pasada")).toBeNull();
+  });
+
   it("lo descartado no ocupa sitio", async () => {
     mockedApi.epicFreeGames.mockResolvedValue([offer({ offerId: "of-1", dismissed: true })]);
     const { container } = renderBlock();
