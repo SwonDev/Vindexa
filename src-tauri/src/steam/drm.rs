@@ -420,7 +420,11 @@ pub fn classify(signals: &DrmSignals<'_>) -> DrmAssessment {
             DrmState::DrmFree,
             vec![DrmEvidence::new(
                 SOURCE_STORE,
-                "La ficha oficial no declara drm_notice ni ext_user_account_notice.",
+                // En palabras, no con el nombre interno de los dos campos de
+                // la API: una marca de DRM sólo vale si se puede comprobar, y
+                // no se comprueba lo que no se entiende. La migración 048
+                // reescribe las que ya estaban guardadas.
+                "La ficha oficial no declara ningún aviso de DRM ni exige una cuenta externa.",
             )],
         );
     }

@@ -1,7 +1,7 @@
 # Esquema y persistencia de Vindexa
 
 SQLite es la fuente de verdad de Vindexa. Este documento describe el esquema vigente de la
-migración **47** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
+migración **48** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
 normativa ejecutable.
 
 ## Índice
@@ -95,6 +95,10 @@ permite incorporarlo a la biblioteca personal como `family_shared`.
   y `failed`; desconocido no se convierte en cero.
 - `ownership_source` distingue `owned`, `family_shared` y `local`.
 - `family_availability` distingue `not_applicable`, `unknown` y `confirmed`.
+- `steam_deck_status` distingue `verified`, `playable`, `unsupported` y `unknown`. Vacío no es
+  `unknown`: vacío es «todavía no se ha preguntado» y `unknown` es «se preguntó y Steam no lo
+  ha valorado». Lo rellena `steam::deck_pass` a partir del informe público de la tienda, y sólo
+  para juegos que existen en Steam.
 
 ### `game_personal`
 
@@ -174,6 +178,28 @@ actual. Todas las ordenaciones añaden título/AppID como desempate determinista
 | 24 | `priority_engine` | Puntuación de prioridad explicable, modelo de gustos y próximos lanzamientos. |
 | 25 | `external_stores` | Cuentas y juegos detectados de Epic y GOG, con emparejado y confianza. |
 | 26 | `agent_bridge` | Clientes de agente autorizados y registro auditable de sus acciones. |
+| 27 | `agent_receipt` | El recibo de deshacer de una acción de agente tiene columna propia. |
+| 28 | `saved_views` | Vistas guardadas de biblioteca. |
+| 29 | `pricing_and_archive` | Precio observado de un juego y archivado de biblioteca. |
+| 30 | `wishlist_catalog` | Catálogo de deseados que todavía no se poseen. |
+| 31 | `game_platforms` | Plataformas en las que la tienda ofrece el juego. |
+| 32 | `itch_store` | itch.io como tercera tienda externa. |
+| 33 | `catalog_prices` | Precios también para los deseados que aún no se poseen. |
+| 34 | `sharp_covers` | Carátulas verticales a resolución real. |
+| 35 | `family_sharp_covers` | Carátulas del catálogo de Family a resolución real. |
+| 36 | `family_games_are_organizable` | Los juegos del préstamo familiar entran en la biblioteca y se organizan. |
+| 37 | `external_games_join_the_library` | Los juegos de Epic, GOG e itch.io entran en la biblioteca. |
+| 38 | `bought_elsewhere_is_owned` | Comprado en otra tienda es tuyo, aunque en Steam sólo esté prestado. |
+| 39 | `store_drm_reaches_the_library` | Lo que la tienda sabe del DRM llega a la ficha del juego. |
+| 40 | `upcoming_checks` | Cuándo se miró por última vez cada deseado buscando su fecha de salida. |
+| 41 | `art_cache_fits_the_library` | La caché de arte deja de tener techo. |
+| 42 | `agent_tasks` | Encargos que el agente repite solo. |
+| 43 | `epic_free_games` | Los juegos que Epic regala cada semana. |
+| 44 | `preview_screenshots` | Capturas para la vista rápida al pasar el ratón. |
+| 45 | `store_deals` | Ofertas de la tienda que no están en tus deseados. |
+| 46 | `deals_by_store` | Las ofertas dejan de ser sólo de Steam. |
+| 47 | `price_checks` | «Sin precio consultado» y «sin precio publicado» no son lo mismo. |
+| 48 | `drm_evidence_in_words` | La evidencia del DRM decía el nombre interno de dos campos de la API. |
 
 > [!WARNING]
 > Una migración ya publicada o aplicada es inmutable: no se edita su SQL. Una corrección se
@@ -185,7 +211,8 @@ el AppID a `owned`.
 
 `games.drm_state` nunca se adivina: parte de `unknown` y solo cambia con una señal oficial
 (`drm_notice`, `ext_user_account_notice`, `legal_notice` o las categorías de la tienda), que
-queda registrada en `drm_evidence_json`. La marca es un dato de ficha y no se muestra sobre
+queda registrada en `drm_evidence_json` **en palabras**: quien lee la ficha no tiene por qué
+saber cómo se llaman esos campos por dentro. La marca es un dato de ficha y no se muestra sobre
 las carátulas.
 
 `game_dlc.owned` solo puede subir desde la importación: la única prueba disponible es el
