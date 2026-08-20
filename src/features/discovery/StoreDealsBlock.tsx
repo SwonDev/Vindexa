@@ -267,7 +267,7 @@ function DealRow({
             }
             headline={
               <>
-                <b>{formatCents(deal.finalCents, deal.currency)}</b>
+                <b>{formatAmount(deal)}</b>
                 {deal.discountPercent > 0 && (
                   <>
                     <s>{formatCents(deal.initialCents, deal.currency)}</s>
@@ -301,8 +301,8 @@ function DealRow({
                   {describeMatch(deal.matchScore).percent} %
                 </span>
               )}
-              <span className="store-deals__amount">
-                {formatCents(deal.finalCents, deal.currency)}
+              <span className="store-deals__amount" data-free={deal.finalCents === 0}>
+                {formatAmount(deal)}
               </span>
             </button>
           </GamePreviewCard>
@@ -329,6 +329,18 @@ function DealRow({
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+/**
+ * Un precio de cero no se escribe «0,00 €».
+ *
+ * Steam y GOG regalan juegos durante unos días modelándolo como un descuento
+ * del cien por cien. «0,00 €» obliga a traducirlo mentalmente; «Gratis» dice lo
+ * que es, que además es lo más accionable que puede haber en una lista de
+ * rebajas —por eso van primero.
+ */
+function formatAmount(deal: DealCandidate): string {
+  return deal.finalCents === 0 ? "Gratis" : formatCents(deal.finalCents, deal.currency);
 }
 
 /** Cómo se llama cada tienda por escrito. */

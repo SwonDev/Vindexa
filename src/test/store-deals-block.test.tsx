@@ -117,6 +117,28 @@ describe("ofertas para ti", () => {
     expect(within(fila).getByText("72 %")).toBeVisible();
   });
 
+  it("un juego regalado dice «Gratis», no «0,00 €»", async () => {
+    // Steam y GOG regalan juegos unos días como un descuento del cien por
+    // cien. «0,00 €» obliga a traducirlo; «Gratis» dice lo que es.
+    mockedApi.storeDeals.mockResolvedValue(
+      vista([
+        deal({
+          appId: 10,
+          title: "Regalado esta semana",
+          finalCents: 0,
+          initialCents: 1999,
+          discountPercent: 100,
+        }),
+      ]),
+    );
+    renderBlock();
+
+    const fila = await screen.findByRole("button", { name: /Regalado esta semana/ });
+    expect(within(fila).getByText("Gratis")).toBeVisible();
+    expect(within(fila).queryByText("0,00 €")).toBeNull();
+    expect(within(fila).getByText("−100 %")).toBeVisible();
+  });
+
   it("una oferta sin puntuar no finge un cero", async () => {
     // Sin sus géneros no se puede saber si encaja; cero significaría «no te
     // interesa», y eso no lo ha comprobado nadie.

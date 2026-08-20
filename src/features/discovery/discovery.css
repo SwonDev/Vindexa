@@ -1775,6 +1775,12 @@
   font-size: 12px;
 }
 
+/* Gratis no es un precio bajo: es otra cosa. */
+.store-deals__amount[data-free="true"] {
+  color: var(--v-lime);
+  font-weight: 600;
+}
+
 .store-deals__note {
   display: flex;
   gap: 6px;

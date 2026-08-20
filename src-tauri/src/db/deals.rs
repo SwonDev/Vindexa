@@ -280,7 +280,12 @@ pub fn list(connection: &Connection, limit: u32) -> AppResult<Vec<DealCandidate>
                 match_score, match_reason
            FROM store_deals
           WHERE dismissed_at IS NULL
-          ORDER BY match_score IS NULL ASC,
+          -- Lo que está a cero va primero, por delante de cualquier
+          -- puntuación: un juego regalado durante unos días es la oferta más
+          -- accionable que puede haber, y ordenarlo por afinidad lo hundía
+          -- entre treinta rebajas del setenta por ciento.
+          ORDER BY (final_cents = 0) DESC,
+                   match_score IS NULL ASC,
                    match_score DESC,
                    discount_percent DESC,
                    store ASC,
@@ -523,6 +528,31 @@ mod tests {
         let titulos: Vec<&str> = lista.iter().map(|deal| deal.title.as_str()).collect();
         assert!(titulos.contains(&"El de Steam"));
         assert!(titulos.contains(&"El de GOG"));
+    }
+
+    #[test]
+    fn lo_que_esta_a_cero_va_por_delante_de_todo() {
+        // Steam y GOG regalan juegos durante unos días modelándolo como un
+        // descuento del cien por cien. Ordenado sólo por afinidad, un regalo
+        // sin género conocido quedaba el último de treinta.
+        let mut connection = database();
+        sync(
+            &mut connection,
+            "steam",
+            &[steam(20, "Regalado", 100), steam(21, "Rebajado", 80)],
+            at(10),
+        )
+        .expect("guardar");
+        connection
+            .execute_batch(
+                "UPDATE store_deals SET final_cents = 0 WHERE external_id = '20';
+                 UPDATE store_deals SET match_score = 0.9 WHERE external_id = '21';",
+            )
+            .expect("preparar");
+
+        let lista = list(&connection, 10).expect("listar");
+        assert_eq!(lista[0].title, "Regalado", "{lista:?}");
+        assert_eq!(lista[1].title, "Rebajado");
     }
 
     #[test]
