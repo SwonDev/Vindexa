@@ -167,6 +167,29 @@
   line-height: 1.45;
 }
 
+/* Un anuncio de Steam entero llena la bandeja él solo. */
+.notification-row__text[data-clamped="true"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.notification-row__more {
+  margin: 3px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--v-cyan);
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
+}
+
+.notification-row__more:hover {
+  text-decoration: underline;
+}
+
 .notification-row__meta {
   margin: 4px 0 0;
   color: var(--v-subtle);

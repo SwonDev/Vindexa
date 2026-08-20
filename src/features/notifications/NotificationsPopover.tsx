@@ -293,6 +293,13 @@ function NotificationRow({
 }) {
   const SeverityIcon = SEVERITY_ICON[event.severity] ?? IconInfoCircle;
   const unread = !event.readAt;
+  // Las publicaciones de Steam traen el anuncio entero. Tres de ellas llenaban
+  // la bandeja y había que desplazarse para ver si quedaba algo más, así que se
+  // recortan a tres líneas y se despliegan bajo petición. El umbral es por
+  // longitud del texto, no por lo que ocupe: medir el recorte exige pintar, y
+  // aquí basta con saber si hay bastante como para que sobre.
+  const [expanded, setExpanded] = useState(false);
+  const largo = (event.body?.length ?? 0) > 220;
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -304,7 +311,21 @@ function NotificationRow({
           />
           <div className="notification-row__body">
             <p className="notification-row__title">{event.title}</p>
-            {event.body && <p className="notification-row__text">{event.body}</p>}
+            {event.body && (
+              <p className="notification-row__text" data-clamped={largo && !expanded}>
+                {event.body}
+              </p>
+            )}
+            {largo && (
+              <button
+                type="button"
+                className="notification-row__more"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((abierto) => !abierto)}
+              >
+                {expanded ? "Leer menos" : "Leer más"}
+              </button>
+            )}
             <p className="notification-row__meta">
               {event.gameTitle ? `${event.gameTitle} · ` : ""}
               {formatRelativeDate(event.occurredAt)}
