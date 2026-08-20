@@ -24,10 +24,10 @@ import { describe, expect, it } from "vitest";
  * se añade también aquí, que es donde se ve de un vistazo cuántas hay.
  */
 const COMPUESTAS_EN_EJECUCION: Record<string, string> = {
-  "artwork--cover": "`artwork--${kind}` en Artwork.tsx",
-  "artwork--header": "`artwork--${kind}` en Artwork.tsx",
-  "artwork--hero": "`artwork--${kind}` en Artwork.tsx",
-  "artwork--icon": "`artwork--${kind}` en Artwork.tsx",
+  "artwork--cover": "la compone Artwork.tsx con el tipo de arte",
+  "artwork--header": "la compone Artwork.tsx con el tipo de arte",
+  "artwork--hero": "la compone Artwork.tsx con el tipo de arte",
+  "artwork--icon": "la compone Artwork.tsx con el tipo de arte",
 };
 
 /**
