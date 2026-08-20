@@ -750,13 +750,6 @@ button.detail-media__item:focus-visible img {
   line-height: 1.45;
 }
 
-.priority-verdicts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  padding: 1px;
-}
-
 .priority-verdict {
   display: grid;
   gap: 1px;
@@ -1062,14 +1055,6 @@ button.detail-media__item:focus-visible img {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
-}
-
-.dlc-pending__caveat {
-  margin: 2px 0 0;
-  max-width: 62ch;
-  color: var(--v-muted);
-  font-size: 11px;
-  line-height: 1.45;
 }
 
 .dlc-evidence {

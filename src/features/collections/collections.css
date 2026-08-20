@@ -27,21 +27,6 @@
   overflow: hidden;
 }
 
-.collections-heading__meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0 0;
-  color: var(--v-subtle);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.collections-heading__meta b {
-  color: var(--v-muted);
-  font-weight: 600;
-}
-
 /* Columna flexible, no rejilla de filas fijas, por dos motivos: el aviso vive
    en una región `sr-only` fuera de flujo cuando no hay mensaje y el acompañante
    de arrastre de `@dnd-kit` aparece y desaparece, de modo que la colocación
@@ -338,17 +323,6 @@
   padding: 3px 12px;
   border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: color-mix(in srgb, var(--background) 42%, transparent);
-}
-
-.collection-tile__chip {
-  overflow: hidden;
-  min-width: 0;
-  color: var(--v-subtle);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Los controles flotan sobre el extremo derecho del pie en vez de ocupar un

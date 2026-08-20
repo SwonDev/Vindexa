@@ -55,44 +55,6 @@
   color: var(--v-warning);
 }
 
-.wishlist-heading__caveat {
-  max-width: 62ch;
-  margin: 3px 0 0;
-  color: var(--v-subtle);
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.wishlist-heading__totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wishlist-heading__totals li {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  font-variant-numeric: tabular-nums;
-}
-
-.wishlist-heading__totals b {
-  color: var(--foreground);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.wishlist-heading__totals span {
-  color: var(--v-subtle);
-  font-size: 10px;
-}
-
 /* El área de trabajo no crece: lo que se desplaza es cada carril por dentro.
    Con un carril de mil cuatrocientas tarjetas, dejar crecer esto arrastraba la
    página entera y la cabecera se iba de la pantalla. */
