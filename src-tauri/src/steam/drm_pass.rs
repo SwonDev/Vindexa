@@ -156,8 +156,11 @@ pub async fn run_if_due(database: &Database) -> AppResult<Option<DrmPassReport>>
 
 /// Juegos de Steam a los que nunca se les miró el DRM.
 ///
-/// «Nunca se miró» no es lo mismo que «se miró y no se supo»: lo segundo tiene
-/// fecha en `drm_checked_at` y no vuelve a la cola hasta pasado su plazo.
+/// «Nunca se miró» no es lo mismo que «se miró y no se supo». Lo segundo tiene
+/// fecha en `drm_checked_at` y **no vuelve a esta cola**: no hay plazo de
+/// caducidad, y decir que lo hay sería describir algo que no ocurre. Si la
+/// ficha de ese juego se vuelve a enriquecer, el veredicto se recalcula por ese
+/// camino, que es el que sí revisita.
 fn pending_app_ids(database: &Database, limit: u32) -> AppResult<Vec<u32>> {
     let connection = database.open()?;
     let mut statement = connection.prepare(
