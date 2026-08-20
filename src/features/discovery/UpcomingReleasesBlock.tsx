@@ -279,7 +279,7 @@ export function UpcomingReleasesBlock() {
             </div>
           </dl>
           {highlights.length ? (
-            <ul className="taste-report__facets">
+            <ul className="taste-report__facets" aria-label="Las facetas con más peso">
               {highlights.map((facet) => (
                 <li key={`${facet.facet}-${facet.value}`} data-sign={facet.weight >= 0 ? "+" : "−"}>
                   <span className="taste-report__facet">

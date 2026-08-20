@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DiscoveryScreen } from "@/features/discovery/DiscoveryScreen";
@@ -200,6 +200,33 @@ describe("seguimiento y descubrimiento", () => {
     expect(
       await screen.findByRole("heading", { name: "Recomendaciones descartadas" }),
     ).toBeVisible();
+  });
+
+  /**
+   * Los bloques de señales pintan cuatro y la cabecera decía el total.
+   *
+   * «12 publicaciones verificadas» sobre una lista de cuatro es exactamente la
+   * cifra que engañaba en los próximos lanzamientos: se lee como el contenido
+   * de la lista y es otra cosa.
+   */
+  it("no da el total por lo que se ve cuando la lista se recorta", async () => {
+    const user = userEvent.setup();
+    const publicaciones = Array.from({ length: 7 }, (_, indice) => ({
+      ...(snapshot.officialPublications[0] as (typeof snapshot.officialPublications)[number]),
+      gid: `gid-${indice}`,
+      title: `Publicación ${indice}`,
+    }));
+    mockedApi.discoverySnapshot.mockResolvedValue({
+      ...snapshot,
+      officialPublications: publicaciones,
+    });
+    renderScreen();
+
+    await user.click(await screen.findByRole("tab", { name: "Novedades" }));
+    expect(await screen.findByText("4 de 7 publicaciones verificadas")).toBeVisible();
+    // Y lo que se ve son cuatro, no siete.
+    const lista = screen.getByRole("list", { name: "Publicaciones verificadas de Steam" });
+    expect(within(lista).getAllByRole("listitem")).toHaveLength(4);
   });
 
   it("crea un recordatorio persistente desde un juego olvidado", async () => {

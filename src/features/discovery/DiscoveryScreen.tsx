@@ -548,6 +548,21 @@ const signalGroups = [
   description: string;
 }[];
 
+/**
+ * Cuántas se enseñan de cuántas hay.
+ *
+ * Estos bloques pintan las cuatro primeras y la cabecera decía el total: «12
+ * publicaciones verificadas» sobre una lista de cuatro es la misma cifra que
+ * engaña que «12 candidatos puntuados» cuando doce era el tope. Cuando hay
+ * recorte se dice, y cuando no lo hay no se añade un «de» que sobra.
+ */
+const SIGNAL_VISIBLE = 4;
+
+function signalCount(total: number, singular: string, plural: string): string {
+  if (total > SIGNAL_VISIBLE) return `${SIGNAL_VISIBLE} de ${total} ${plural}`;
+  return `${total} ${total === 1 ? singular : plural}`;
+}
+
 function SignalsNav({
   group,
   onSelect,
@@ -1070,7 +1085,7 @@ function PublicationsBlock({
         : refresh.data?.failedGames
           ? `${refresh.data.failedGames} juegos pendientes · caché local`
           : items.length
-            ? `${items.length} publicaciones verificadas`
+            ? signalCount(items.length, "publicación verificada", "publicaciones verificadas")
             : "Sin publicaciones recientes";
   return (
     <SignalBlock
@@ -1112,7 +1127,7 @@ function PublicationsBlock({
         </p>
       ) : items.length ? (
         <ul className="signal-list" aria-label="Publicaciones verificadas de Steam">
-          {items.slice(0, 4).map((item) => (
+          {items.slice(0, SIGNAL_VISIBLE).map((item) => (
             <li key={`${item.appId}-${item.gid}`}>
               <div>
                 <strong>{item.title}</strong>
@@ -1143,7 +1158,7 @@ function RelatedReleasesBlock({ items, loading }: { items: RelatedRelease[]; loa
         loading
           ? "Contrastando cambios"
           : items.length
-            ? `${items.length} relaciones verificadas`
+            ? signalCount(items.length, "relación verificada", "relaciones verificadas")
             : "Sin coincidencias"
       }
       state={items.length ? "ready" : "unavailable"}
@@ -1153,7 +1168,7 @@ function RelatedReleasesBlock({ items, loading }: { items: RelatedRelease[]; loa
         <SignalSkeleton lines={2} />
       ) : items.length ? (
         <ul className="signal-list" aria-label="Lanzamientos relacionados verificables">
-          {items.slice(0, 4).map((item) => (
+          {items.slice(0, SIGNAL_VISIBLE).map((item) => (
             <li key={`${item.appId}-${item.relatedToAppId}-${item.criterion}`}>
               <div>
                 <strong>{item.title}</strong>
@@ -1187,7 +1202,7 @@ function UpcomingBlock({ items, loading }: { items: GameSummary[]; loading: bool
         loading
           ? "Contrastando cambios"
           : items.length
-            ? `${items.length} fechas reales`
+            ? signalCount(items.length, "fecha real", "fechas reales")
             : "Sin fechas futuras"
       }
       state={items.length ? "ready" : "unavailable"}
@@ -1196,7 +1211,7 @@ function UpcomingBlock({ items, loading }: { items: GameSummary[]; loading: bool
         <SignalSkeleton lines={2} />
       ) : items.length ? (
         <ul className="signal-list signal-list--tight" aria-label="Próximos lanzamientos fechados">
-          {items.slice(0, 4).map((game) => (
+          {items.slice(0, SIGNAL_VISIBLE).map((game) => (
             <li key={game.appId}>
               <div>
                 <strong>{game.title}</strong>

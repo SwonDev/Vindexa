@@ -483,6 +483,15 @@ function seedRules(seed: CollectionSeed | undefined): SmartRule[] {
   }));
 }
 
+/**
+ * Cuántas portadas enseña la vista previa.
+ *
+ * El recuento que hay encima es el de verdad —la consulta cuenta todo lo que
+ * casa—, pero debajo sólo caben unas pocas portadas. Sin decirlo, «127 juegos
+ * coinciden» encima de seis portadas se lee como que las seis son las 127.
+ */
+const PREVIEW_VISIBLE = 6;
+
 export function CollectionEditorDialog({
   open,
   onOpenChange,
@@ -741,7 +750,9 @@ export function CollectionEditorDialog({
                   <strong>Vista previa</strong>
                   <span>
                     {preview.data
-                      ? `${preview.data.total} juegos coinciden`
+                      ? preview.data.total > PREVIEW_VISIBLE
+                        ? `${preview.data.total} juegos coinciden · se ven ${PREVIEW_VISIBLE}`
+                        : `${preview.data.total} juegos coinciden`
                       : "Comprueba las reglas antes de guardar"}
                   </span>
                 </div>
@@ -760,7 +771,7 @@ export function CollectionEditorDialog({
               </div>
               {preview.data && (
                 <div className="preview-games">
-                  {preview.data.items.slice(0, 6).map((game) => (
+                  {preview.data.items.slice(0, PREVIEW_VISIBLE).map((game) => (
                     <div key={game.appId}>
                       <Artwork
                         appId={game.appId}
