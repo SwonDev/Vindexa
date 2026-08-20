@@ -68,6 +68,11 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   respuesta ahora se guarda, se cuenta aparte —«no pone a la venta» frente a «sin consultar»—,
   cada fila dice cuál de las dos cosas le pasa, y deja de repreguntarse cada seis horas por algo
   que no va a cambiar hoy.
+- **La evidencia del DRM enseñaba el nombre interno del campo.** «extUserAccountNotice → Rockstar
+  Games», escondido dentro de un emergente y concatenado con el resto de la explicación. La marca
+  de DRM sólo vale si se puede comprobar, y no se comprueba lo que no se entiende: ahora la
+  evidencia se lee bajo la insignia, en palabras —«Cuenta externa que pide la ficha»— y con sitio
+  para que quepa en una línea.
 - **El repaso de DRM se atascaba en los juegos retirados.** Cuando la tienda contesta que un
   juego ya no existe, eso no se apuntaba en ninguna parte, así que seguía en la cola. Y como la
   cola va por AppID ascendente y los juegos viejos son justo los que más se retiran, cada tanda

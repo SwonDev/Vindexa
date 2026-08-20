@@ -327,6 +327,36 @@ describe("estructura de la descripción de la ficha", () => {
     expect(artwork.textContent).not.toMatch(/DRM/i);
   });
 
+  /**
+   * La evidencia es lo que hace comprobable la marca.
+   *
+   * Antes vivía dentro de un emergente, concatenada y con el **nombre interno
+   * del campo** de la respuesta de la tienda: «extUserAccountNotice → Rockstar
+   * Games». Un dato que no se entiende no se puede comprobar, y una marca de
+   * DRM sin evidencia comprobable es una insignia.
+   */
+  it("enseña de dónde sale la marca de DRM, en palabras", async () => {
+    serveDetail({
+      ...enriched,
+      drmState: "third_party_drm",
+      drmEvidence: [
+        { source: "drmNotice", match: "Denuvo Anti-Tamper" },
+        { source: "extUserAccountNotice", match: "Rockstar Games" },
+      ],
+    } as unknown as GameDetail);
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    const evidencia = document.querySelector(".detail-drm__evidence") as HTMLElement;
+    expect(evidencia).not.toBeNull();
+    expect(within(evidencia).getByText("Aviso de DRM de la ficha")).toBeVisible();
+    expect(within(evidencia).getByText("Denuvo Anti-Tamper")).toBeVisible();
+    expect(within(evidencia).getByText("Cuenta externa que pide la ficha")).toBeVisible();
+    expect(within(evidencia).getByText("Rockstar Games")).toBeVisible();
+    // Y el nombre interno del campo no aparece en ninguna parte.
+    expect(evidencia.textContent).not.toContain("extUserAccountNotice");
+  });
+
   it("publica capturas con texto alternativo y deriva el vídeo a la tienda integrada", async () => {
     const user = userEvent.setup();
     renderSheet();

@@ -1577,7 +1577,10 @@ function readSpecs(detail: EnrichedDetail): SpecEntry[] {
       id: "drm",
       label: "Protección",
       icon: drm.state === "drm_free" ? <IconShieldCheck /> : <IconShieldLock />,
-      wide: Boolean(detail.drmNotice) || drm.evidence.length > 1,
+      // Con evidencia delante, la celda estrecha parte «Rockstar Games
+      // (permite la vinculación…)» en cuatro líneas de dos palabras. La
+      // evidencia es lo que hace comprobable la marca: necesita ancho.
+      wide: Boolean(detail.drmNotice) || drm.evidence.length > 0,
       value: <DrmValue state={drm.state} evidence={drm.evidence} notice={detail.drmNotice} />,
     });
   }
@@ -1595,6 +1598,27 @@ function readSpecs(detail: EnrichedDetail): SpecEntry[] {
   return specs;
 }
 
+/**
+ * De dónde salió cada señal, en palabras.
+ *
+ * Los nombres internos —`extUserAccountNotice`, `storeAppdetails`— son los
+ * campos de la respuesta de la tienda, no algo que nadie deba leer. La marca de
+ * DRM sólo vale si se puede comprobar, y no se comprueba nada que no se
+ * entienda.
+ */
+const DRM_SOURCE_LABEL: Record<string, string> = {
+  drmNotice: "Aviso de DRM de la ficha",
+  extUserAccountNotice: "Cuenta externa que pide la ficha",
+  legalNotice: "Aviso legal de la ficha",
+  categories: "Categorías de la tienda",
+  storeAppdetails: "Ficha oficial de la tienda",
+  storeCatalogue: "Catálogo de la tienda",
+};
+
+function drmSourceLabel(source: string): string {
+  return DRM_SOURCE_LABEL[source] ?? source;
+}
+
 function DrmValue({
   state,
   evidence,
@@ -1605,23 +1629,34 @@ function DrmValue({
   notice?: string | null | undefined;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="detail-drm" data-state={state}>
-          {state === "drm_free" ? <IconShieldCheck /> : <IconShieldLock />}
-          {DRM_LABEL[state]}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">
-        <span>
-          {DRM_EXPLANATION[state]}
-          {notice ? ` Aviso oficial: ${notice}` : ""}
-          {evidence.length
-            ? ` Señales: ${evidence.map((item) => `${item.source} → ${item.match}`).join("; ")}`
-            : ""}
-        </span>
-      </TooltipContent>
-    </Tooltip>
+    <div className="detail-drm-block">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="detail-drm" data-state={state}>
+            {state === "drm_free" ? <IconShieldCheck /> : <IconShieldLock />}
+            {DRM_LABEL[state]}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <span>
+            {DRM_EXPLANATION[state]}
+            {notice ? ` Aviso oficial: ${notice}` : ""}
+          </span>
+        </TooltipContent>
+      </Tooltip>
+      {/* La evidencia se lee, no se esconde en un emergente y con el nombre
+          interno del campo: es lo único que hace comprobable la marca. */}
+      {evidence.length > 0 && (
+        <ul className="detail-drm__evidence">
+          {evidence.map((item) => (
+            <li key={`${item.source}:${item.match}`}>
+              <span>{drmSourceLabel(item.source)}</span>
+              <b>{item.match}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

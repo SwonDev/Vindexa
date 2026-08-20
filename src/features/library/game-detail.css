@@ -394,11 +394,41 @@
   color: var(--v-warning);
 }
 
+/* La evidencia es lo que hace comprobable la marca: se lee, no se esconde. */
+.detail-drm-block {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+  min-width: 0;
+}
+
 .detail-drm__evidence {
-  margin: 4px 0 0;
-  padding-left: 14px;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detail-drm__evidence li {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.4;
+}
+
+.detail-drm__evidence span {
+  color: var(--v-subtle);
+}
+
+.detail-drm__evidence b {
+  overflow: hidden;
+  color: var(--v-muted);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  text-wrap: pretty;
 }
 
 .detail-spec__languages {
