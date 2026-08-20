@@ -227,6 +227,31 @@ describe("estructura de la descripción de la ficha", () => {
     expect(specs.compareDocumentPosition(media) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  /**
+   * Un juego de otra tienda no está esperando a Steam.
+   *
+   * La cola de metadatos excluye a propósito lo que viene de Epic, GOG o
+   * itch.io: no existe en Steam y pedir su ficha allí no devolvería nada. Pero
+   * la ficha decía «Cargando la descripción desde Steam…» con un girador
+   * eterno, en trescientos dieciocho juegos, porque su estado se queda en
+   * «pending» para siempre. Una espera que no acaba nunca es peor que decir que
+   * no hay nada que esperar.
+   */
+  it("no finge que está cargando la ficha de un juego que no es de Steam", async () => {
+    const { detailedDescription: _sinDescripcion, ...sinTexto } = enriched;
+    serveDetail({
+      ...sinTexto,
+      shortDescription: "",
+      metadataStatus: "pending",
+      externalStore: "gog",
+    });
+    renderSheet();
+    await screen.findByRole("heading", { name: "Portal 2", level: 2 });
+
+    expect(screen.queryByText(/Cargando la descripción desde Steam/)).toBeNull();
+    expect(screen.getByText(/Este juego viene de GOG/)).toBeVisible();
+  });
+
   it("maqueta los bloques seguros como encabezados, párrafos y listas reales sin inyectar HTML", async () => {
     renderSheet();
     await screen.findByRole("heading", { name: "Portal 2", level: 2 });

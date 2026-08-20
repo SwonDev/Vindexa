@@ -816,6 +816,17 @@ export function GameDetailSheet({
                       </Button>
                     )}
                   </>
+                ) : detail.externalStore ? (
+                  /* Un juego de otra tienda no tiene ficha en Steam y nadie va
+                     a pedirla: la cola de metadatos lo excluye a propósito.
+                     Decía «Cargando la descripción desde Steam…» y ahí se
+                     quedaba, con un girador eterno, en trescientos dieciocho
+                     juegos. */
+                  <p className="detail-about__state">
+                    Este juego viene de {storeLabel(detail.externalStore)}, que no publica una
+                    descripción que Vindexa pueda leer. Lo que se ve de él —lo instalado, lo jugado
+                    y tu organización— es local.
+                  </p>
                 ) : metadataMutation.isPending || detail.metadataStatus === "pending" ? (
                   <p className="detail-about__state">
                     <IconLoader2 className="is-spinning" /> Cargando la descripción desde Steam…

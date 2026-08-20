@@ -4,6 +4,22 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 pub const MAX_VISIBLE_PRIORITY_IDS: usize = 240;
 
+/// A qué juegos se les puede pedir la ficha a Steam.
+///
+/// Se escribe una vez porque la usan tres consultas: la que encola el trabajo,
+/// la que encola uno suelto y la que cuenta cuántos faltan. Cuando la cuenta no
+/// usaba la misma condición, la barra de estado prometía completar trescientas
+/// diecisiete fichas que nadie iba a pedir nunca —las de Epic, GOG e itch.io,
+/// que no existen en Steam—: un «faltan 317 de 2.260» que no podía llegar a
+/// cero.
+///
+/// La tabla `games` tiene que estar aliasada como `g`.
+const ELEGIBLES: &str = "g.external_store IS NULL
+            AND NOT (
+                g.ownership_source = 'family_shared'
+                AND g.family_availability <> 'confirmed'
+            )";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MetadataJob {
     pub app_id: u32,
@@ -38,19 +54,12 @@ pub fn enqueue(
     }
     if include_backlog {
         transaction.execute(
-            "INSERT INTO metadata_enrichment_queue(app_id, priority)
+            &format!(
+                "INSERT INTO metadata_enrichment_queue(app_id, priority)
              SELECT g.app_id, CASE WHEN p.installed = 1 THEN 50 ELSE 100 END
                FROM games g
                JOIN game_personal p ON p.app_id = g.app_id
-              WHERE NOT (
-                    g.ownership_source = 'family_shared'
-                    AND g.family_availability <> 'confirmed'
-              )
-                -- Un juego de Epic, GOG o itch.io no existe en Steam: pedir su
-                -- ficha allí devolvería vacío y lo dejaría marcado como «sin
-                -- datos» para reintentarlo cada semana. Sus datos vienen de su
-                -- propia tienda.
-                AND g.external_store IS NULL
+              WHERE {ELEGIBLES}
                 AND (
                     g.metadata_fetched_at IS NULL
                     OR (g.metadata_status = 'success'
@@ -87,7 +96,8 @@ pub fn enqueue(
                     ELSE NULL
                 END,
                 finished_at = NULL,
-                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+            ),
             [],
         )?;
     }
@@ -108,15 +118,12 @@ pub fn enqueue(
 
 fn enqueue_one(connection: &Connection, app_id: u32, priority: u8) -> AppResult<()> {
     connection.execute(
-        "INSERT INTO metadata_enrichment_queue(app_id, priority)
+        &format!(
+            "INSERT INTO metadata_enrichment_queue(app_id, priority)
          SELECT g.app_id, ?2
            FROM games g
           WHERE g.app_id = ?1
-            AND g.external_store IS NULL
-            AND NOT (
-                g.ownership_source = 'family_shared'
-                AND g.family_availability <> 'confirmed'
-            )
+            AND {ELEGIBLES}
             AND (
                 g.metadata_fetched_at IS NULL
                 OR (g.metadata_status = 'success'
@@ -153,7 +160,8 @@ fn enqueue_one(connection: &Connection, app_id: u32, priority: u8) -> AppResult<
                 ELSE NULL
             END,
             finished_at = NULL,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        ),
         params![app_id, priority],
     )?;
     Ok(())
@@ -293,8 +301,7 @@ pub fn next_ready_delay_ms(connection: &Connection) -> AppResult<Option<u64>> {
 pub fn status(connection: &Connection) -> AppResult<MetadataEnrichmentStatus> {
     let total_games = count_to_u64(
         connection.query_row(
-            "SELECT COUNT(*) FROM games
-          WHERE NOT (ownership_source = 'family_shared' AND family_availability <> 'confirmed')",
+            &format!("SELECT COUNT(*) FROM games g WHERE {ELEGIBLES}"),
             [],
             |row| row.get::<_, i64>(0),
         )?,
@@ -302,10 +309,12 @@ pub fn status(connection: &Connection) -> AppResult<MetadataEnrichmentStatus> {
     )?;
     let fresh_metadata = count_to_u64(
         connection.query_row(
-            "SELECT COUNT(*) FROM games
-          WHERE metadata_status = 'success'
-            AND datetime(metadata_fetched_at) >= datetime('now', '-7 days')
-            AND NOT (ownership_source = 'family_shared' AND family_availability <> 'confirmed')",
+            &format!(
+                "SELECT COUNT(*) FROM games g
+          WHERE g.metadata_status = 'success'
+            AND datetime(g.metadata_fetched_at) >= datetime('now', '-7 days')
+            AND {ELEGIBLES}"
+            ),
             [],
             |row| row.get::<_, i64>(0),
         )?,
@@ -419,6 +428,47 @@ mod tests {
                 .expect("crear datos personales");
         }
         connection
+    }
+
+    /// Lo que nunca se va a pedir no se cuenta como pendiente.
+    ///
+    /// Un juego de Epic, GOG o itch.io no existe en Steam, así que la cola no
+    /// lo encola nunca. Cuando la cuenta usaba otra condición, la barra de
+    /// estado decía «faltan 317 de 2.260» y esas trescientas diecisiete no
+    /// bajaban jamás: trabajo prometido que nadie iba a hacer.
+    #[test]
+    fn un_juego_de_otra_tienda_no_engorda_el_recuento_de_fichas_pendientes() {
+        let mut connection = database();
+        connection
+            .execute(
+                "INSERT INTO games(app_id, title, ownership_source, family_availability,
+                                   external_store)
+                 VALUES (99, 'Comprado en Epic', 'owned', 'not_applicable', 'epic')",
+                [],
+            )
+            .expect("crear juego de otra tienda");
+        connection
+            .execute(
+                "INSERT INTO game_personal(app_id, status_id) VALUES (99, 'backlog')",
+                [],
+            )
+            .expect("crear datos personales");
+
+        let antes = status(&connection).expect("estado").total_games;
+        enqueue(&mut connection, &[99], true).expect("encolar");
+        let encolado: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM metadata_enrichment_queue WHERE app_id = 99",
+                [],
+                |row| row.get(0),
+            )
+            .expect("contar");
+
+        assert_eq!(encolado, 0, "no se encola porque no existe en Steam");
+        assert_eq!(
+            antes, 3,
+            "los tres de Steam; ni el de Epic ni el compartido sin confirmar"
+        );
     }
 
     #[test]
