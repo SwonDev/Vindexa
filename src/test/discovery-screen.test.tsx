@@ -9,6 +9,7 @@ import type { AppBootstrap, DiscoverySnapshot, GameSummary } from "@/lib/types";
 vi.mock("@/lib/tauri", () => ({
   api: {
     discoverySnapshot: vi.fn(),
+    discoveryRadarPage: vi.fn(),
     refreshDiscoveryNews: vi.fn(),
     listGames: vi.fn(),
     recommendGame: vi.fn(),
@@ -251,6 +252,43 @@ describe("seguimiento y descubrimiento", () => {
     // Y lo que se ve son cuatro, no siete.
     const lista = screen.getByRole("list", { name: "Publicaciones verificadas de Steam" });
     expect(within(lista).getAllByRole("listitem")).toHaveLength(4);
+  });
+
+  /**
+   * La cifra que dice el radar tiene que poder recorrerse.
+   *
+   * «12 de 280 en esta vista» sin manera de llegar a los 280 es una cifra que
+   * sólo sirve para mirar. El botón pide la tanda siguiente desde donde acabó
+   * la primera.
+   */
+  it("trae más olvidados sin repetir los que ya estaban", async () => {
+    const user = userEvent.setup();
+    const olvidados = Array.from({ length: 12 }, (_, indice) => ({
+      ...trackedGame,
+      appId: 1000 + indice,
+      title: `Parado ${indice}`,
+      tracking: false,
+    }));
+    mockedApi.discoverySnapshot.mockResolvedValue({
+      ...snapshot,
+      forgotten: olvidados,
+      totals: { ...snapshot.totals, forgotten: 280 },
+    });
+    mockedApi.discoveryRadarPage.mockResolvedValue([
+      { ...trackedGame, appId: 2000, title: "El decimotercero", tracking: false },
+    ]);
+    renderScreen();
+
+    await user.click(await screen.findByRole("tab", { name: /Olvidados/ }));
+    expect(await screen.findByText("12 de 280 en esta vista")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /Ver más · quedan 268/ }));
+
+    expect(await screen.findByText("El decimotercero")).toBeVisible();
+    // La tanda se pide desde el doce, no desde el principio.
+    expect(mockedApi.discoveryRadarPage).toHaveBeenCalledWith("forgotten", 12, 24);
+    // Y la cabecera cuenta lo que hay en pantalla ahora.
+    expect(screen.getByText("13 de 280 en esta vista")).toBeVisible();
   });
 
   it("crea un recordatorio persistente desde un juego olvidado", async () => {

@@ -1400,6 +1400,15 @@ impl Database {
         discovery::snapshot(&self.open()?)
     }
 
+    pub fn discovery_radar_page(
+        &self,
+        view: &str,
+        offset: u32,
+        limit: u32,
+    ) -> AppResult<Vec<crate::models::GameSummary>> {
+        discovery::radar_page(&self.open()?, view, offset, limit)
+    }
+
     pub fn claim_news_refresh_candidates(
         &self,
         limit: usize,

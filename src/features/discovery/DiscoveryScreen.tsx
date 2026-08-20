@@ -4,6 +4,7 @@ import {
   IconBolt,
   IconCalendarEvent,
   IconCheck,
+  IconChevronDown,
   IconClock,
   IconDeviceGamepad2,
   IconEye,
@@ -79,6 +80,15 @@ import type {
 import "./discovery.css";
 
 type RadarView = "tracking" | "reminders" | "forgotten" | "almost";
+
+/**
+ * Cuántos trae el panorama de cada lista antes de pedir más.
+ *
+ * Es el `DISCOVERY_LIST_LIMIT` de Rust visto desde aquí: el punto donde
+ * empieza la siguiente tanda. Si allí cambia, aquí se repetiría la última
+ * página, así que la prueba de contrato lo compara con el valor real.
+ */
+const RADAR_FIRST_PAGE = 12;
 
 interface RadarDefinition {
   id: RadarView;
@@ -251,12 +261,32 @@ export function DiscoveryScreen({
     onError: (cause) => setAnnouncement(`No se pudo restaurar: ${getErrorMessage(cause)}`),
   });
 
+  /**
+   * Lo que se ha traído además de la primera tanda.
+   *
+   * El panorama trae doce de cada montón porque es lo que se ve de un vistazo.
+   * Decir «12 de 280» y no poder llegar a los 280 es una cifra que sólo sirve
+   * para mirar; esto es lo que la hace recorrible. Se guarda por vista, porque
+   * cambiar de pestaña y volver no debería perder lo leído.
+   */
+  const [radarExtra, setRadarExtra] = useState<Partial<Record<RadarView, GameSummary[]>>>({});
+  const masRadar = useMutation({
+    mutationFn: (vista: "forgotten" | "almost") =>
+      api.discoveryRadarPage(vista, RADAR_FIRST_PAGE + (radarExtra[vista]?.length ?? 0), 24),
+    onSuccess: (items, vista) => {
+      setRadarExtra((actual) => ({ ...actual, [vista]: [...(actual[vista] ?? []), ...items] }));
+    },
+    onError: (error) => setAnnouncement(getErrorMessage(error)),
+  });
+
   const currentItems = useMemo(() => {
     if (radarView === "tracking") return tracked.data?.items ?? [];
-    if (radarView === "forgotten") return discovery.data?.forgotten ?? [];
-    if (radarView === "almost") return discovery.data?.almostFinished ?? [];
+    if (radarView === "forgotten")
+      return [...(discovery.data?.forgotten ?? []), ...(radarExtra.forgotten ?? [])];
+    if (radarView === "almost")
+      return [...(discovery.data?.almostFinished ?? []), ...(radarExtra.almost ?? [])];
     return [];
-  }, [discovery.data, radarView, tracked.data]);
+  }, [discovery.data, radarExtra, radarView, tracked.data]);
 
   const trackedTotal = tracked.data?.total ?? 0;
   const activeView = radarViews.find((item) => item.id === radarView) ?? radarViews[0];
@@ -412,13 +442,33 @@ export function DiscoveryScreen({
                   onSnooze={(item) => snoozeReminder.mutate(item)}
                 />
               ) : currentItems.length ? (
-                <GameRadarList
-                  items={currentItems}
-                  view={radarView}
-                  reminding={reminder.isPending}
-                  onRemind={(game) => reminder.mutate(game)}
-                  acciones={acciones}
-                />
+                <>
+                  <GameRadarList
+                    items={currentItems}
+                    view={radarView}
+                    reminding={reminder.isPending}
+                    onRemind={(game) => reminder.mutate(game)}
+                    acciones={acciones}
+                  />
+                  {(radarView === "forgotten" || radarView === "almost") &&
+                    radarShown < radarTotal && (
+                      <div className="radar-more">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={masRadar.isPending}
+                          onClick={() => masRadar.mutate(radarView)}
+                        >
+                          {masRadar.isPending ? (
+                            <IconLoader2 className="is-spinning" />
+                          ) : (
+                            <IconChevronDown />
+                          )}
+                          Ver más · quedan {radarTotal - radarShown}
+                        </Button>
+                      </div>
+                    )}
+                </>
               ) : (
                 <EmptyState
                   compact

@@ -58,6 +58,7 @@ import type {
   GamePreview,
   GamePrice,
   GameReminder,
+  GameSummary,
   GameVideo,
   GameVideoRef,
   LibraryDropInput,
@@ -368,6 +369,14 @@ export const api = {
       request: { durationMinutes, mood },
     }),
   discoverySnapshot: () => invoke<DiscoverySnapshot>("get_discovery_snapshot"),
+  /**
+   * Una tanda más de una lista del radar personal.
+   *
+   * La cabecera dice «12 de 280»: esto es lo que permite recorrer los 280 en
+   * vez de sólo leer la cifra.
+   */
+  discoveryRadarPage: (view: "forgotten" | "almost" | "upcoming", offset: number, limit: number) =>
+    invoke<GameSummary[]>("discovery_radar_page", { view, offset, limit }),
   refreshDiscoveryNews: () => invoke<NewsRefreshReport>("refresh_discovery_news"),
   saveReminder: (input: SaveReminderInput) => invoke<GameReminder>("save_reminder", { input }),
   completeReminder: (id: string) => invoke<void>("complete_reminder", { id }),

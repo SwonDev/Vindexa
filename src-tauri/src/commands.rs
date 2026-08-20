@@ -614,6 +614,23 @@ pub async fn preview_smart_collection(
     .await
 }
 
+/// Una tanda más de una lista del radar personal.
+///
+/// La cabecera dice cuántos hay —«12 de 280»— y esto es lo que hace que esa
+/// cifra se pueda recorrer en vez de sólo leerse.
+#[tauri::command]
+pub async fn discovery_radar_page(
+    state: State<'_, AppState>,
+    view: String,
+    offset: u32,
+    limit: u32,
+) -> AppResult<Vec<crate::models::GameSummary>> {
+    database_read(&state, move |database| {
+        database.discovery_radar_page(&view, offset, limit)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn delete_collection(state: State<'_, AppState>, id: String) -> AppResult<()> {
     database_read(&state, move |database| database.delete_collection(&id)).await

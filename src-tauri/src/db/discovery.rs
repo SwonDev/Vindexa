@@ -862,6 +862,52 @@ fn parse_iso_date(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
 }
 
+/// Cuántos se traen de golpe cuando se pide seguir leyendo una lista.
+///
+/// La pantalla arranca con doce; el resto llega por tandas. Veinticuatro es lo
+/// que cabe de un vistazo al desplazarse sin que la consulta se note.
+pub const RADAR_PAGE_SIZE: u32 = 24;
+
+/// Cuántas páginas como mucho. Con doscientas ochenta pendientes, quien
+/// insiste llega al final; el tope existe para que una lista enorme no pueda
+/// pedirse entera en una sola llamada.
+pub const RADAR_MAX_PAGE: u32 = 100;
+
+/// Una tanda más de una lista del radar.
+///
+/// Sale de la misma condición que la cabecera cuenta, así que lo que se lee al
+/// seguir bajando es exactamente lo que la cifra prometía.
+pub fn radar_page(
+    connection: &Connection,
+    view: &str,
+    offset: u32,
+    limit: u32,
+) -> AppResult<Vec<GameSummary>> {
+    let lista = match view {
+        "forgotten" => &OLVIDADOS,
+        "almost" => &CASI_TERMINADOS,
+        "upcoming" => &PROXIMOS_DE_LA_BIBLIOTECA,
+        _ => {
+            return Err(AppError::validation(
+                "Esa vista del radar no existe: sólo «forgotten», «almost» y «upcoming».",
+            ));
+        }
+    };
+    let limit = limit.clamp(1, RADAR_PAGE_SIZE);
+    let offset = offset.min(RADAR_MAX_PAGE * RADAR_PAGE_SIZE);
+    let sql = format!(
+        "SELECT g.app_id {} {} LIMIT ?1 OFFSET ?2",
+        lista.desde, lista.orden
+    );
+    let mut statement = connection.prepare(&sql)?;
+    let ids = statement
+        .query_map(params![limit, offset], |row| row.get::<_, u32>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    ids.into_iter()
+        .map(|app_id| library::game_summary(connection, app_id))
+        .collect()
+}
+
 /// Los primeros de una lista del radar, y cuántos hay detrás.
 ///
 /// Las dos consultas salen de la misma condición, así que no pueden dejar de
@@ -1249,6 +1295,61 @@ mod tests {
             vista.totals.forgotten > vista.forgotten.len() as u32,
             "si el total coincidiera con el recorte, el recorte estaría contándose como total"
         );
+    }
+
+    /// La segunda tanda empieza donde acabó la primera.
+    ///
+    /// Si el desplazamiento no coincidiera con lo que ya trajo el panorama, al
+    /// pulsar «Ver más» reaparecerían juegos que están dos filas más arriba.
+    #[test]
+    fn la_siguiente_tanda_del_radar_continua_la_lista() {
+        let connection = database();
+        for app_id in 100..130u32 {
+            connection
+                .execute(
+                    "INSERT INTO games(app_id, title, genres_json, categories_json, imported_at)
+                     VALUES (?1, ?2, '[]', '[]', '2020-01-01T00:00:00Z')",
+                    params![app_id, format!("Parado {app_id:03}")],
+                )
+                .expect("insertar juego");
+            connection
+                .execute(
+                    "INSERT INTO game_personal(app_id, status_id, progress, priority)
+                     VALUES (?1, 'unclassified', 0, 3)",
+                    params![app_id],
+                )
+                .expect("insertar ficha");
+        }
+
+        let primera = snapshot(&connection).expect("snapshot").forgotten;
+        let segunda = radar_page(
+            &connection,
+            "forgotten",
+            DISCOVERY_LIST_LIMIT as u32,
+            RADAR_PAGE_SIZE,
+        )
+        .expect("segunda tanda");
+
+        let ya_vistos: Vec<u32> = primera.iter().map(|game| game.app_id).collect();
+        for game in &segunda {
+            assert!(
+                !ya_vistos.contains(&game.app_id),
+                "«{}» ya estaba en la primera tanda",
+                game.title
+            );
+        }
+        assert_eq!(
+            primera.len() + segunda.len(),
+            33,
+            "entre las dos tandas están todos los que hay"
+        );
+    }
+
+    #[test]
+    fn una_vista_que_no_existe_no_devuelve_una_lista_cualquiera() {
+        let connection = database();
+        let error = radar_page(&connection, "inventada", 0, 10).expect_err("rechazar");
+        assert_eq!(error.code, "validation");
     }
 
     #[test]

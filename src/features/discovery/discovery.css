@@ -421,6 +421,14 @@
   outline-offset: -2px;
 }
 
+/* El final de la lista, cuando queda más detrás. Centrado y con aire: es el
+   límite de lo leído, no una fila más. */
+.radar-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
 .radar-list {
   display: grid;
   /* Arriba, no repartidos: una lista de un elemento no se centra en el hueco. */
