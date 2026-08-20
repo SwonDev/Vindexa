@@ -82,7 +82,9 @@ pub async fn discover() -> Vec<InferenceEndpoint> {
         let client = client.clone();
         let port = *port;
         let label = *label;
-        probes.push(tokio::spawn(async move { probe(&client, port, label).await }));
+        probes.push(tokio::spawn(
+            async move { probe(&client, port, label).await },
+        ));
     }
     let mut found = Vec::new();
     for probe in probes {

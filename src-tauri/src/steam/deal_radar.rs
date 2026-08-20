@@ -222,9 +222,8 @@ fn is_due(database: &Database) -> AppResult<bool> {
             |row| row.get(0),
         )
         .optional()?;
-    let guardadas: i64 = connection.query_row("SELECT COUNT(*) FROM store_deals", [], |row| {
-        row.get(0)
-    })?;
+    let guardadas: i64 =
+        connection.query_row("SELECT COUNT(*) FROM store_deals", [], |row| row.get(0))?;
     Ok(should_run(last.as_deref(), guardadas, Utc::now()))
 }
 
@@ -288,7 +287,10 @@ mod tests {
         assert_eq!(entrante.store, "steam");
         assert_eq!(entrante.external_id, "379720");
         assert_eq!(entrante.app_id, Some(379_720));
-        assert_eq!(entrante.store_url, "https://store.steampowered.com/app/379720/");
+        assert_eq!(
+            entrante.store_url,
+            "https://store.steampowered.com/app/379720/"
+        );
         // Sin rasgos: la rebaja de Steam llega desnuda y hay que pedir la ficha.
         assert!(!entrante.facets_known);
         assert!(entrante.genres.is_empty());
@@ -325,12 +327,16 @@ mod tests {
         // Migración 046: la tabla se rehace y queda vacía, pero el sello de la
         // última tanda sigue puesto. Sin esta regla, la sección se quedaría sin
         // nada durante seis horas y nada lo diría.
-        let ahora = Utc.with_ymd_and_hms(2026, 8, 20, 12, 0, 0)
+        let ahora = Utc
+            .with_ymd_and_hms(2026, 8, 20, 12, 0, 0)
             .single()
             .expect("instante válido");
         let hace_un_rato = "2026-08-20T11:30:00Z";
 
-        assert!(should_run(Some(hace_un_rato), 0, ahora), "sin ofertas se pregunta");
+        assert!(
+            should_run(Some(hace_un_rato), 0, ahora),
+            "sin ofertas se pregunta"
+        );
         assert!(
             !should_run(Some(hace_un_rato), 40, ahora),
             "con ofertas recientes se respeta el ritmo"
@@ -339,7 +345,10 @@ mod tests {
             should_run(Some("2026-08-20T05:00:00Z"), 40, ahora),
             "pasadas las seis horas se vuelve a preguntar"
         );
-        assert!(should_run(None, 40, ahora), "sin sello nunca se ha preguntado");
+        assert!(
+            should_run(None, 40, ahora),
+            "sin sello nunca se ha preguntado"
+        );
         assert!(
             should_run(Some("no es una fecha"), 40, ahora),
             "un sello ilegible no bloquea la tanda"

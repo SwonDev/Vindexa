@@ -28,8 +28,8 @@ use chrono::Utc;
 use rusqlite::OptionalExtension;
 use tokio::time::sleep;
 
-use crate::db::pricing::PriceRefreshReport;
 use crate::db::Database;
+use crate::db::pricing::PriceRefreshReport;
 use crate::error::AppResult;
 use crate::steam::store_api;
 

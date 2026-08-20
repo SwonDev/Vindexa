@@ -1,8 +1,8 @@
 pub mod achievements;
 pub mod actions;
-pub mod dlc;
 pub mod deal_radar;
 pub mod deals;
+pub mod dlc;
 pub mod drm;
 pub mod drm_pass;
 pub mod family;

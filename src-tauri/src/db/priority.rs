@@ -3308,7 +3308,11 @@ mod tests {
             .into_iter()
             .map(|(app_id, _)| app_id)
             .collect();
-        assert_eq!(a_revisar.first(), Some(&10), "el vencido va primero: {a_revisar:?}");
+        assert_eq!(
+            a_revisar.first(),
+            Some(&10),
+            "el vencido va primero: {a_revisar:?}"
+        );
 
         // Y detrás, por antigüedad de la última pregunta a la tienda. Los ya
         // preguntados hace poco van al final aunque su fecha no diga día.
@@ -3765,7 +3769,10 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("contar");
-        assert_eq!(sin_puntuar, 0, "las dos tiendas se puntúan con el mismo modelo");
+        assert_eq!(
+            sin_puntuar, 0,
+            "las dos tiendas se puntúan con el mismo modelo"
+        );
 
         let razon: String = connection
             .query_row(
@@ -3774,6 +3781,9 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("leer razón");
-        assert!(razon.contains("Rol"), "la razón nombra lo que la sostiene: {razon}");
+        assert!(
+            razon.contains("Rol"),
+            "la razón nombra lo que la sostiene: {razon}"
+        );
     }
 }

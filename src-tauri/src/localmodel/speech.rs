@@ -57,7 +57,10 @@ struct Health {
 
 /// Busca un transcriptor en el bucle local. `None` es una respuesta válida.
 pub async fn discover() -> Option<SpeechEndpoint> {
-    let client = reqwest::Client::builder().timeout(PROBE_TIMEOUT).build().ok()?;
+    let client = reqwest::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .ok()?;
     let mut probes = Vec::with_capacity(KNOWN_PORTS.len());
     for port in KNOWN_PORTS {
         let client = client.clone();
@@ -105,10 +108,12 @@ pub async fn transcribe(base_url: &str, audio: Vec<u8>, mime: &str) -> AppResult
     // empieza por `http://127.0.0.1:` y la petición viaja a otro servidor,
     // porque lo de delante de la arroba son credenciales. Se analiza la URL y
     // se mira el anfitrión que de verdad se va a usar.
-    let base = url::Url::parse(base_url).map_err(|_| {
-        AppError::validation("La dirección del transcriptor no es válida.")
-    })?;
-    if base.scheme() != "http" || !crate::vindagent::usable_base(&base) || !crate::vindagent::is_loopback(&base) {
+    let base = url::Url::parse(base_url)
+        .map_err(|_| AppError::validation("La dirección del transcriptor no es válida."))?;
+    if base.scheme() != "http"
+        || !crate::vindagent::usable_base(&base)
+        || !crate::vindagent::is_loopback(&base)
+    {
         return Err(AppError::validation(
             "El dictado sólo habla con un transcriptor de este ordenador.",
         ));
@@ -145,12 +150,7 @@ pub async fn transcribe(base_url: &str, audio: Vec<u8>, mime: &str) -> AppResult
             ultimo = format!("ruta inválida: {ruta}");
             continue;
         };
-        let response = match client
-            .post(destino)
-            .multipart(formulario)
-            .send()
-            .await
-        {
+        let response = match client.post(destino).multipart(formulario).send().await {
             Ok(value) => value,
             Err(error) => {
                 ultimo = error.to_string();
@@ -203,8 +203,9 @@ mod tests {
             "http://127.0.0.1:8767/proxy",
             "https://127.0.0.1:8767",
         ] {
-            let error = tauri::async_runtime::block_on(transcribe(base, vec![1, 2, 3], "audio/wav"))
-                .expect_err("rechazar");
+            let error =
+                tauri::async_runtime::block_on(transcribe(base, vec![1, 2, 3], "audio/wav"))
+                    .expect_err("rechazar");
             assert_eq!(error.code, "validation", "{base}");
         }
     }
@@ -212,12 +213,20 @@ mod tests {
     #[test]
     fn si_acepta_un_transcriptor_de_verdad_local() {
         // Rechazar de más también sería un fallo: lo local tiene que entrar.
-        for base in ["http://127.0.0.1:8767", "http://localhost:8767/", "http://[::1]:8767"] {
+        for base in [
+            "http://127.0.0.1:8767",
+            "http://localhost:8767/",
+            "http://[::1]:8767",
+        ] {
             let error = tauri::async_runtime::block_on(transcribe(base, Vec::new(), "audio/wav"))
                 .expect_err("sin audio siempre falla");
             // Llega hasta la comprobación del audio, que es la siguiente: eso
             // significa que la dirección se aceptó.
-            assert!(error.message.contains("No se grabó nada"), "{base}: {}", error.message);
+            assert!(
+                error.message.contains("No se grabó nada"),
+                "{base}: {}",
+                error.message
+            );
         }
     }
 
@@ -247,8 +256,8 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(audio).expect("leer el audio");
-        let texto =
-            tauri::async_runtime::block_on(transcribe(&base, bytes, "audio/wav")).expect("transcribir");
+        let texto = tauri::async_runtime::block_on(transcribe(&base, bytes, "audio/wav"))
+            .expect("transcribir");
         assert!(!texto.trim().is_empty(), "no se entendió nada");
         println!("transcrito: {texto}");
     }

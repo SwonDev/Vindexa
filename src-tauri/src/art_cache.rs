@@ -2497,7 +2497,7 @@ fn download_error() -> AppError {
 mod tests {
     use super::{
         ArtKind, ArtVariant, Conditional, Density, FetchedAsset, MAX_CONCURRENT_DOWNLOADS,
-        MIN_FREE_DISK_BYTES, NO_LIMIT, MaintenanceReport, NegativeEntry, PAGE_BACKGROUND_FILE,
+        MIN_FREE_DISK_BYTES, MaintenanceReport, NO_LIMIT, NegativeEntry, PAGE_BACKGROUND_FILE,
         allowed_content_type, cache, cache_file_name, candidate_sources, clear_negative,
         derive_library_asset, download_slots, effective_pixels, ensure_within_root, existing_cache,
         fast_path_candidates, fetch_asset, fingerprint_from_file_name, has_valid_trailer,
@@ -3026,7 +3026,10 @@ mod tests {
         // tiene que salir del sistema y no de una constante.
         let directory = TempDir::new().expect("crear directorio temporal");
         let free = disk::free_bytes(directory.path()).expect("medir el disco");
-        assert!(free > 0, "un volumen montado y escribible no tiene cero libre");
+        assert!(
+            free > 0,
+            "un volumen montado y escribible no tiene cero libre"
+        );
         assert!(
             free < 1024 * 1024 * 1024 * 1024 * 1024,
             "un petabyte huele a unidad mal interpretada: {free}"

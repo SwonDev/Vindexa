@@ -1043,8 +1043,9 @@ mod tests {
         let mut connection = database();
         catalog_wish(&connection, 4242, "Deseado no poseído");
 
-        let recorded = record_observation(&mut connection, &observation(4242, "EUR", 1999), at(1, 9))
-            .expect("guardar el precio de un deseado del catálogo");
+        let recorded =
+            record_observation(&mut connection, &observation(4242, "EUR", 1999), at(1, 9))
+                .expect("guardar el precio de un deseado del catálogo");
         assert_eq!(recorded.price.final_cents, 1999);
 
         let statuses = wishlist_price_statuses(&connection, at(1, 10)).expect("estados");
@@ -1445,7 +1446,10 @@ mod tests {
         let despues = wishlist_price_statuses(&connection, at(1, 13)).expect("estados");
         assert_eq!(despues[0].absence.as_deref(), Some(ABSENCE_NO_PRICE));
         assert!(despues[0].absence_checked_at.is_some());
-        assert!(despues[0].price.is_none(), "sigue sin haber precio que enseñar");
+        assert!(
+            despues[0].price.is_none(),
+            "sigue sin haber precio que enseñar"
+        );
     }
 
     /// «Todavía no ha salido» y «ya no se vende» no son lo mismo.
@@ -1517,9 +1521,14 @@ mod tests {
 
         let estados = wishlist_price_statuses(&connection, at(1, 14)).expect("estados");
         assert!(estados[0].price.is_some());
-        assert_eq!(estados[0].absence, None, "la respuesta vieja ya no es verdad");
+        assert_eq!(
+            estados[0].absence, None,
+            "la respuesta vieja ya no es verdad"
+        );
         let quedan: i64 = connection
-            .query_row("SELECT COUNT(*) FROM game_price_checks", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM game_price_checks", [], |row| {
+                row.get(0)
+            })
             .expect("contar");
         assert_eq!(quedan, 0);
     }

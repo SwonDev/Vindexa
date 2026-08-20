@@ -15,12 +15,10 @@ use crate::db::{
     RichGameMetadata, SaveCuratedListInput, SaveGameVideoInput, SaveNotificationRuleInput,
     SavePersonalDatesInput, SaveReminderInput, SaveSessionInput, SaveTagInput, SaveViewInput,
     SaveWishlistEntryInput, SavedView, SteamProfileWrite, SteamWishlistImportResult, TagDefinition,
-    TasteReport, UpdateCuratedItemInput, WishlistEntry, WishlistOverview,
-    WishlistPriceStatus,
+    TasteReport, UpdateCuratedItemInput, WishlistEntry, WishlistOverview, WishlistPriceStatus,
 };
 use crate::error::{AppError, AppResult};
 use crate::localmodel::{self, LocalModelSurvey};
-use crate::vindagent;
 use crate::models::{
     AppBootstrap, AppPreferences, BulkUpdateStatusInput, CollectionSummary, DatabaseDiagnostics,
     DatabaseRecoverySnapshot, GameDetail, GameListRequest, LibraryFilterOptions,
@@ -41,6 +39,7 @@ use crate::stores::{
     online::{ExternalStoreSession, SignOutReport as StoreSignOutReport, StoreLoginPrompt},
 };
 use crate::updates;
+use crate::vindagent;
 use chrono::Utc;
 use std::future::Future;
 use std::path::PathBuf;
@@ -1424,10 +1423,7 @@ pub async fn epic_free_games(
 
 /// Descarta un regalo para que deje de aparecer y de avisar.
 #[tauri::command]
-pub async fn dismiss_epic_free_game(
-    state: State<'_, AppState>,
-    offer_id: String,
-) -> AppResult<()> {
+pub async fn dismiss_epic_free_game(state: State<'_, AppState>, offer_id: String) -> AppResult<()> {
     let database = state.database.clone();
     let now = Utc::now();
     blocking(move || database.dismiss_epic_free_offer(&offer_id, now)).await
@@ -2788,10 +2784,7 @@ pub async fn save_vindagent_config(
 pub async fn list_agent_tasks(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<vindagent::schedule::ScheduledTask>> {
-    database_read(&state, move |database| {
-        vindagent::schedule::list(&database)
-    })
-    .await
+    database_read(&state, move |database| vindagent::schedule::list(&database)).await
 }
 
 /// Crea o edita un encargo.

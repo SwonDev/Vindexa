@@ -220,8 +220,7 @@ pub fn snapshot(connection: &Connection) -> AppResult<DiscoverySnapshot> {
     let (forgotten, forgotten_total) = summaries_and_total(connection, &OLVIDADOS)?;
     let (almost_finished, almost_finished_total) =
         summaries_and_total(connection, &CASI_TERMINADOS)?;
-    let (upcoming, upcoming_total) =
-        summaries_and_total(connection, &PROXIMOS_DE_LA_BIBLIOTECA)?;
+    let (upcoming, upcoming_total) = summaries_and_total(connection, &PROXIMOS_DE_LA_BIBLIOTECA)?;
     let events = list_events(connection)?;
     let (official_publications, official_publications_total) =
         list_official_publications(connection)?;
@@ -703,9 +702,11 @@ fn list_official_publications(
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let total = connection.query_row(&format!("SELECT COUNT(*) {PUBLICACIONES_DESDE}"), [], |row| {
-        row.get::<_, u32>(0)
-    })?;
+    let total = connection.query_row(
+        &format!("SELECT COUNT(*) {PUBLICACIONES_DESDE}"),
+        [],
+        |row| row.get::<_, u32>(0),
+    )?;
     Ok((items, total))
 }
 

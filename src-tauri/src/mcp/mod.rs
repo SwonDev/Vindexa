@@ -85,11 +85,7 @@ fn default_database_path() -> Option<PathBuf> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
-            return Some(
-                PathBuf::from(data)
-                    .join(identifier)
-                    .join("vindexa.sqlite3"),
-            );
+            return Some(PathBuf::from(data).join(identifier).join("vindexa.sqlite3"));
         }
         let home = std::env::var_os("HOME")?;
         Some(
@@ -344,7 +340,10 @@ mod tests {
 
     #[test]
     fn cada_herramienta_declara_un_esquema_de_objeto() {
-        for tool in tools::TOOLS.iter().chain(std::iter::once(&tools::UNDO_TOOL)) {
+        for tool in tools::TOOLS
+            .iter()
+            .chain(std::iter::once(&tools::UNDO_TOOL))
+        {
             let schema = (tool.schema)();
             assert_eq!(
                 schema.get("type").and_then(Value::as_str),
@@ -443,7 +442,10 @@ mod tests {
                 .expect("el esquema es un objeto")
                 .insert("intent".to_owned(), json!(tool.name));
             serde_json::from_value::<AgentIntent>(payload.clone()).unwrap_or_else(|error| {
-                panic!("«{}» no encaja con el puente: {error}\n{payload:#}", tool.name)
+                panic!(
+                    "«{}» no encaja con el puente: {error}\n{payload:#}",
+                    tool.name
+                )
             });
         }
     }
@@ -491,7 +493,10 @@ mod tests {
                 &NewAgentClient {
                     name: "Hermes".into(),
                     kind: "hermes".into(),
-                    scopes: ALL_SCOPES.iter().map(|scope| scope.as_str().to_owned()).collect(),
+                    scopes: ALL_SCOPES
+                        .iter()
+                        .map(|scope| scope.as_str().to_owned())
+                        .collect(),
                 },
                 TokenPolicy::default(),
             )
@@ -519,7 +524,11 @@ mod tests {
         let texto = respuesta["result"]["content"][0]["text"]
             .as_str()
             .expect("resultado de texto");
-        assert_eq!(respuesta["result"]["isError"], serde_json::json!(false), "{texto}");
+        assert_eq!(
+            respuesta["result"]["isError"],
+            serde_json::json!(false),
+            "{texto}"
+        );
         assert!(texto.contains("applied"), "{texto}");
 
         let connection = database.open().expect("abrir");
@@ -559,9 +568,14 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"registrar_sesion","arguments":{"game":{"appId":4242},"minutes":30}}}"#,
         )
         .expect("registra");
-        let texto = aplicado["result"]["content"][0]["text"].as_str().expect("texto");
+        let texto = aplicado["result"]["content"][0]["text"]
+            .as_str()
+            .expect("texto");
         let cuerpo: Value = serde_json::from_str(texto).expect("json");
-        let audit_id = cuerpo["auditId"].as_str().expect("identificador").to_owned();
+        let audit_id = cuerpo["auditId"]
+            .as_str()
+            .expect("identificador")
+            .to_owned();
 
         let deshecho = handle_line(
             &database,
@@ -572,7 +586,9 @@ mod tests {
             ),
         )
         .expect("deshace");
-        let detalle = deshecho["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        let detalle = deshecho["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
         assert_eq!(deshecho["result"]["isError"], json!(false), "{detalle}");
 
         let connection = database.open().expect("abrir");

@@ -44,12 +44,12 @@
 //!   lo que se guarda, marcado como no exacta.
 
 use crate::db::Database;
-use crate::error::AppError;
 use crate::db::priority::{ImportedUpcomingRelease, UpcomingImportSummary};
+use crate::error::AppError;
 use crate::error::AppResult;
+use crate::steam::store_api::{self, StoreBundleOutcome};
 use chrono::Utc;
 use rusqlite::OptionalExtension;
-use crate::steam::store_api::{self, StoreBundleOutcome};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -138,9 +138,7 @@ pub async fn refresh_from_wishlist(database: &Database) -> AppResult<UpcomingRef
                     // propósito para todo lo que aún no ha salido, así que
                     // preguntarle daba «aproximada» siempre, incluso con el día
                     // delante.
-                    release_date: dia
-                        .clone()
-                        .or_else(|| bundle.release.label.clone()),
+                    release_date: dia.clone().or_else(|| bundle.release.label.clone()),
                     release_date_is_exact: dia.is_some(),
                     genres: metadata.genres.clone(),
                     categories: metadata.categories.clone(),
@@ -403,9 +401,7 @@ pub async fn refresh_from_showcase(database: &Database) -> AppResult<ShowcaseRep
                     title: juego.title.clone(),
                     capsule_url: metadata.capsule_url.clone(),
                     header_url: metadata.header_url.clone(),
-                    release_date: dia
-                        .clone()
-                        .or_else(|| bundle.release.label.clone()),
+                    release_date: dia.clone().or_else(|| bundle.release.label.clone()),
                     release_date_is_exact: dia.is_some(),
                     genres: metadata.genres.clone(),
                     categories: metadata.categories.clone(),

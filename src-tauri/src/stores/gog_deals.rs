@@ -150,7 +150,11 @@ pub fn parse(bytes: &[u8]) -> AppResult<Vec<GogDeal>> {
 
 fn parse_product(product: &serde_json::Value) -> Option<GogDeal> {
     // Sólo juegos: los paquetes y las bandas sonoras no son lo que se busca.
-    if product.get("productType").and_then(serde_json::Value::as_str) != Some("game") {
+    if product
+        .get("productType")
+        .and_then(serde_json::Value::as_str)
+        != Some("game")
+    {
         return None;
     }
     let product_id = product
@@ -337,7 +341,11 @@ mod tests {
         // Un paquete no es lo que se busca, un importe sin moneda no es un
         // precio, y un enlace fuera de GOG no se abre en su navegador.
         let ofertas = parse(&respuesta()).expect("analizar");
-        assert!(!ofertas.iter().any(|deal| deal.title.contains("banda sonora")));
+        assert!(
+            !ofertas
+                .iter()
+                .any(|deal| deal.title.contains("banda sonora"))
+        );
         assert!(!ofertas.iter().any(|deal| deal.title.contains("Sin moneda")));
         assert!(!ofertas.iter().any(|deal| deal.title.contains("ajeno")));
     }
@@ -354,7 +362,10 @@ mod tests {
             money_cents(Some(&serde_json::json!({ "amount": 19.99 }))),
             Some(1999)
         );
-        assert_eq!(money_cents(Some(&serde_json::json!({ "amount": "-1" }))), None);
+        assert_eq!(
+            money_cents(Some(&serde_json::json!({ "amount": "-1" }))),
+            None
+        );
         assert_eq!(money_cents(None), None);
     }
 
@@ -405,7 +416,6 @@ mod tests {
         }
     }
 
-
     /// La carátula que se guarda tiene que poder pintarse.
     ///
     /// GOG sirve las del catálogo desde `gog-statics.com`, que no estaba en la
@@ -424,7 +434,10 @@ mod tests {
         );
         // Un anfitrión que sólo termina pareciéndose no hereda el permiso, y sin
         // cifrar tampoco: comparar el principio de la cadena dejaba pasar las dos.
-        assert_eq!(imagen_pintable("https://gog.com.attacker.tld/abc.png"), None);
+        assert_eq!(
+            imagen_pintable("https://gog.com.attacker.tld/abc.png"),
+            None
+        );
         assert_eq!(imagen_pintable("https://evilgog-statics.com/abc.png"), None);
         assert_eq!(imagen_pintable("http://images.gog.com/abc.png"), None);
         assert_eq!(imagen_pintable("https://cdn.otra-tienda.com/abc.png"), None);

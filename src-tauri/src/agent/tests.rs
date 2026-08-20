@@ -2087,7 +2087,10 @@ fn el_identificador_manda_y_el_nombre_corrobora() {
         },
     )
     .expect("aplicar");
-    assert!(matches!(outcome, AgentOutcome::Applied { .. }), "{outcome:?}");
+    assert!(
+        matches!(outcome, AgentOutcome::Applied { .. }),
+        "{outcome:?}"
+    );
 }
 
 #[test]
@@ -2124,7 +2127,11 @@ fn un_identificador_que_no_es_de_ese_juego_se_rechaza() {
 
     let fijado: i64 = fixture
         .connection
-        .query_row("SELECT pinned FROM game_personal WHERE app_id = 570", [], |row| row.get(0))
+        .query_row(
+            "SELECT pinned FROM game_personal WHERE app_id = 570",
+            [],
+            |row| row.get(0),
+        )
         .expect("leer");
     assert_eq!(fijado, 0, "no se toca el juego equivocado");
 }
@@ -2226,7 +2233,10 @@ fn las_sesiones_tambien_dicen_cuantas_hay() {
             utterance: String::new(),
             intent: AgentIntent::Query {
                 query: AgentQuery::Sessions {
-                    game: GameSelector { app_id: Some(4242), name: None },
+                    game: GameSelector {
+                        app_id: Some(4242),
+                        name: None,
+                    },
                     limit: Some(3),
                 },
             },
@@ -2267,7 +2277,9 @@ fn los_avisos_tambien_dicen_cuantos_hay() {
         &AgentRequest {
             token,
             utterance: String::new(),
-            intent: AgentIntent::Query { query: AgentQuery::Reminders },
+            intent: AgentIntent::Query {
+                query: AgentQuery::Reminders,
+            },
         },
     )
     .expect("consultar");
@@ -2320,7 +2332,10 @@ fn un_nombre_ya_ocupado_se_retira_para_poder_rehacer_el_enlace() {
     let retirado = clients::revoke_by_name(&mut fixture.connection, "hermes")
         .expect("retirar por nombre")
         .expect("había uno");
-    assert_eq!(retirado, primero.client.id, "se retira el que ocupaba el nombre");
+    assert_eq!(
+        retirado, primero.client.id,
+        "se retira el que ocupaba el nombre"
+    );
 
     let segundo = clients::issue(
         &mut fixture.connection,

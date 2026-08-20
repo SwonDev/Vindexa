@@ -207,8 +207,9 @@ pub fn sync(
         transaction.execute("DELETE FROM store_deals WHERE store = ?1", [store])?;
     } else {
         let marcadores = vigentes.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-        let sql =
-            format!("DELETE FROM store_deals WHERE store = ? AND external_id NOT IN ({marcadores})");
+        let sql = format!(
+            "DELETE FROM store_deals WHERE store = ? AND external_id NOT IN ({marcadores})"
+        );
         let mut referencias: Vec<&dyn rusqlite::ToSql> = vec![&store];
         for id in &vigentes {
             referencias.push(*id as &dyn rusqlite::ToSql);
@@ -429,7 +430,10 @@ mod tests {
     fn una_rebaja_de_algo_que_ya_tienes_no_es_una_oferta() {
         let mut connection = database();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (10, 'Ya lo tengo')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (10, 'Ya lo tengo')",
+                [],
+            )
             .expect("insertar juego");
 
         let report = sync(
@@ -453,7 +457,10 @@ mod tests {
         // rebaja en dos sitios es la misma rebaja dos veces.
         let mut connection = database();
         connection
-            .execute("INSERT INTO catalog_games(app_id, title) VALUES (30, 'Deseado')", [])
+            .execute(
+                "INSERT INTO catalog_games(app_id, title) VALUES (30, 'Deseado')",
+                [],
+            )
             .expect("insertar catálogo");
         connection
             .execute(
@@ -462,8 +469,13 @@ mod tests {
             )
             .expect("insertar deseado");
 
-        let report =
-            sync(&mut connection, "steam", &[steam(30, "Deseado", 60)], at(10)).expect("guardar");
+        let report = sync(
+            &mut connection,
+            "steam",
+            &[steam(30, "Deseado", 60)],
+            at(10),
+        )
+        .expect("guardar");
         assert_eq!(report.already_known, 1);
         assert!(list(&connection, 10).expect("listar").is_empty());
     }
@@ -482,8 +494,13 @@ mod tests {
         .expect("primera tanda");
         assert_eq!(list(&connection, 10).expect("listar").len(), 2);
 
-        sync(&mut connection, "steam", &[steam(21, "Segunda", 40)], at(12))
-            .expect("segunda tanda");
+        sync(
+            &mut connection,
+            "steam",
+            &[steam(21, "Segunda", 40)],
+            at(12),
+        )
+        .expect("segunda tanda");
         let lista = list(&connection, 10).expect("listar");
         assert_eq!(lista.len(), 1);
         assert_eq!(lista[0].app_id, Some(21));
@@ -503,7 +520,13 @@ mod tests {
         // toda la tabla, las rebajas de Steam desaparecerían cada seis horas y
         // volverían sólo en la vuelta siguiente.
         let mut connection = database();
-        sync(&mut connection, "steam", &[steam(20, "De Steam", 30)], at(10)).expect("Steam");
+        sync(
+            &mut connection,
+            "steam",
+            &[steam(20, "De Steam", 30)],
+            at(10),
+        )
+        .expect("Steam");
         sync(&mut connection, "gog", &[gog("1207", "De GOG", 70)], at(10)).expect("GOG");
         assert_eq!(list(&connection, 10).expect("listar").len(), 2);
 
@@ -519,9 +542,20 @@ mod tests {
         // GOG numera sus productos a su manera: que un número coincida con un
         // AppID de Steam no es imposible, y sería otro juego distinto.
         let mut connection = database();
-        sync(&mut connection, "steam", &[steam(1207, "El de Steam", 30)], at(10))
-            .expect("Steam");
-        sync(&mut connection, "gog", &[gog("1207", "El de GOG", 70)], at(10)).expect("GOG");
+        sync(
+            &mut connection,
+            "steam",
+            &[steam(1207, "El de Steam", 30)],
+            at(10),
+        )
+        .expect("Steam");
+        sync(
+            &mut connection,
+            "gog",
+            &[gog("1207", "El de GOG", 70)],
+            at(10),
+        )
+        .expect("GOG");
 
         let lista = list(&connection, 10).expect("listar");
         assert_eq!(lista.len(), 2);
@@ -594,7 +628,10 @@ mod tests {
             at(10),
         )
         .expect("guardar");
-        assert_eq!(pending_facets(&connection, 10).expect("pendientes"), [21, 20]);
+        assert_eq!(
+            pending_facets(&connection, 10).expect("pendientes"),
+            [21, 20]
+        );
     }
 
     #[test]
@@ -603,7 +640,11 @@ mod tests {
         // pedir: dejarla pendiente sería esperar para siempre.
         let mut connection = database();
         sync(&mut connection, "gog", &[gog("1207", "De GOG", 70)], at(10)).expect("guardar");
-        assert!(pending_facets(&connection, 10).expect("pendientes").is_empty());
+        assert!(
+            pending_facets(&connection, 10)
+                .expect("pendientes")
+                .is_empty()
+        );
 
         let guardados: String = connection
             .query_row(
@@ -633,7 +674,11 @@ mod tests {
         .expect("guardar rasgos");
 
         sync(&mut connection, "steam", &[steam(20, "Una", 45)], at(16)).expect("segunda tanda");
-        assert!(pending_facets(&connection, 10).expect("pendientes").is_empty());
+        assert!(
+            pending_facets(&connection, 10)
+                .expect("pendientes")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -650,15 +695,30 @@ mod tests {
             at(11),
         )
         .expect("guardar rasgos");
-        assert!(pending_facets(&connection, 10).expect("pendientes").is_empty());
+        assert!(
+            pending_facets(&connection, 10)
+                .expect("pendientes")
+                .is_empty()
+        );
     }
 
     #[test]
     fn lo_descartado_deja_de_aparecer_y_solo_en_su_tienda() {
         let mut connection = database();
-        sync(&mut connection, "steam", &[steam(1207, "El de Steam", 30)], at(10))
-            .expect("Steam");
-        sync(&mut connection, "gog", &[gog("1207", "El de GOG", 70)], at(10)).expect("GOG");
+        sync(
+            &mut connection,
+            "steam",
+            &[steam(1207, "El de Steam", 30)],
+            at(10),
+        )
+        .expect("Steam");
+        sync(
+            &mut connection,
+            "gog",
+            &[gog("1207", "El de GOG", 70)],
+            at(10),
+        )
+        .expect("GOG");
 
         dismiss(&connection, "gog", "1207", at(11)).expect("descartar");
         let lista = list(&connection, 10).expect("listar");

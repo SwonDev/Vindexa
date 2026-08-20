@@ -71,9 +71,7 @@ pub use pricing::{
     GamePrice, PriceHistory, PriceObservation, PriceRefreshReport, RecordedPrice,
     WishlistPriceStatus,
 };
-pub use priority::{
-    PriorityExplanation, PriorityRanking, PriorityRecomputeReport, TasteReport,
-};
+pub use priority::{PriorityExplanation, PriorityRanking, PriorityRecomputeReport, TasteReport};
 pub use rich_metadata::{DrmStateCounts, RichGameMetadata, RichMetadataUpdate};
 pub use saved_views::{SaveViewInput, SavedView};
 pub use wishlist::{
@@ -212,7 +210,9 @@ impl Database {
         let destino = directorio.join(backups::file_name(now));
         match self.export_backup(&destino) {
             Ok(()) => {
-                let bytes = std::fs::metadata(&destino).map(|meta| meta.len()).unwrap_or(0);
+                let bytes = std::fs::metadata(&destino)
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
                 let pruned = backups::prune(&directorio, backups::KEEP);
                 let connection = self.open()?;
                 backups::mark_done(&connection, now)?;

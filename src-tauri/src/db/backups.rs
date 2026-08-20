@@ -250,7 +250,11 @@ mod tests {
 
         let quedan: Vec<String> = existing(ruta)
             .iter()
-            .filter_map(|path| path.file_name().and_then(|n| n.to_str()).map(str::to_string))
+            .filter_map(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+            })
             .collect();
         assert_eq!(
             quedan,
@@ -303,7 +307,10 @@ mod tests {
 
         // Y no se repite hasta que pase un día.
         assert!(
-            database.auto_backup_if_due(at(20, 9)).expect("copiar").is_none(),
+            database
+                .auto_backup_if_due(at(20, 9))
+                .expect("copiar")
+                .is_none(),
             "seis horas después no toca"
         );
 

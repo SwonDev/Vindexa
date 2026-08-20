@@ -107,12 +107,7 @@ pub struct Hardware {
 
 /// Motores conocidos y dónde suelen estar.
 const RUNTIMES: &[(&str, &str, &[&str], &[&str])] = &[
-    (
-        "llamacpp",
-        "llama.cpp",
-        &["llama-server"],
-        &["gguf"],
-    ),
+    ("llamacpp", "llama.cpp", &["llama-server"], &["gguf"]),
     ("mlx", "MLX", &["mlx_lm.server"], &["mlx"]),
     ("ollama", "Ollama", &["ollama"], &["gguf"]),
     ("lmstudio", "LM Studio", &["lms"], &["gguf", "mlx"]),
@@ -240,7 +235,9 @@ fn walk(root: &Path, source: &str, found: &mut Vec<LocalModel>) {
             // Los enlaces simbólicos se siguen sólo hacia archivos: la caché de
             // Hugging Face los usa, pero seguirlos hacia carpetas puede dar
             // vueltas en círculo.
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             if kind.is_dir() {
                 pending.push((path, depth + 1));
             } else if let Some(model) = model_from_file(&path, source) {
@@ -281,7 +278,9 @@ fn total_memory() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
         let contents = std::fs::read_to_string("/proc/meminfo").ok()?;
-        let line = contents.lines().find(|line| line.starts_with("MemTotal:"))?;
+        let line = contents
+            .lines()
+            .find(|line| line.starts_with("MemTotal:"))?;
         let kilobytes: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
         Some(kilobytes * 1024)
     }

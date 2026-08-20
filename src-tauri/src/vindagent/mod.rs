@@ -341,7 +341,9 @@ pub async fn chat(
         let url = url::Url::parse(base_url)
             .map_err(|_| AppError::validation("La dirección del modelo no es válida."))?;
         if !matches!(url.scheme(), "http" | "https") || !usable_base(&url) {
-            return Err(AppError::validation("La dirección del modelo no es válida."));
+            return Err(AppError::validation(
+                "La dirección del modelo no es válida.",
+            ));
         }
     } else {
         ensure_loopback(base_url)?;
@@ -446,13 +448,8 @@ pub async fn chat(
         for call in &choice.message.tool_calls {
             let arguments: Value =
                 serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
-            let (result, failed) = run_tool(
-                database,
-                &limiter,
-                &token,
-                &call.function.name,
-                &arguments,
-            );
+            let (result, failed) =
+                run_tool(database, &limiter, &token, &call.function.name, &arguments);
             steps.push(ChatStep {
                 tool: call.function.name.clone(),
                 arguments,

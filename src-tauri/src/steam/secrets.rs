@@ -184,7 +184,6 @@ mod tests {
         assert!(!error.message.contains("secret"));
     }
 
-
     /// La clave se lee una vez por sesión, no una vez por consulta.
     ///
     /// Cada lectura del llavero es un diálogo pidiendo la contraseña mientras la

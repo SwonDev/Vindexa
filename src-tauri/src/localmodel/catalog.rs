@@ -161,7 +161,12 @@ pub async fn suggest(usable_bytes: Option<u64>) -> AppResult<CatalogSuggestions>
         .filter(|model| !model.id.is_empty())
         // La búsqueda es aproximada: se comprueba que el nombre lleve de verdad
         // el tamaño buscado, para no proponer un 235B a quien pidió un 8B.
-        .filter(|model| model.id.to_uppercase().contains(&class.token.to_uppercase()))
+        .filter(|model| {
+            model
+                .id
+                .to_uppercase()
+                .contains(&class.token.to_uppercase())
+        })
         .take(HOW_MANY)
         .map(|model| ModelSuggestion {
             repo: model.id,

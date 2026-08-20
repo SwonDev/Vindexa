@@ -288,11 +288,7 @@ fn store_url(element: &serde_json::Value, locale: &str) -> String {
                 .get("productSlug")
                 .and_then(serde_json::Value::as_str)
         })
-        .or_else(|| {
-            element
-                .get("urlSlug")
-                .and_then(serde_json::Value::as_str)
-        })
+        .or_else(|| element.get("urlSlug").and_then(serde_json::Value::as_str))
         .map(str::trim)
         .filter(|slug| !slug.is_empty() && !slug.contains(['/', '?', '#', ' ']));
 
@@ -316,7 +312,11 @@ fn store_url(element: &serde_json::Value, locale: &str) -> String {
 /// vez de producir una ruta inválida.
 fn locale_path(locale: &str) -> String {
     let limpio = locale.trim();
-    if limpio.len() >= 2 && limpio.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if limpio.len() >= 2
+        && limpio
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         limpio.to_string()
     } else {
         "en-US".to_string()
@@ -500,7 +500,10 @@ mod tests {
     #[test]
     fn las_horas_que_faltan_se_calculan_y_se_callan_si_no_se_saben() {
         let juegos = parse(&respuesta(), "es-ES");
-        let ahora = Utc.with_ymd_and_hms(2026, 8, 19, 15, 0, 0).single().unwrap();
+        let ahora = Utc
+            .with_ymd_and_hms(2026, 8, 19, 15, 0, 0)
+            .single()
+            .unwrap();
         assert_eq!(juegos[0].hours_left(ahora), Some(48));
 
         let sin_fin = EpicFreeGame {

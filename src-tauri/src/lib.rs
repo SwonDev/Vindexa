@@ -1,18 +1,18 @@
 mod agent;
-mod localmodel;
-mod mcp;
-mod vindagent;
 mod art_cache;
 mod browser;
 mod commands;
 mod db;
 mod error;
 mod keychain;
+mod localmodel;
+mod mcp;
 mod models;
 mod steam;
 mod store_window;
 mod stores;
 mod updates;
+mod vindagent;
 
 use commands::AppState;
 use db::Database;
@@ -45,14 +45,17 @@ pub fn run_connect_agent(host_id: &str, scopes: &[String]) -> i32 {
     };
     let input = agent::NewAgentClient {
         name: host_id.to_owned(),
-        kind: if host_id == "hermes" { "hermes" } else { "generic" }.to_owned(),
+        kind: if host_id == "hermes" {
+            "hermes"
+        } else {
+            "generic"
+        }
+        .to_owned(),
         scopes,
     };
-    let issued = match database
-        .open()
-        .and_then(|mut connection| {
-            agent::clients::issue(&mut connection, &input, agent::TokenPolicy::default())
-        }) {
+    let issued = match database.open().and_then(|mut connection| {
+        agent::clients::issue(&mut connection, &input, agent::TokenPolicy::default())
+    }) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("Vindexa: no se pudo emitir el testigo: {}", error.message);

@@ -114,7 +114,10 @@ pub fn save(
         .collect();
 
     let transaction = connection.transaction()?;
-    transaction.execute("DELETE FROM preview_screenshots WHERE app_id = ?1", [app_id])?;
+    transaction.execute(
+        "DELETE FROM preview_screenshots WHERE app_id = ?1",
+        [app_id],
+    )?;
     for (position, url) in recortadas.iter().enumerate() {
         transaction.execute(
             "INSERT INTO preview_screenshots(app_id, position, thumbnail_url)
@@ -128,11 +131,7 @@ pub fn save(
          ON CONFLICT(app_id) DO UPDATE SET
              checked_at = excluded.checked_at,
              found = excluded.found",
-        params![
-            app_id,
-            now.to_rfc3339(),
-            recortadas.len() as i64
-        ],
+        params![app_id, now.to_rfc3339(), recortadas.len() as i64],
     )?;
     transaction.commit()?;
 
@@ -204,10 +203,7 @@ mod tests {
     #[test]
     fn una_imagen_sin_cifrar_no_entra() {
         let mut connection = database();
-        let mezcla = vec![
-            "http://cdn.inseguro/ss_1.jpg".to_string(),
-            url(2),
-        ];
+        let mezcla = vec!["http://cdn.inseguro/ss_1.jpg".to_string(), url(2)];
         let guardado = save(&mut connection, 8, &mezcla, at()).expect("guardar");
         assert_eq!(guardado.screenshots, vec![url(2)]);
     }
@@ -219,7 +215,10 @@ mod tests {
         // mismo dato en dos sitios que pueden separarse.
         let mut connection = database();
         connection
-            .execute("INSERT INTO games(app_id, title) VALUES (9, 'Con galería')", [])
+            .execute(
+                "INSERT INTO games(app_id, title) VALUES (9, 'Con galería')",
+                [],
+            )
             .expect("insertar juego");
         connection
             .execute(

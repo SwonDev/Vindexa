@@ -1341,7 +1341,8 @@ pub fn answer(connection: &Connection, query: &AgentQuery) -> AppResult<Value> {
         AgentQuery::Audit { limit } => {
             let entries = audit::list(connection, limit.unwrap_or(20))?;
             let matched: i64 =
-                connection.query_row("SELECT COUNT(*) FROM agent_audit_log", [], |row| row.get(0))?;
+                connection
+                    .query_row("SELECT COUNT(*) FROM agent_audit_log", [], |row| row.get(0))?;
             let shown = entries.len();
             Ok(json!({
                 "entries": entries,

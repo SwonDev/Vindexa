@@ -135,11 +135,9 @@ pub fn parse(bytes: &[u8], sources: &[DealSource]) -> AppResult<Vec<StoreDeal>> 
     // Un juego puede salir en dos escaparates; se queda la entrada de mayor
     // descuento, que es la que motiva mirarlo.
     salida.sort_by(|left, right| {
-        left.app_id.cmp(&right.app_id).then(
-            right
-                .discount_percent
-                .cmp(&left.discount_percent),
-        )
+        left.app_id
+            .cmp(&right.app_id)
+            .then(right.discount_percent.cmp(&left.discount_percent))
     });
     salida.dedup_by_key(|deal| deal.app_id);
     Ok(salida)
@@ -265,7 +263,10 @@ mod tests {
     #[test]
     fn una_imagen_sin_cifrar_no_se_usa() {
         let ofertas = parse(&respuesta(), &[DealSource::TopSellers]).expect("analizar");
-        let cs = ofertas.iter().find(|deal| deal.app_id == 730).expect("está");
+        let cs = ofertas
+            .iter()
+            .find(|deal| deal.app_id == 730)
+            .expect("está");
         assert_eq!(cs.header_url, None);
     }
 
@@ -279,8 +280,11 @@ mod tests {
             !ofertas.iter().any(|deal| deal.app_id == 892_970),
             "un precio completo no entra: {ofertas:?}"
         );
-        assert!(ofertas.iter().all(|deal| deal.discount_percent > 0
-            || deal.initial_cents > deal.final_cents));
+        assert!(
+            ofertas
+                .iter()
+                .all(|deal| deal.discount_percent > 0 || deal.initial_cents > deal.final_cents)
+        );
     }
 
     #[test]

@@ -124,7 +124,9 @@ pub fn sync(
         // Se avisa de lo que se puede reclamar hoy y aún no se tiene. Un regalo
         // anunciado para dentro de una semana no es una noticia accionable, y
         // uno que ya está en la biblioteca no es una noticia en absoluto.
-        let ya_avisado = anterior.as_ref().is_some_and(|(_, avisado)| avisado.is_some());
+        let ya_avisado = anterior
+            .as_ref()
+            .is_some_and(|(_, avisado)| avisado.is_some());
         if game.state == FreeGameState::Current && !owned && !ya_avisado {
             let clave = format!("epic_free:{}", game.offer_id);
             let cuerpo = match (game.original_price_cents, game.currency.as_deref()) {

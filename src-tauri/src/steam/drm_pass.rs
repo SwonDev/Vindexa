@@ -238,7 +238,13 @@ mod tests {
         connection
     }
 
-    fn juego(connection: &Connection, app_id: u32, tienda: Option<&str>, estado: &str, mirado: bool) {
+    fn juego(
+        connection: &Connection,
+        app_id: u32,
+        tienda: Option<&str>,
+        estado: &str,
+        mirado: bool,
+    ) {
         connection
             .execute(
                 "INSERT INTO games(app_id, title, external_store, drm_state, drm_checked_at)
@@ -310,7 +316,9 @@ mod tests {
             .expect("la tienda conoce el juego");
         assert_eq!(rdr2.state, DrmState::ThirdPartyDrm, "{rdr2:?}");
         assert!(
-            rdr2.evidence.iter().any(|e| e.matched.to_lowercase().contains("rockstar")),
+            rdr2.evidence
+                .iter()
+                .any(|e| e.matched.to_lowercase().contains("rockstar")),
             "la evidencia cita el aviso literal: {:?}",
             rdr2.evidence
         );
@@ -332,7 +340,6 @@ mod tests {
         assert_eq!(report.pending, 0);
     }
 
-
     /// Un juego que ya no está en la tienda tiene que salir de la cola.
     ///
     /// La cola va por AppID ascendente y los juegos viejos son justo los que
@@ -343,11 +350,7 @@ mod tests {
     fn preguntar_por_un_juego_retirado_cuenta_como_preguntado() {
         let mut connection = database();
         juego(&connection, 2430, None, "unknown", false);
-        assert_eq!(
-            pendientes(&connection),
-            vec![2430],
-            "empieza en la cola"
-        );
+        assert_eq!(pendientes(&connection), vec![2430], "empieza en la cola");
 
         // Es lo que hace la pasada cuando la tienda contesta sin datos: guarda
         // «no se sabe» —porque no se sabe— y con ello la fecha de comprobación.
@@ -369,9 +372,11 @@ mod tests {
             "preguntado y sin respuesta sale de la cola"
         );
         let estado: String = connection
-            .query_row("SELECT drm_state FROM games WHERE app_id = 2430", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT drm_state FROM games WHERE app_id = 2430",
+                [],
+                |row| row.get(0),
+            )
             .expect("leer estado");
         assert_eq!(estado, "unknown", "sigue sin saberse, que es la verdad");
     }

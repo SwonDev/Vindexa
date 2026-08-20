@@ -1,10 +1,9 @@
 use crate::db::StoreMetadataUpdate;
 use crate::db::pricing::{self, PriceObservation};
 use crate::db::rich_metadata::{
-    DrmAssessment,
-    DescriptionBlock, GameMediaItem, GameMediaKind, MAX_BLOCK_CHARS, MAX_DESCRIPTION_BLOCKS,
-    MAX_LANGUAGES_CHARS, MAX_LIST_ITEMS, MAX_MEDIA_ITEMS, MAX_NOTICE_CHARS, MAX_STRUCTURED_CHARS,
-    MAX_URL_CHARS, RichMetadataUpdate, StructuredDescription,
+    DescriptionBlock, DrmAssessment, GameMediaItem, GameMediaKind, MAX_BLOCK_CHARS,
+    MAX_DESCRIPTION_BLOCKS, MAX_LANGUAGES_CHARS, MAX_LIST_ITEMS, MAX_MEDIA_ITEMS, MAX_NOTICE_CHARS,
+    MAX_STRUCTURED_CHARS, MAX_URL_CHARS, RichMetadataUpdate, StructuredDescription,
 };
 use crate::error::{AppError, AppResult};
 use crate::steam::drm::{self, DrmSignals};
@@ -618,9 +617,7 @@ pub fn parse_facets(app_id: u32, bytes: &[u8]) -> AppResult<Option<StoreFacets>>
 /// Devuelve `Ok(None)` cuando la tienda contesta que no conoce el juego —
 /// retirado, regional, o nunca publicado—: no es un fallo y no debe reintentarse
 /// como si lo fuera.
-pub async fn fetch_drm_signals(
-    app_id: u32,
-) -> Result<Option<DrmAssessment>, StoreMetadataFailure> {
+pub async fn fetch_drm_signals(app_id: u32) -> Result<Option<DrmAssessment>, StoreMetadataFailure> {
     if app_id == 0 {
         return Err(AppError::validation("El AppID de Steam no es válido.").into());
     }
@@ -1995,9 +1992,18 @@ mod tests {
             exact_release_day("18 APR 2011").as_deref(),
             Some("2011-04-18")
         );
-        assert_eq!(exact_release_day("2 FEB 2021").as_deref(), Some("2021-02-02"));
+        assert_eq!(
+            exact_release_day("2 FEB 2021").as_deref(),
+            Some("2021-02-02")
+        );
         // Y lo que no nombra un día sigue sin nombrarlo.
-        for vago in ["Q4 2026", "Próximamente", "2026", "Coming soon", "31 FEB 2026"] {
+        for vago in [
+            "Q4 2026",
+            "Próximamente",
+            "2026",
+            "Coming soon",
+            "31 FEB 2026",
+        ] {
             assert_eq!(exact_release_day(vago), None, "{vago}");
         }
     }

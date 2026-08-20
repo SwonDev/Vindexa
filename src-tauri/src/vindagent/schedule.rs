@@ -88,7 +88,8 @@ fn map(row: &rusqlite::Row<'_>) -> rusqlite::Result<ScheduledTask> {
     })
 }
 
-const SELECT: &str = "SELECT id, instruction, cadence, enabled, last_run_at, last_result, created_at
+const SELECT: &str =
+    "SELECT id, instruction, cadence, enabled, last_run_at, last_result, created_at
                         FROM agent_tasks";
 
 pub fn list(database: &Database) -> AppResult<Vec<ScheduledTask>> {
@@ -111,7 +112,10 @@ pub fn save(database: &Database, input: &SaveScheduledTask) -> AppResult<Schedul
         ));
     }
     let connection = database.open()?;
-    let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+    let id = input
+        .id
+        .clone()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     connection.execute(
         "INSERT INTO agent_tasks(id, instruction, cadence, enabled)
          VALUES (?1, ?2, ?3, ?4)
@@ -184,7 +188,11 @@ pub struct ScheduleReport {
 /// segundos un encargo que no puede funcionar es la forma más rápida de llenar
 /// la auditoría de ruido. Lo que falló se cuenta en `last_result`, se ve en
 /// Ajustes y volverá a intentarse en su siguiente turno.
-pub async fn run_due(database: &Database, base_url: &str, model: &str) -> AppResult<ScheduleReport> {
+pub async fn run_due(
+    database: &Database,
+    base_url: &str,
+    model: &str,
+) -> AppResult<ScheduleReport> {
     let now = Utc::now();
     let mut report = ScheduleReport::default();
     for task in list(database)? {
@@ -260,9 +268,15 @@ mod tests {
     #[test]
     fn no_se_repite_antes_de_tiempo() {
         let hace_una_hora = (Utc::now() - Duration::hours(1)).to_rfc3339();
-        assert!(!is_due(&task("diaria", Some(&hace_una_hora), true), Utc::now()));
+        assert!(!is_due(
+            &task("diaria", Some(&hace_una_hora), true),
+            Utc::now()
+        ));
         let hace_dos_dias = (Utc::now() - Duration::days(2)).to_rfc3339();
-        assert!(is_due(&task("diaria", Some(&hace_dos_dias), true), Utc::now()));
+        assert!(is_due(
+            &task("diaria", Some(&hace_dos_dias), true),
+            Utc::now()
+        ));
     }
 
     #[test]

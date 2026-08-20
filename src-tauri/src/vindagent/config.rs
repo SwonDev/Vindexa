@@ -18,8 +18,8 @@
 //! La clave no se guarda en SQLite. Va al llavero del sistema, que es donde
 //! esta aplicación guarda el resto de sus credenciales.
 
-use crate::error::{AppError, AppResult};
 use crate::db::Database;
+use crate::error::{AppError, AppResult};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
@@ -124,7 +124,10 @@ pub fn save(database: &Database, input: &SaveModelConfig) -> AppResult<ModelConf
         "INSERT INTO app_settings(key, value, updated_at)
          VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-        params![SETTING_KEY, serde_json::to_string(&config).unwrap_or_default()],
+        params![
+            SETTING_KEY,
+            serde_json::to_string(&config).unwrap_or_default()
+        ],
     )?;
     load(database)
 }

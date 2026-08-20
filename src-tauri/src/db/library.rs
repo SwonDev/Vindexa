@@ -230,7 +230,7 @@ pub fn library_stats(connection: &Connection) -> AppResult<LibraryStats> {
 pub fn filter_options(connection: &Connection) -> AppResult<LibraryFilterOptions> {
     let (total_games, metadata_games, achievement_games, steam_deck_games, drm_games) = connection
         .query_row(
-        "SELECT COUNT(*),
+            "SELECT COUNT(*),
                 COUNT(*) FILTER (WHERE metadata_status = 'success'),
                 COUNT(*) FILTER (WHERE achievements_status = 'success'),
                 COUNT(*) FILTER (WHERE steam_deck_status IS NOT NULL),
@@ -240,7 +240,7 @@ pub fn filter_options(connection: &Connection) -> AppResult<LibraryFilterOptions
               ownership_source = 'family_shared'
               AND family_availability <> 'confirmed'
           )",
-        [],
+            [],
             |row| {
                 Ok((
                     get_u64(row, 0)?,
