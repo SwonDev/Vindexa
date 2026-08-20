@@ -1598,12 +1598,42 @@
 
 .wishlist-list__toolbar {
   display: grid;
-  grid-template-columns: auto minmax(160px, 1fr) auto;
+  grid-template-columns: auto minmax(160px, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--v-surface-raised);
+}
+
+/* El interruptor de «ya lo tienes»: un botón de estado, no una acción. */
+.wishlist-list__owned-filter {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
+}
+
+.wishlist-list__owned-filter:hover {
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.wishlist-list__owned-filter[data-active="true"] {
+  border-color: var(--v-cyan);
+  background: var(--v-surface-selected);
+  color: var(--foreground);
 }
 
 .wishlist-list__search {

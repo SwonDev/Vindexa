@@ -1,4 +1,4 @@
-import { IconLoader2, IconRefresh, IconSearch, IconTag } from "@tabler/icons-react";
+import { IconEyeOff, IconLoader2, IconRefresh, IconSearch, IconTag } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState } from "react";
 import { Artwork } from "@/components/common/Artwork";
@@ -90,6 +90,15 @@ export function WishlistList({
     | undefined;
 }) {
   const [bucket, setBucket] = useState<WishlistBucketId | "todos">("todos");
+  /**
+   * Esconder lo que ya está en la biblioteca.
+   *
+   * La lista existe para decidir una compra, y un juego que ya se tiene no se
+   * puede comprar: con el orden por descuento, sesenta y cinco filas que sólo
+   * pueden mirarse ocupaban la cabecera. Apagado por omisión, porque esconder
+   * datos sin que nadie lo pida es decidir por quien mira.
+   */
+  const [ocultarPoseidos, setOcultarPoseidos] = useState(false);
   const [orden, setOrden] = useState<Orden>("descuento");
   const [busqueda, setBusqueda] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
@@ -106,6 +115,7 @@ export function WishlistList({
     const termino = busqueda.trim().toLowerCase();
     const filtradas = todas.filter((entry) => {
       if (bucket !== "todos" && entry.bucket !== bucket) return false;
+      if (ocultarPoseidos && entry.game.inLibrary) return false;
       if (termino && !entry.game.title.toLowerCase().includes(termino)) return false;
       return true;
     });
@@ -130,7 +140,7 @@ export function WishlistList({
           return left.game.title.localeCompare(right.game.title, "es");
       }
     });
-  }, [bucket, busqueda, orden, precioDe, todas]);
+  }, [bucket, busqueda, ocultarPoseidos, orden, precioDe, todas]);
 
   const virtualizer = useVirtualizer({
     count: filas.length,
@@ -139,6 +149,7 @@ export function WishlistList({
     overscan: 12,
   });
 
+  const poseidos = todas.filter((entry) => entry.game.inLibrary).length;
   const enOferta = filas.filter(
     (entry) => (precioDe.get(entry.game.appId)?.price?.discountPercent ?? 0) > 0,
   ).length;
@@ -167,6 +178,18 @@ export function WishlistList({
             onChange={(event) => setBusqueda(event.currentTarget.value)}
           />
         </div>
+        {poseidos > 0 && (
+          <button
+            type="button"
+            className="wishlist-list__owned-filter"
+            data-active={ocultarPoseidos ? "true" : undefined}
+            aria-pressed={ocultarPoseidos}
+            onClick={() => setOcultarPoseidos((valor) => !valor)}
+          >
+            <IconEyeOff aria-hidden="true" size={14} />
+            Ocultar los que ya tienes · {poseidos}
+          </button>
+        )}
         <Select value={orden} onValueChange={(value) => setOrden(value as Orden)}>
           <SelectTrigger aria-label="Ordenar por" className="wishlist-list__sort">
             <SelectValue />

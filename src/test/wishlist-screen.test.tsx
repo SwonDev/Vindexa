@@ -37,6 +37,28 @@ vi.mock("@/components/common/Artwork", () => ({
   prefetchArtwork: () => undefined,
 }));
 
+/**
+ * La lista de deseados se virtualiza, y en jsdom el contenedor mide cero: sin
+ * ventana no se pinta ninguna fila y una prueba sobre la lista no vería nunca
+ * lo que dice comprobar. El doble pinta todo lo que le pidan.
+ */
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        key: index,
+        index,
+        start: index * 56,
+        size: 56,
+        end: (index + 1) * 56,
+        lane: 0,
+      })),
+    getTotalSize: () => count * 56,
+    measure: vi.fn(),
+    scrollToIndex: vi.fn(),
+  }),
+}));
+
 const mockedApi = api as unknown as { [Key in keyof typeof api]: ReturnType<typeof vi.fn> };
 
 function game(appId: number, title: string): WishlistGame {
@@ -317,6 +339,71 @@ describe("pantalla de deseados · cubos de intención", () => {
         note: "",
       }),
     );
+  });
+});
+
+/**
+ * Lo que ya está en la biblioteca no se puede comprar.
+ *
+ * La lista de deseados existe para decidir una compra. Con la importación de
+ * Steam encima había sesenta y cinco entradas de juegos ya comprados, y con el
+ * orden por descuento —el de omisión— ocupaban la cabecera: lo primero que se
+ * ve son las filas sobre las que no se puede hacer nada.
+ */
+describe("deseados que ya están en la biblioteca", () => {
+  beforeEach(() => {
+    mockedApi.listGameVideos.mockResolvedValue([]);
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 8, offset: 0 });
+    mockedApi.wishlistOverview.mockResolvedValue({
+      ...fullOverview,
+      buckets: [
+        { bucket: "buying_now", items: [silksong], total: 1 },
+        {
+          bucket: "considering",
+          items: [
+            entry(70, "Ya comprado", "considering", 0, {
+              game: { appId: 70, title: "Ya comprado", inLibrary: true },
+            }),
+          ],
+          total: 1,
+        },
+      ],
+      total: 2,
+    });
+  });
+
+  it("los esconde sólo cuando se pide, y dice cuántos son", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    // Con dos entradas la pantalla abre por el tablero; la lista es donde vive
+    // el orden por descuento y donde estorban los que ya se tienen.
+    await user.click(await screen.findByRole("radio", { name: "Lista" }));
+
+    // De omisión están, porque esconder datos sin que nadie lo pida es decidir
+    // por quien mira.
+    expect(await screen.findByText("Ya comprado")).toBeVisible();
+    const interruptor = screen.getByRole("button", { name: /Ocultar los que ya tienes · 1/ });
+    expect(interruptor).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(interruptor);
+
+    expect(screen.queryByText("Ya comprado")).toBeNull();
+    // El que no está en la biblioteca sigue en la lista.
+    const lista = screen.getByRole("region", { name: "Lista de deseados" });
+    expect(within(lista).getByText("Hollow Knight: Silksong")).toBeVisible();
+    expect(interruptor).toHaveAttribute("aria-pressed", "true");
+    // Y el recuento dice que la lista está recortada, no que haya un solo juego.
+    expect(screen.getByText("1 de 2")).toBeVisible();
+  });
+
+  it("sin ninguno en la biblioteca no ofrece el interruptor", async () => {
+    const user = userEvent.setup();
+    mockedApi.wishlistOverview.mockResolvedValue(fullOverview);
+    renderScreen();
+    await user.click(await screen.findByRole("radio", { name: "Lista" }));
+
+    await screen.findByText("Dredge");
+    expect(screen.queryByRole("button", { name: /Ocultar los que ya tienes/ })).toBeNull();
   });
 });
 
