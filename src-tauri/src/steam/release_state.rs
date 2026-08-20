@@ -78,6 +78,41 @@ pub struct ReleaseStateReport {
     pub failed_batches: usize,
 }
 
+/// Apunta, para toda la lista de deseados, cuáles están por salir.
+///
+/// Va por lotes: los 1.345 deseados de una lista real son siete peticiones. Con
+/// esto anotado, la pasada que pide la ficha completa —la que trae géneros y
+/// descripción para puntuar— puede ir directa a los que están por salir en vez
+/// de rotar por todos y descartar a los publicados uno a uno.
+pub async fn refresh_wishlist_release_state(database: &Database) -> AppResult<ReleaseStateReport> {
+    let deseados = database.wishlist_app_ids()?;
+    let mut report = ReleaseStateReport {
+        asked: deseados.len(),
+        ..ReleaseStateReport::default()
+    };
+    if deseados.is_empty() {
+        return Ok(report);
+    }
+    for chunk in deseados.chunks(BATCH) {
+        let estados = match resolve(chunk).await {
+            Ok(estados) => estados,
+            Err(_) => {
+                report.failed_batches += 1;
+                continue;
+            }
+        };
+        for (_, coming) in &estados {
+            if *coming {
+                report.coming_soon += 1;
+            } else {
+                report.released += 1;
+            }
+        }
+        database.record_wishlist_release_state(&estados)?;
+    }
+    Ok(report)
+}
+
 /// Pregunta al índice cuáles de estos juegos aún no se han publicado.
 pub async fn resolve(app_ids: &[u32]) -> AppResult<Vec<(u32, bool)>> {
     let client = super::wishlist::wishlist_client()?;

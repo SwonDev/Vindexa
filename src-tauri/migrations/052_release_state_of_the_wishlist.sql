@@ -1,0 +1,23 @@
+-- Qué deseados están por salir, sabido de golpe en vez de uno a uno.
+--
+-- # El cuello de botella que quita
+--
+-- «Próximos lanzamientos» sale de la lista de deseados, y para saber si un
+-- juego está por salir se le pedía su ficha a la tienda **uno a uno**, sesenta
+-- por pasada y con pausa entre peticiones. Con 1.345 deseados, cubrir la lista
+-- entera son veintitrés pasadas, y la mayoría de esas peticiones se gastan en
+-- juegos ya publicados que se descartan al llegar.
+--
+-- Medido el 20/08/2026: 422 deseados están por salir y sólo 112 habían llegado
+-- a la sección.
+--
+-- El índice de la tienda —`IStoreBrowseService/GetItems`, el mismo que resuelve
+-- el arte— contesta por lotes de doscientos y trae el bloque `release`. Siete
+-- peticiones cubren la lista entera. Con eso apuntado, la pasada que sí pide
+-- ficha completa —la que trae géneros, categorías y descripción para puntuar—
+-- puede ir directa a los que están por salir en vez de rotar por todos.
+--
+-- `NULL` es «no se sabe», y se trata como tal: un juego sin respuesta del
+-- índice no se descarta, sólo va después de los que sí constan.
+ALTER TABLE upcoming_checks ADD COLUMN coming_soon INTEGER
+    CHECK (coming_soon IS NULL OR coming_soon IN (0, 1));

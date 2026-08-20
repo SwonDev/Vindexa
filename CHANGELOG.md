@@ -67,6 +67,14 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   biblioteca» era falsa: no se leía en ninguna consulta. Ahora se recalcula solo al arrancar y
   cada doce horas —las señales dependen del reloj—, y hay un orden **Prioridad calculada** en la
   biblioteca, que es lo que la ficha decía que hacía.
+- **Los próximos lanzamientos dejan de tardar veintitrés pasadas en mirarse.** «Próximos
+  lanzamientos» sale de la lista de deseados, y para saber si un juego está por salir se le pedía
+  su ficha a la tienda **uno a uno**, sesenta por pasada. Con 1.345 deseados, cubrir la lista
+  entera eran veintitrés pasadas, y siete de cada diez peticiones se gastaban en juegos ya
+  publicados que se descartaban al llegar: de los 422 que están por salir sólo habían llegado 112
+  a la sección. El índice de la tienda contesta por lotes de doscientos, así que ahora se
+  pregunta primero **a quién** hay que pedirle la ficha —siete peticiones para toda la lista— y
+  la cola va directa a los que están por salir.
 - **La compatibilidad con Steam Deck deja de estar vacía.** La columna existe desde la primera
   migración, tiene índice, viaja en la ficha, se puede filtrar y hasta sirve para una regla de
   colección inteligente. Nunca la escribió nadie: vacía en los 3.877 juegos, la ficha decía «Sin

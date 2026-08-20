@@ -535,6 +535,43 @@ impl Database {
         library::store_metadata_refresh_due(&self.open()?, app_id)
     }
 
+    /// Los AppID de toda la lista de deseados importada.
+    pub fn wishlist_app_ids(&self) -> AppResult<Vec<u32>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(
+            "SELECT app_id FROM catalog_wishlist_entries
+              UNION
+             SELECT app_id FROM wishlist_entries
+              ORDER BY 1 ASC",
+        )?;
+        let ids = statement
+            .query_map([], |row| row.get::<_, u32>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Apunta si cada deseado está por salir, sin tocar la fecha de la última
+    /// consulta de ficha: son dos cosas distintas y la segunda ordena otra cola.
+    pub fn record_wishlist_release_state(&self, estados: &[(u32, bool)]) -> AppResult<()> {
+        if estados.is_empty() {
+            return Ok(());
+        }
+        let mut connection = self.open()?;
+        let transaction = connection.transaction()?;
+        {
+            let mut statement = transaction.prepare_cached(
+                "INSERT INTO upcoming_checks(app_id, checked_at, coming_soon)
+                 VALUES (?1, '', ?2)
+                 ON CONFLICT(app_id) DO UPDATE SET coming_soon = excluded.coming_soon",
+            )?;
+            for (app_id, coming_soon) in estados {
+                statement.execute(rusqlite::params![app_id, i64::from(*coming_soon)])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Ausencias de precio que dicen «no se vende» y podrían ser «aún no ha
     /// salido».
     ///

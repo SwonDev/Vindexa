@@ -190,25 +190,46 @@ fn pending_candidates(database: &Database, limit: usize) -> AppResult<Vec<(u32, 
     // Los que nunca se han mirado van primero —su marca es la cadena vacía— y
     // detrás los más antiguos. Así una lista larga se cubre entera en pasadas
     // sucesivas en vez de repetir siempre la cabeza.
+    // Primero los que el índice dice que están por salir, después los que no
+    // constan, y nunca los que ya salieron.
+    //
+    // Sin este orden, la cola rotaba por los 1.345 deseados pidiendo la ficha
+    // de uno en uno, y siete de cada diez peticiones se gastaban en juegos ya
+    // publicados que se descartaban al llegar: cubrir la lista entera eran
+    // veintitrés pasadas. Con 422 por salir, ahora son siete.
+    //
+    // `NULL` es «no se sabe» y va en medio: un juego del que el índice no ha
+    // contestado no se descarta, sólo espera su turno detrás de los que constan.
     let mut statement = connection.prepare(
         "SELECT c.app_id, c.title
            FROM catalog_wishlist_entries w
            JOIN catalog_games c ON c.app_id = w.app_id
            LEFT JOIN upcoming_checks k ON k.app_id = c.app_id
-          ORDER BY COALESCE(k.checked_at, '') ASC, c.app_id ASC
+          WHERE k.coming_soon IS NULL OR k.coming_soon = 1
+          ORDER BY (k.coming_soon = 1) DESC,
+                   COALESCE(k.checked_at, '') ASC,
+                   c.app_id ASC
           LIMIT ?1",
     )?;
     let rows = statement.query_map([limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
+/// Cuántos deseados quedan por mirar.
+///
+/// Los mismos que la cola: los que están por salir y los que no constan. Contar
+/// los 1.345 cuando sólo se van a preguntar 422 sería decir que queda tres
+/// veces más trabajo del que hay.
 fn pending_count(database: &Database) -> AppResult<u32> {
     let connection = database.open()?;
-    Ok(
-        connection.query_row("SELECT COUNT(*) FROM catalog_wishlist_entries", [], |row| {
-            row.get(0)
-        })?,
-    )
+    Ok(connection.query_row(
+        "SELECT COUNT(*)
+           FROM catalog_wishlist_entries w
+           LEFT JOIN upcoming_checks k ON k.app_id = w.app_id
+          WHERE k.coming_soon IS NULL OR k.coming_soon = 1",
+        [],
+        |row| row.get(0),
+    )?)
 }
 
 /// Deja constancia de que estos ya se han mirado, aunque no fueran candidatos.
@@ -550,6 +571,14 @@ pub async fn maintain_if_due(database: &Database) -> AppResult<Option<UpcomingRe
     if !is_due(database)? {
         return Ok(None);
     }
+    // Antes de pedir fichas una a una, saber a quién hay que pedírselas.
+    //
+    // El índice de la tienda contesta por lotes de doscientos: los 1.345
+    // deseados son siete peticiones, y con eso apuntado la cola de fichas deja
+    // de gastar siete de cada diez en juegos ya publicados. Si falla, la pasada
+    // sigue con el orden que tuviera: es una mejora del reparto, no un paso
+    // imprescindible.
+    let _ = crate::steam::release_state::refresh_wishlist_release_state(database).await;
     let report = refresh_from_wishlist(database).await?;
     // Y lo que la tienda destaca, que es lo único de esta sección que puede
     // enseñar algo que no hubieras marcado tú. Si falla, la pasada sigue: los
@@ -773,6 +802,41 @@ mod tests {
         );
         // Y sigue siendo texto legible, no bytes partidos.
         assert!(recortado.starts_with("áéíóú"));
+    }
+
+    /// La cola de fichas va a los que están por salir, no a la lista entera.
+    ///
+    /// Pedía la ficha de uno en uno rotando por los 1.345 deseados, y siete de
+    /// cada diez peticiones se gastaban en juegos ya publicados que se
+    /// descartaban al llegar: cubrir la lista eran veintitrés pasadas. Con el
+    /// estado de publicación apuntado —que el índice contesta por lotes— la
+    /// cola va directa. `NULL` es «no se sabe» y espera turno detrás; un juego
+    /// publicado no se vuelve a preguntar.
+    #[test]
+    fn la_cola_pregunta_primero_por_los_que_estan_por_salir() {
+        let (_directory, database) = base();
+        for (app_id, title) in [
+            (10_u32, "Ya publicado"),
+            (20, "Sin saber"),
+            (30, "Por salir"),
+        ] {
+            deseado(&database, app_id, title);
+        }
+        database
+            .record_wishlist_release_state(&[(10, false), (30, true)])
+            .expect("apuntar el estado");
+
+        let cola = pending_candidates(&database, 10).expect("cola");
+        let ids: Vec<u32> = cola.iter().map(|(app_id, _)| *app_id).collect();
+        assert_eq!(
+            ids,
+            vec![30, 20],
+            "primero el que consta por salir, después el que no consta, y el publicado nunca"
+        );
+
+        // Y el recuento de pendientes cuenta lo mismo que la cola: decir 3
+        // cuando sólo se van a preguntar 2 es prometer trabajo que no existe.
+        assert_eq!(pending_count(&database).expect("pendientes"), 2);
     }
 
     #[test]
