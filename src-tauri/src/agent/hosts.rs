@@ -194,6 +194,69 @@ pub(crate) fn add_arguments(dialect: AddDialect, vindexa: &str, token: &str) -> 
     }
 }
 
+/// Argumentos para retirar un alta anterior.
+///
+/// Los dos agentes usan `mcp remove <nombre>`; lo que cambia es el alta, no la
+/// baja.
+pub(crate) fn remove_arguments() -> Vec<String> {
+    vec!["mcp".into(), "remove".into(), "vindexa".into()]
+}
+
+/// Perfiles del agente en los que hay que dar de alta.
+///
+/// Hermes puede tener varios perfiles aislados, cada uno con su configuración y
+/// su propio registro de servidores MCP. El bot de alguien puede correr en uno
+/// que no es el de por defecto —«vindexabot», por ejemplo— y dar de alta sólo
+/// en el activo deja a ese bot con el testigo viejo: Vindexa cree que entregó
+/// uno nuevo, revoca el anterior, y el bot contesta que el suyo ha caducado.
+/// Pasó exactamente así, y se descubrió veinte horas después.
+///
+/// La lista sale de `profile list`, que imprime una tabla: se lee la primera
+/// palabra de cada fila, saltando la cabecera y las líneas de separación. Si el
+/// agente no entiende de perfiles, se devuelve la lista vacía y el alta se hace
+/// una sola vez, como siempre.
+fn profiles(binary: &PathBuf, spec: &HostSpec) -> Vec<String> {
+    if spec.dialect != AddDialect::Hermes {
+        return Vec::new();
+    }
+    let Ok(output) = Command::new(binary)
+        .arg("profile")
+        .arg("list")
+        .stdin(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|linea| {
+            // El activo lleva un rombo delante; la cabecera y los separadores,
+            // guiones de dibujo.
+            let limpia = linea.trim().trim_start_matches('◆').trim();
+            let primera = limpia.split_whitespace().next()?;
+            let valido = primera
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+            (valido && primera != "Profile").then(|| primera.to_owned())
+        })
+        .collect()
+}
+
+/// Los mismos argumentos, dirigidos a un perfil concreto.
+fn con_perfil(perfil: Option<&str>, resto: Vec<String>) -> Vec<String> {
+    match perfil {
+        Some(nombre) => {
+            let mut args = vec!["-p".to_owned(), nombre.to_owned()];
+            args.extend(resto);
+            args
+        }
+        None => resto,
+    }
+}
+
 /// Da de alta Vindexa como servidor MCP del agente indicado.
 ///
 /// El testigo viaja como variable de entorno del proceso hijo y acaba guardado
@@ -212,8 +275,92 @@ pub fn connect(host_id: &str, token: &str) -> AppResult<String> {
     })?;
     let vindexa = vindexa_command()?;
 
-    let mut child = Command::new(&binary)
-        .args(add_arguments(spec.dialect, &vindexa, token))
+    // Un alta por perfil. Sin perfiles, una sola sin `-p`, que es lo que había.
+    let perfiles = profiles(&binary, spec);
+    let destinos: Vec<Option<String>> = if perfiles.is_empty() {
+        vec![None]
+    } else {
+        perfiles.into_iter().map(Some).collect()
+    };
+
+    let mut hechos: Vec<String> = Vec::new();
+    let mut fallos: Vec<String> = Vec::new();
+
+    for destino in &destinos {
+        let perfil = destino.as_deref();
+        match alta_en(&binary, spec, perfil, &vindexa, token) {
+            Ok(()) => hechos.push(perfil.unwrap_or("por defecto").to_owned()),
+            Err(error) => fallos.push(format!(
+                "{}: {}",
+                perfil.unwrap_or("por defecto"),
+                error.message
+            )),
+        }
+    }
+
+    // Que uno de los perfiles se resista no puede pasar por un alta correcta:
+    // el testigo anterior ya se ha revocado y ese perfil se ha quedado sin
+    // enlace. Se dice cuál.
+    if hechos.is_empty() || !fallos.is_empty() {
+        return Err(AppError::new(
+            "agent_host",
+            format!(
+                "{} no completó el alta en {}: {}",
+                spec.label,
+                if fallos.len() == 1 {
+                    "un perfil"
+                } else {
+                    "varios perfiles"
+                },
+                fallos.join(" · ").chars().take(400).collect::<String>()
+            ),
+        ));
+    }
+
+    Ok(format!(
+        "Vindexa quedó registrado en {} ({}). Ya puedes pedirle cosas por cualquiera de sus canales.",
+        spec.label,
+        if destinos.len() == 1 && destinos[0].is_none() {
+            "perfil único".to_owned()
+        } else {
+            format!("perfiles: {})", hechos.join(", ")).replace("))", ")")
+        }
+    ))
+}
+
+/// Da de alta Vindexa en un destino concreto: un perfil, o el agente entero si
+/// no tiene perfiles.
+fn alta_en(
+    binary: &PathBuf,
+    spec: &HostSpec,
+    perfil: Option<&str>,
+    vindexa: &str,
+    token: &str,
+) -> AppResult<()> {
+    // Primero se retira el alta anterior, si la hay.
+    //
+    // `mcp add` no sobrescribe una entrada que ya existe: se va sin escribir y
+    // sin fallar. Como el agente seguía teniendo **un** servidor llamado
+    // «vindexa» —el de antes, con el testigo viejo—, la comprobación de más
+    // abajo lo daba por bueno, Vindexa revocaba el testigo anterior y el enlace
+    // se rompía en silencio. Se descubrió veinte horas después, cuando el bot
+    // contestó que su testigo había caducado.
+    //
+    // Retirando primero, lo que aparezca después sólo puede ser el alta nueva.
+    // Si no había nada que retirar, el agente se queja y no pasa nada: por eso
+    // el resultado se ignora a propósito.
+    let _ = Command::new(binary)
+        .args(con_perfil(perfil, remove_arguments()))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    let mut child = Command::new(binary)
+        .args(con_perfil(
+            perfil,
+            add_arguments(spec.dialect, vindexa, token),
+        ))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -253,37 +400,33 @@ pub fn connect(host_id: &str, token: &str) -> AppResult<String> {
         return Err(AppError::new(
             "agent_host",
             format!(
-                "{} rechazó el alta: {}",
-                spec.label,
-                detalle.chars().take(400).collect::<String>()
+                "rechazó el alta: {}",
+                detalle.chars().take(200).collect::<String>()
             ),
         ));
     }
     // Salir con cero no basta: la primera versión de esto terminaba «bien»
     // dejando el alta a medias porque una pregunta interactiva se cancelaba
     // sola. Lo que cuenta es que el servidor aparezca en la lista del agente.
-    if !is_registered(&binary, spec) {
+    if !is_registered(binary, perfil) {
         return Err(AppError::new(
             "agent_host",
-            format!(
-                "{} aceptó el alta pero Vindexa no aparece en su lista de servidores.",
-                spec.label
-            ),
+            "aceptó el alta pero Vindexa no aparece en su lista de servidores.".to_owned(),
         ));
     }
-
-    Ok(format!(
-        "Vindexa quedó registrado en {}. Ya puedes pedirle cosas por cualquiera de sus canales.",
-        spec.label
-    ))
+    Ok(())
 }
 
 /// ¿Aparece Vindexa entre los servidores del agente?
-fn is_registered(binary: &PathBuf, _spec: &HostSpec) -> bool {
-    // `mcp list` es común a los dos agentes; lo que cambia es el alta.
+fn is_registered(binary: &PathBuf, perfil: Option<&str>) -> bool {
+    // `mcp list` es común a los dos agentes; lo que cambia es el alta. Y se
+    // pregunta al mismo perfil en el que se acaba de dar de alta: preguntarle a
+    // otro devuelve la lista de otro.
     let Ok(output) = Command::new(binary)
-        .arg("mcp")
-        .arg("list")
+        .args(con_perfil(
+            perfil,
+            vec!["mcp".to_owned(), "list".to_owned()],
+        ))
         .stdin(Stdio::null())
         .output()
     else {
@@ -296,6 +439,51 @@ fn is_registered(binary: &PathBuf, _spec: &HostSpec) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Los argumentos dirigidos a un perfil llevan `-p` delante de todo.
+    ///
+    /// Detrás no vale: `--args` de Hermes se traga todo lo que venga después,
+    /// así que un `-p` al final acabaría siendo un argumento del proceso hijo.
+    #[test]
+    fn el_perfil_va_delante_del_resto() {
+        let sin = con_perfil(None, remove_arguments());
+        assert_eq!(sin, vec!["mcp", "remove", "vindexa"]);
+
+        let con = con_perfil(Some("vindexabot"), remove_arguments());
+        assert_eq!(con, vec!["-p", "vindexabot", "mcp", "remove", "vindexa"]);
+
+        let alta = con_perfil(
+            Some("vindexabot"),
+            add_arguments(AddDialect::Hermes, "/ruta/vindexa", "<testigo>"),
+        );
+        assert_eq!(&alta[0..2], &["-p", "vindexabot"]);
+        assert_eq!(alta.last().map(String::as_str), Some("mcp"));
+    }
+
+    /// Rehacer un alta empieza por retirar la que había.
+    ///
+    /// `mcp add` no sobrescribe una entrada existente: termina con cero sin
+    /// escribir nada. Como el agente seguía teniendo un servidor llamado
+    /// «vindexa» —el de antes—, la comprobación de efecto lo daba por bueno y
+    /// Vindexa revocaba el testigo que el agente sí tenía. El bot lo descubrió
+    /// veinte horas más tarde diciendo que su testigo había caducado.
+    #[test]
+    fn la_baja_usa_el_mismo_nombre_que_el_alta() {
+        let baja = remove_arguments();
+        assert_eq!(baja, vec!["mcp", "remove", "vindexa"]);
+
+        // El nombre tiene que ser el mismo en las dos, o la baja no encuentra
+        // nada que quitar y el alta vuelve a chocar.
+        for dialecto in [AddDialect::Hermes, AddDialect::ClaudeCode] {
+            let alta = add_arguments(dialecto, "/ruta/vindexa", "<testigo>");
+            let nombre_del_alta = alta
+                .iter()
+                .position(|arg| arg == "add")
+                .and_then(|indice| alta.get(indice + 1))
+                .expect("el alta nombra el servidor");
+            assert_eq!(nombre_del_alta, &baja[2], "dialecto {dialecto:?}");
+        }
+    }
 
     #[test]
     fn el_comando_de_muestra_no_lleva_el_testigo() {

@@ -203,6 +203,16 @@ export interface AgentLinkRecord {
 }
 
 /** Qué hay instalado, qué está conectado y si el automatismo sigue encendido. */
+/** Lo que dejó una pasada de reconexión. */
+export interface AgentAutolinkReport {
+  /** Agentes que se han dado de alta o se han reparado. */
+  linked: string[];
+  /** Agentes que ya estaban bien y no se han tocado. */
+  unchanged: string[];
+  /** Agentes encontrados que no se pudieron conectar, con el motivo. */
+  failed: string[];
+}
+
 export interface AgentAutolinkStatus {
   disabled: boolean;
   links: AgentLinkRecord[];

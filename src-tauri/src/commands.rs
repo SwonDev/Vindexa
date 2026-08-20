@@ -2911,6 +2911,22 @@ pub async fn connect_agent_host(
     agent::hosts::connect(&host_id, &issued.token)
 }
 
+/// Rehace el enlace de un agente ahora mismo.
+///
+/// Lo que hay detrás es la misma pasada que corre al arrancar, pero olvidando
+/// primero lo apuntado para ese agente: si el alta anterior se quedó a medias,
+/// una pasada normal la daría por buena y no arreglaría nada.
+#[tauri::command]
+pub async fn relink_agent_host(
+    state: State<'_, AppState>,
+    host_id: String,
+) -> AppResult<agent::autolink::AutolinkReport> {
+    database_read(&state, move |database| {
+        agent::autolink::relink(&database, &host_id)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn rotate_agent_token(
     state: State<'_, AppState>,

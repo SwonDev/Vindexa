@@ -4,6 +4,31 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
+## [Sin publicar]
+
+### Corregido
+
+- **El enlace con Hermes se rompía solo, y nadie se enteraba hasta que el bot contestaba que su
+  testigo había caducado.** Tres cosas a la vez, y las tres del mismo tipo: dar algo por hecho sin
+  comprobar el efecto.
+  1. **`mcp add` no sobrescribe.** Si ya existe un servidor con ese nombre se va sin escribir y sin
+     fallar. La comprobación de Vindexa —«¿aparece vindexa en su lista?»— seguía viendo el de
+     antes y lo daba por bueno, así que revocaba el testigo que el agente sí tenía. Ahora se retira
+     el alta anterior primero, y lo que aparece después sólo puede ser la nueva.
+  2. **El alta iba al perfil equivocado.** Hermes puede tener varios perfiles aislados, cada uno
+     con su propia configuración, y el bot de alguien puede correr en uno que no es el de por
+     defecto. Se daba de alta sólo en el activo, así que el bot se quedaba con el testigo viejo.
+     Ahora se da de alta en **todos** los perfiles, y si uno se resiste se dice cuál en vez de
+     contarlo como éxito.
+  3. **Abrir una copia secuestraba el enlace.** El vínculo se rehacía cuando la ruta del ejecutable
+     no era exactamente la registrada; abrir una compilación de desarrollo lo movía a ella y volver
+     a la instalada lo movía de vuelta. Dos rotaciones de testigo que nadie pidió. Ahora basta con
+     que el binario registrado siga existiendo.
+- **Un enlace roto sólo se podía intentar arreglar reiniciando.** Y cuando el alta fallaba en
+  silencio, ni eso: la pasada del arranque lo veía vigente y no lo tocaba. Ajustes → Agentes tiene
+  ahora un botón **«Volver a conectar»** por agente, que olvida lo apuntado y rehace el alta desde
+  cero. Y si la reconexión falla, el enlace deja de figurar como bueno en vez de fingir que sigue.
+
 ## [0.1.7] · 2026-08-20
 
 ### Añadido

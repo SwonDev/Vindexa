@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SavedLibraryView, SaveViewInput } from "@/features/library/library-views";
 import type {
   AgentAuditEntry,
+  AgentAutolinkReport,
   AgentAutolinkStatus,
   AgentClientSummary,
   AgentModelConfig,
@@ -452,6 +453,7 @@ export const api = {
   vindagentChat: (baseUrl: string, model: string, history: ChatMessage[]) =>
     invoke<ChatTurn>("vindagent_chat", { baseUrl, model, history }),
   agentAutolinkState: () => invoke<AgentAutolinkStatus>("agent_autolink_state"),
+  relinkAgentHost: (hostId: string) => invoke<AgentAutolinkReport>("relink_agent_host", { hostId }),
   setAgentAutolinkDisabled: (disabled: boolean) =>
     invoke<void>("set_agent_autolink_disabled", { disabled }),
   listAgentClients: () => invoke<AgentClientSummary[]>("list_agent_clients"),

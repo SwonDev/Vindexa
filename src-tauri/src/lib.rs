@@ -714,6 +714,7 @@ pub fn run() {
             commands::install_local_runtime,
             commands::agent_autolink_state,
             commands::set_agent_autolink_disabled,
+            commands::relink_agent_host,
             commands::connect_agent_host,
             commands::rotate_agent_token,
             commands::set_agent_client_scopes,

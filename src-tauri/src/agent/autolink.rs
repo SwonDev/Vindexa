@@ -18,6 +18,7 @@
 //! | Está conectado y todo cuadra | Nada. Es el caso normal y no cuesta nada. |
 //! | La aplicación cambió de ruta | Rehace el alta con la ruta nueva. |
 //! | El testigo se revocó o desapareció | Emite otro y rehace el alta. |
+//! | El alta nueva no se pudo escribir | No finge que sigue conectado: lo dice. |
 //!
 //! # Límites que se respetan
 //!
@@ -25,6 +26,10 @@
 //!   entonces esto no toca nada.
 //! - **Un testigo por agente.** No se acumulan clientes muertos: al rehacer un
 //!   alta se revoca el anterior.
+//! - **Rehacer un alta empieza por retirar la que había.** `mcp add` no
+//!   sobrescribe una entrada existente: se va sin escribir y sin fallar, y el
+//!   agente se queda con el testigo viejo mientras Vindexa cree que entregó uno
+//!   nuevo. Eso rompió el enlace de Hermes durante veinte horas.
 //! - **Nunca en primer plano.** Corre en un hilo aparte; si el agente tarda o
 //!   falla, la ventana ni se entera.
 //! - **Deja rastro.** Lo que hizo se ve en Ajustes → Agentes, con su fecha.
@@ -38,6 +43,7 @@ use crate::error::AppResult;
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Clave en `app_settings` con lo que se dejó conectado.
 const SETTING_KEY: &str = "agent_autolink_state";
@@ -148,6 +154,23 @@ fn client_alive(connection: &Connection, client_id: &str) -> bool {
         .is_some_and(|enabled| enabled != 0)
 }
 
+/// Rehace el enlace de un agente ahora, sin esperar al próximo arranque.
+///
+/// Hasta ahora, si un enlace se rompía sólo quedaba reiniciar Vindexa y confiar.
+/// Cuando el alta fallaba en silencio —que es como se rompió el de Hermes—
+/// reiniciar tampoco arreglaba nada: la pasada veía un enlace vigente y no lo
+/// tocaba. Esto olvida lo apuntado para ese agente y vuelve a empezar, que es
+/// lo que alguien quiere decir cuando pulsa «volver a conectar».
+pub fn relink(database: &Database, host_id: &str) -> AppResult<AutolinkReport> {
+    {
+        let connection = database.open()?;
+        let mut records = read_state(&connection);
+        records.retain(|record| record.host_id != host_id);
+        write_state(&connection, &records)?;
+    }
+    reconcile(database)
+}
+
 /// Da una pasada: conecta lo que falte, repara lo que se haya movido.
 ///
 /// No devuelve error si un agente falla: se anota y se sigue con los demás. Que
@@ -169,8 +192,18 @@ pub fn reconcile(database: &Database) -> AppResult<AutolinkReport> {
         }
         let current = hosts::vindexa_command()?;
         let existing = records.iter().find(|record| record.host_id == host.id);
+        // Un enlace sigue valiendo mientras su cliente esté vivo y el binario
+        // que se registró siga ahí.
+        //
+        // Antes se exigía además que la ruta fuera **la de este proceso**, y eso
+        // convertía cualquier copia en un secuestro: abrir una compilación de
+        // desarrollo desde `target/` rehacía el alta apuntando a ella, y volver
+        // a la instalada la rehacía otra vez. Dos rotaciones de testigo que
+        // nadie pidió, en una función cuyo trabajo es justamente que el enlace
+        // no se rompa.
         let vigente = existing.is_some_and(|record| {
-            record.command == current && client_alive(&connection, &record.client_id)
+            client_alive(&connection, &record.client_id)
+                && (record.command == current || Path::new(&record.command).exists())
         });
         if vigente {
             report.unchanged.push(host.label.clone());
@@ -224,6 +257,16 @@ pub fn reconcile(database: &Database) -> AppResult<AutolinkReport> {
                 // El testigo emitido no llegó a entregarse: se revoca para no
                 // dejar credenciales vivas que nadie tiene.
                 let _ = clients::revoke(&mut connection, &issued.client.id);
+                // Y el enlace anterior deja de figurar como bueno, porque ya no
+                // lo es: el alta se retiró para rehacerla y no se rehízo. Sin
+                // esto, Ajustes seguía enseñando un enlace vigente mientras el
+                // agente contestaba que su testigo no vale, y la única forma de
+                // enterarse era que alguien lo intentara y fallara.
+                records.retain(|record| record.host_id != host.id);
+                eprintln!(
+                    "Vindexa: {} se quedó sin enlace ({}). Vuelve a conectarlo desde Ajustes → Agentes.",
+                    host.label, error.message
+                );
                 report
                     .failed
                     .push(format!("{}: {}", host.label, error.message));

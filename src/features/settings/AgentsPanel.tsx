@@ -32,6 +32,7 @@ import {
   IconCopy,
   IconLoader2,
   IconPlus,
+  IconRefresh,
   IconRobot,
   IconTrash,
 } from "@tabler/icons-react";
@@ -403,6 +404,27 @@ function AutolinkSection() {
     mutationFn: (disabled: boolean) => api.setAgentAutolinkDisabled(disabled),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent", "autolink"] }),
   });
+  const [aviso, setAviso] = useState<string>();
+  // Volver a conectar rehace el alta desde cero. Antes, un enlace roto sólo se
+  // podía intentar arreglar reiniciando Vindexa —y si el alta había fallado en
+  // silencio, ni eso: la pasada lo daba por bueno—.
+  const reconectar = useMutation({
+    mutationFn: (hostId: string) => api.relinkAgentHost(hostId),
+    onSuccess: async (informe, hostId) => {
+      const fallo = informe.failed.find((entrada) => entrada.length > 0);
+      setAviso(
+        fallo
+          ? `No se pudo conectar: ${fallo}`
+          : informe.linked.length > 0
+            ? `${informe.linked.join(", ")} vuelve a estar conectado.`
+            : "El enlace ya estaba bien; no hizo falta tocarlo.",
+      );
+      void hostId;
+      await queryClient.invalidateQueries({ queryKey: ["agent", "autolink"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent", "clients"] });
+    },
+    onError: (causa) => setAviso(`No se pudo conectar: ${getErrorMessage(causa)}`),
+  });
 
   if (estado.isPending) {
     return <p className="settings-hint">Buscando agentes en este ordenador…</p>;
@@ -447,19 +469,42 @@ function AutolinkSection() {
                   <strong>{host.label}</strong>
                   <span>{host.path}</span>
                 </div>
-                {link ? (
-                  <span className="agent-autolink__state" data-kind="linked">
-                    <IconCheck aria-hidden="true" /> Conectado {formatRelativeDate(link.linkedAt)}
-                  </span>
-                ) : (
-                  <span className="agent-autolink__state" data-kind="pending">
-                    {disabled ? "Automatismo apagado" : "Se conectará al reiniciar Vindexa"}
-                  </span>
-                )}
+                <div className="agent-autolink__actions">
+                  {link ? (
+                    <span className="agent-autolink__state" data-kind="linked">
+                      <IconCheck aria-hidden="true" /> Conectado {formatRelativeDate(link.linkedAt)}
+                    </span>
+                  ) : (
+                    <span className="agent-autolink__state" data-kind="pending">
+                      {disabled ? "Automatismo apagado" : "Se conectará al reiniciar Vindexa"}
+                    </span>
+                  )}
+                  {/* Un enlace que dejó de funcionar se arregla aquí, sin
+                      reiniciar nada. */}
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={reconectar.isPending}
+                    onClick={() => reconectar.mutate(host.id)}
+                  >
+                    {reconectar.isPending && reconectar.variables === host.id ? (
+                      <IconLoader2 className="is-spinning" aria-hidden="true" />
+                    ) : (
+                      <IconRefresh aria-hidden="true" />
+                    )}
+                    Volver a conectar
+                  </Button>
+                </div>
               </li>
             );
           })}
         </ul>
+      )}
+
+      {aviso && (
+        <p className="settings-hint" role="status">
+          {aviso}
+        </p>
       )}
     </div>
   );

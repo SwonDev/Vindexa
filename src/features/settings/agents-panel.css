@@ -416,3 +416,15 @@
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* La fila de cada agente cierra por la derecha con su estado y el botón de
+   volver a conectar; en una ventana estrecha bajan juntos a la línea siguiente
+   en vez de empujar el nombre. */
+.agent-autolink__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
