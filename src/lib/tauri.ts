@@ -24,11 +24,11 @@ import { notifyArtworkCacheCleared } from "@/lib/artwork-cache-events";
 import type {
   AddCuratedGameInput,
   AppBootstrap,
-  ArtIndexReport,
   AppPreferences,
   ArchiveReport,
   ArtCacheMaintenanceReport,
   ArtCacheUsage,
+  ArtIndexReport,
   ArtworkTarget,
   BackupStatus,
   BulkUpdateStatusInput,

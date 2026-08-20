@@ -659,9 +659,7 @@ describe("contrastar el arte con la tienda", () => {
     renderSettings();
 
     await user.click(screen.getByRole("button", { name: "Datos y copias" }));
-    await user.click(
-      await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }),
-    );
+    await user.click(await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }));
 
     expect(await screen.findByText(/3.501 de 3.877|3501 de 3877/)).toBeVisible();
     expect(screen.getByText(/376 sin arte publicada/)).toBeVisible();
@@ -679,9 +677,7 @@ describe("contrastar el arte con la tienda", () => {
     renderSettings();
 
     await user.click(screen.getByRole("button", { name: "Datos y copias" }));
-    await user.click(
-      await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }),
-    );
+    await user.click(await screen.findByRole("button", { name: /Contrastar arte con la tienda/ }));
 
     expect(await screen.findByText(/1 lote sin respuesta/)).toBeVisible();
   });
