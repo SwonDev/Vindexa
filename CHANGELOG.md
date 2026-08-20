@@ -4,7 +4,7 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
-## [Sin publicar]
+## [0.1.7] · 2026-08-20
 
 ### Añadido
 

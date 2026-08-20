@@ -210,6 +210,37 @@ SELECT steam_deck_status, COUNT(*) FROM games
 «Steam no lo ha valorado» es una respuesta —se preguntó—; «Sin datos» significa
 que a ese juego todavía no le ha tocado.
 
+## 9 ter. Logros conseguidos
+
+`achievements_total` estaba puesto en 1.655 juegos de una instalación real y
+`achievements_unlocked` **en ninguno**, con la clave de Steam guardada desde
+hacía días. La ficha decía «Logros · Sin datos» en todas y ofrecía un botón para
+traerlos: uno por juego, mil seiscientas cincuenta y cinco veces. Tercer sitio
+con el mismo patrón, después de la compatibilidad con Steam Deck y de la
+prioridad calculada.
+
+`steam::achievements_pass` los pide por tandas de doscientos con segundo y medio
+de pausa, empezando por los juegos que sí tienen logros publicados, y respeta
+los mismos plazos que la ficha —seis horas si trajo recuento, un día si la
+cuenta no tiene logros ahí, media hora si falló—, escritos una sola vez en
+`ACHIEVEMENTS_DUE_SQL` para que la pasada y la pantalla no puedan discrepar.
+
+**La pasada no toca el llavero.** Leer la clave puede abrir un diálogo de
+contraseña del sistema, y una tarea que arranca sola no tiene derecho a eso:
+aparece en mitad de otra cosa y, si no hay nadie delante, se queda esperando o
+se deniega. Usa `secrets::cached_api_key`, que devuelve la clave sólo si un acto
+explícito —verificar la clave, sincronizar, pulsar «Actualizar logros» en una
+ficha— ya la cargó. Mientras no la haya, se abstiene y lo dice:
+
+```
+Vindexa: los logros esperan a que se cargue la clave de Steam; quedan 3.559
+juegos por preguntar.
+```
+
+Ese recuento importa: la primera versión salía sin rellenarlo y decía «quedan 0
+juegos por preguntar» con tres mil quinientos esperando, que se lee como que ya
+no hay nada que hacer.
+
 ## 10. Clic derecho
 
 Cancelar el menú nativo de WebKit es una decisión de toda la aplicación, así que
