@@ -49,6 +49,20 @@ const LAST_AUTO_KEY: &str = "achievements.last_auto_pass";
 /// Cada cuánto se vuelve mientras quede biblioteca por preguntar.
 const CATCHUP_INTERVAL_MINUTES: i64 = 10;
 
+/// Errores ante los que la tanda se corta en vez de seguir preguntando.
+///
+/// Una clave que falta, una que Steam rechaza, un límite de peticiones o una
+/// conexión que no se pudo preparar dan la misma respuesta para los mil
+/// seiscientos juegos siguientes. Los cuatro los emite [`achievements`]; una
+/// prueba de aquí abajo comprueba que siguen existiendo, porque un código
+/// inventado se lee igual de bien y no corta nada.
+const NEGATIVAS_QUE_NO_SE_ARREGLAN_INSISTIENDO: [&str; 4] = [
+    "steam_api_key_missing",
+    "steam_api_unauthorized",
+    "steam_rate_limited",
+    "steam_achievements_http_client",
+];
+
 /// Qué dejó una pasada.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,13 +113,12 @@ pub async fn run(database: &Database, limit: u32) -> AppResult<AchievementsPassR
             Err(error) => {
                 let _ = database.mark_achievements_attempt(*app_id, "failed");
                 report.failed = report.failed.saturating_add(1);
-                // Una clave que falta o una cuenta sin permiso no se arreglan
-                // insistiendo mil veces: la tanda se corta y se reintenta en la
-                // siguiente ronda.
-                if matches!(
-                    error.code.as_str(),
-                    "steam_api_key_missing" | "steam_api_forbidden"
-                ) {
+                // Hay tres negativas que no se arreglan insistiendo, y una
+                // biblioteca entera insistiendo son mil seiscientas peticiones
+                // inútiles: la tanda se corta y se reintenta en la siguiente
+                // ronda. Los códigos son los que emite `achievements.rs`; no se
+                // inventan aquí.
+                if NEGATIVAS_QUE_NO_SE_ARREGLAN_INSISTIENDO.contains(&error.code.as_str()) {
                     break;
                 }
             }
@@ -226,6 +239,22 @@ mod tests {
             .expect("consultar")
             .collect::<Result<Vec<_>, _>>()
             .expect("filas")
+    }
+
+    /// Los códigos con los que se corta la tanda tienen que existir.
+    ///
+    /// El primer intento de esto usaba `steam_api_forbidden`, que no lo emite
+    /// nadie: compilaba, se leía bien y no cortaba nada. Un identificador
+    /// escrito de memoria es una suposición, y las suposiciones se comprueban.
+    #[test]
+    fn los_codigos_que_cortan_la_tanda_los_emite_de_verdad_el_modulo_de_logros() {
+        let fuente = include_str!("achievements.rs");
+        for codigo in super::NEGATIVAS_QUE_NO_SE_ARREGLAN_INSISTIENDO {
+            assert!(
+                fuente.contains(&format!("\"{codigo}\"")),
+                "«{codigo}» no lo emite achievements.rs: la tanda no se cortaría nunca por él"
+            );
+        }
     }
 
     /// Quién entra en la cola, y en qué orden.
