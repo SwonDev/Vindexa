@@ -338,8 +338,8 @@ export function LibraryFiltersPopover({
               />
               {!deckAvailable && (
                 <AvailabilityNote>
-                  Vindexa lo pregunta al informe público de la tienda por tandas, en segundo
-                  plano; el filtro se habilita en cuanto haya un juego valorado.
+                  Vindexa lo pregunta al informe público de la tienda por tandas, en segundo plano;
+                  el filtro se habilita en cuanto haya un juego valorado.
                 </AvailabilityNote>
               )}
               <RangeFields
