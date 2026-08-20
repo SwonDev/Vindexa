@@ -81,6 +81,11 @@
   color: var(--v-success);
 }
 
+/* No haber podido leer la sesión no es no tenerla: se ve distinto de las dos. */
+.store-card__head span[data-state="warning"] {
+  color: var(--v-warning);
+}
+
 .store-card__count {
   flex: 0 0 auto;
   padding: 2px 7px;

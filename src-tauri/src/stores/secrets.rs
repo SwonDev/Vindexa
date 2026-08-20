@@ -32,7 +32,7 @@ const MAX_ACCOUNT_CHARS: usize = 200;
 /// Margen con el que se considera caducado un testigo que todavía no lo está.
 /// Renovar dos minutos antes evita que una sincronización larga se quede a
 /// medias con un testigo que expira mientras se pagina la biblioteca.
-const EXPIRY_MARGIN_SECONDS: i64 = 120;
+pub const EXPIRY_MARGIN_SECONDS: i64 = 120;
 
 /// Nombre de cuenta con el que cada tienda guarda su sesión en el llavero.
 ///

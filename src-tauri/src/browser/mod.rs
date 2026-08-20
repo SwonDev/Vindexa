@@ -65,6 +65,28 @@ mod tests {
     }
 
     #[test]
+    fn el_trailer_incrustado_pasa_las_dos_fronteras() {
+        // Dejar entrar el marco del tráiler y bloquear después sus recursos
+        // daría el mismo resultado que no dejarlo entrar: un recuadro negro.
+        for rule in stores::EMBEDDED_MEDIA_HOSTS {
+            let candidate = Url::parse(&format!("https://www.{}/embed/x", rule.domain()))
+                .expect("dominio válido");
+            assert!(
+                !blocker::is_blocked_request(&candidate),
+                "{} sirve el tráiler de la ficha y el bloqueador no puede tumbarlo",
+                rule.domain()
+            );
+            assert!(matches!(
+                policy::evaluate(
+                    stores::store_by_id("gog").expect("perfil de GOG"),
+                    &candidate
+                ),
+                policy::NavigationVerdict::Auxiliary
+            ));
+        }
+    }
+
+    #[test]
     fn no_blocked_domain_can_ever_serve_a_store_document() {
         for blocked in blocker::BLOCKED_DOMAINS {
             let candidate = Url::parse(&format!("https://{}/", blocked.domain))

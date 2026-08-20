@@ -190,6 +190,34 @@ pub const HUMAN_VERIFICATION_HOSTS: &[HostRule] = &[
     HostRule::WithSubdomains("recaptcha.net"),
 ];
 
+/// Reproductores que las fichas de las tiendas llevan incrustados.
+///
+/// # Por qué existe esta lista
+///
+/// La ficha de un juego en GOG trae su tráiler en un marco de YouTube. Con la
+/// lista cerrada de tiendas, ese marco se rechazaba y la ventana enseñaba
+/// «ese destino está fuera de las tiendas permitidas; ábrelo en tu navegador
+/// habitual» encima de una página que la persona no había pedido abrir en
+/// ningún sitio: había pedido ver la ficha, y el aviso hablaba de algo que ella
+/// no había pulsado.
+///
+/// # Qué superficie abre, y cuál no
+///
+/// Es el dominio **sin cookies** de YouTube, el mismo que la propia aplicación
+/// ya permite en su ventana para los vídeos guardados de deseados. Se resuelve
+/// como [`crate::browser::policy::NavigationVerdict::Auxiliary`], igual que el
+/// captcha: el marco carga, pero **nunca** se convierte en la página de la
+/// ventana ni toca la barra de direcciones ni el historial.
+pub const EMBEDDED_MEDIA_HOSTS: &[HostRule] = &[HostRule::WithSubdomains("youtube-nocookie.com")];
+
+/// ¿Es esta URL un reproductor incrustado de los que traen las fichas?
+pub fn is_embedded_media(url: &Url) -> bool {
+    let Some(host) = normalized_host(url) else {
+        return false;
+    };
+    EMBEDDED_MEDIA_HOSTS.iter().any(|rule| rule.matches(&host))
+}
+
 /// ¿Es esta URL un proveedor de verificación humana?
 pub fn is_human_verification(url: &Url) -> bool {
     let Some(host) = normalized_host(url) else {

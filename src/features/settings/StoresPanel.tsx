@@ -114,6 +114,14 @@ interface StoreSession {
    * no tiene que saber qué tiendas están listas: se lo preguntan.
    */
   supportsInAppLogin: boolean;
+  /**
+   * El llavero no dejó leer la entrada: permiso denegado, llavero bloqueado o
+   * fallo del sistema.
+   *
+   * No es lo mismo que no tener sesión. Enseñarlo como «sin sesión iniciada»
+   * invitaba a volver a entrar, que no es lo que arregla un permiso.
+   */
+  unreadable: boolean;
 }
 
 interface StoreLoginPrompt {
@@ -188,6 +196,11 @@ function nextStep(
   account?: ExternalStoreAccount,
   session?: StoreSession,
 ): string | undefined {
+  // Un permiso denegado no se arregla volviendo a entrar: el consejo tiene que
+  // llevar a donde está el problema, que es el llavero del sistema.
+  if (session?.unreadable) {
+    return `El llavero de macOS no dejó leer la sesión de ${detection.displayName}. Puede que se denegara el permiso o que el llavero esté bloqueado: ábrelo en Acceso a Llaveros, busca «${session.keychainAccount}» dentro de «${session.keychainService}» y permite el acceso. Si prefieres empezar de cero, cierra sesión y vuelve a iniciarla.`;
+  }
   if (!session?.signedIn) {
     return `Inicia sesión en ${detection.displayName} para traer tu biblioteca completa. No hace falta tener su cliente instalado.`;
   }
@@ -803,12 +816,14 @@ function StoreCard({
       <header className="store-card__head">
         <div>
           <strong>{detection.displayName}</strong>
-          <span data-state={signedIn ? "detected" : "absent"}>
+          <span data-state={signedIn ? "detected" : session?.unreadable ? "warning" : "absent"}>
             {signedIn
               ? session?.accountName
                 ? `Sesión iniciada como ${session.accountName}`
                 : "Sesión iniciada"
-              : "Sin sesión iniciada"}
+              : session?.unreadable
+                ? "No se pudo leer la sesión guardada"
+                : "Sin sesión iniciada"}
           </span>
         </div>
         <span className="store-card__count">

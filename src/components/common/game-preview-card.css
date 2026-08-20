@@ -141,11 +141,17 @@
   text-transform: uppercase;
 }
 
+/* La razón de una coincidencia es una frase, no una etiqueta: cortarla en
+   «Coincide con tus 2738 h en Sim…» quita justo la palabra que la explica. Se
+   deja respirar dos líneas y a partir de ahí sí se recorta. */
 .game-preview__facts dd {
+  display: -webkit-box;
   margin: 0;
   overflow: hidden;
   color: var(--v-subtle);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }

@@ -70,6 +70,14 @@ pub struct ExternalStoreSession {
     /// Vindexa. Cuando es falso queda la vía manual, que funciona igual pero
     /// exige copiar el código a mano.
     pub supports_in_app_login: bool,
+    /// El llavero no dejó leer la entrada: se denegó el permiso, está bloqueado
+    /// o el sistema falló.
+    ///
+    /// **No es lo mismo que no tener sesión**, y confundirlos fue un fallo real:
+    /// la tarjeta decía «sin sesión iniciada» y ofrecía volver a entrar cuando
+    /// la sesión estaba guardada y lo único que faltaba era el permiso. Con
+    /// esto, la tarjeta dice lo que pasó y qué hacer.
+    pub unreadable: bool,
 }
 
 /// Resultado de cerrar sesión, dicho con todas las letras.
@@ -169,22 +177,109 @@ pub async fn complete_login(store: ExternalStore, code: &str) -> AppResult<Exter
         session.account_name = gog_api::fetch_account_name(&session).await;
     }
     secrets::save(store, &session)?;
+    forget_remembered_session(store);
     Ok(describe(store, Some(&session)))
+}
+
+/// Lo que se recuerda de cada tienda entre lecturas del llavero.
+///
+/// # Por qué se recuerda
+///
+/// macOS pregunta por la contraseña del llavero cada vez que lee una entrada
+/// mientras la aplicación no esté en su lista de acceso, y abrir Ajustes →
+/// Tiendas lee **las dos**. Sin recordar nada, cada visita a la pantalla eran
+/// dos diálogos idénticos.
+///
+/// Lo que se guarda **no es el testigo**: son los tres datos que la tarjeta
+/// enseña —nombre visible y caducidades—, y de ellos se recalcula el estado en
+/// cada consulta, así que un testigo que caduca mientras la aplicación está
+/// abierta se sigue viendo caducado. Muere con el proceso y se olvida en cuanto
+/// alguien inicia o cierra sesión.
+type Portrait = Option<(Option<String>, i64, Option<i64>)>;
+static RECORDADO: std::sync::RwLock<Option<Vec<(ExternalStore, Portrait)>>> =
+    std::sync::RwLock::new(None);
+
+fn recordar(store: ExternalStore, portrait: Portrait) {
+    if let Ok(mut cache) = RECORDADO.write() {
+        let entradas = cache.get_or_insert_with(Vec::new);
+        entradas.retain(|(conocida, _)| *conocida != store);
+        entradas.push((store, portrait));
+    }
+}
+
+fn recordado(store: ExternalStore) -> Option<Portrait> {
+    let cache = RECORDADO.read().ok()?;
+    let entradas = cache.as_ref()?;
+    entradas
+        .iter()
+        .find(|(conocida, _)| *conocida == store)
+        .map(|(_, portrait)| portrait.clone())
+}
+
+/// Olvida lo recordado de una tienda: su sesión acaba de cambiar.
+pub fn forget_remembered_session(store: ExternalStore) {
+    if let Ok(mut cache) = RECORDADO.write()
+        && let Some(entradas) = cache.as_mut()
+    {
+        entradas.retain(|(conocida, _)| *conocida != store);
+    }
 }
 
 /// Estado de la sesión de una tienda. No toca la red.
 pub fn session_snapshot(store: ExternalStore) -> AppResult<ExternalStoreSession> {
+    if let Some(portrait) = recordado(store) {
+        return Ok(from_portrait(store, portrait));
+    }
     let session = secrets::load(store)?;
+    recordar(
+        store,
+        session.as_ref().map(|session| {
+            (
+                session.account_name.clone(),
+                session.expires_at,
+                session.refresh_expires_at,
+            )
+        }),
+    );
     Ok(describe(store, session.as_ref()))
 }
 
+/// Reconstruye la tarjeta desde lo recordado, recalculando las caducidades
+/// contra el reloj de ahora y no contra el de la lectura.
+fn from_portrait(store: ExternalStore, portrait: Portrait) -> ExternalStoreSession {
+    let Some((account_name, expires_at, refresh_expires_at)) = portrait else {
+        return describe(store, None);
+    };
+    let now = chrono::Utc::now().timestamp();
+    ExternalStoreSession {
+        signed_in: true,
+        account_name,
+        expires_at: iso_timestamp(expires_at),
+        needs_refresh: now + secrets::EXPIRY_MARGIN_SECONDS >= expires_at,
+        refresh_expired: refresh_expires_at.is_some_and(|limit| now >= limit),
+        ..describe(store, None)
+    }
+}
+
 /// Estado de todas las tiendas conocidas, en el orden de [`ExternalStore::ALL`].
+///
+/// Un llavero que no deja leer **una** tienda no puede borrar del mapa a la
+/// otra: cada tarjeta cuenta lo suyo, y la que no se pudo leer lo dice en vez
+/// de aparecer como si no hubiera sesión.
 pub fn list_sessions() -> AppResult<Vec<ExternalStoreSession>> {
-    ExternalStore::ALL
+    Ok(ExternalStore::ALL
         .iter()
         .copied()
-        .map(session_snapshot)
-        .collect()
+        .map(|store| session_snapshot(store).unwrap_or_else(|_| unreadable(store)))
+        .collect())
+}
+
+/// Lo que se enseña cuando el llavero no deja leer la entrada de una tienda.
+fn unreadable(store: ExternalStore) -> ExternalStoreSession {
+    ExternalStoreSession {
+        unreadable: true,
+        ..describe(store, None)
+    }
 }
 
 /// Cierra la sesión: revoca en la tienda cuando se puede, borra el llavero
@@ -206,6 +301,7 @@ pub async fn sign_out(store: ExternalStore) -> AppResult<SignOutReport> {
     };
 
     secrets::delete(store)?;
+    forget_remembered_session(store);
     let keychain_empty = !secrets::has(store)?;
 
     Ok(SignOutReport {
@@ -239,6 +335,8 @@ async fn active_session(store: ExternalStore) -> AppResult<StoredSession> {
     match renewed {
         Ok(renewed) => {
             secrets::save(store, &renewed)?;
+            // La caducidad recordada acaba de quedarse vieja.
+            forget_remembered_session(store);
             Ok(renewed)
         }
         Err(error) if error.code == "external_store_auth" => Err(session_expired(store)),
@@ -328,6 +426,7 @@ fn describe(store: ExternalStore, session: Option<&StoredSession>) -> ExternalSt
         keychain_account: secrets::keychain_account(store).to_string(),
         account_sessions_url: Some(account_sessions_url(store).to_string()),
         supports_in_app_login: super::login_window::supports_in_app(store),
+        unreadable: false,
     }
 }
 
@@ -338,7 +437,9 @@ fn iso_timestamp(seconds: i64) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{describe, login_prompt, not_signed_in, not_signed_in_scan};
+    use super::{
+        describe, from_portrait, login_prompt, not_signed_in, not_signed_in_scan, unreadable,
+    };
     use crate::stores::secrets::StoredSession;
     use crate::stores::{ExternalStore, ScanStatus, StoreOrigin};
 
@@ -378,6 +479,54 @@ mod tests {
         // El sitio donde se guarda el testigo se enseña aunque no haya ninguno:
         // es justo lo que hay que poder comprobar tras cerrar sesión.
         assert!(!described.keychain_account.is_empty());
+    }
+
+    /// «No se pudo leer» y «no hay sesión» no son lo mismo.
+    ///
+    /// Con el llavero denegando el permiso, la tarjeta decía «sin sesión
+    /// iniciada» y ofrecía volver a entrar. La sesión estaba guardada: lo que
+    /// faltaba era el permiso, y volver a entrar no lo arregla.
+    #[test]
+    fn un_llavero_que_no_deja_leer_no_se_confunde_con_no_tener_sesion() {
+        let sin_sesion = describe(ExternalStore::Gog, None);
+        assert!(!sin_sesion.unreadable);
+
+        let ilegible = unreadable(ExternalStore::Gog);
+        assert!(ilegible.unreadable);
+        assert!(!ilegible.signed_in);
+        // Y sigue diciendo dónde mirar: es lo que permite comprobarlo a mano.
+        assert_eq!(ilegible.keychain_service, "io.vindexa.desktop");
+        assert!(!ilegible.keychain_account.is_empty());
+    }
+
+    /// Lo recordado no puede congelar una caducidad.
+    ///
+    /// El diálogo del llavero se evita recordando tres datos, no el testigo. Si
+    /// además se recordara el veredicto ya calculado, un testigo que caduca con
+    /// la aplicación abierta seguiría figurando como vigente hasta reiniciar.
+    #[test]
+    fn lo_recordado_recalcula_la_caducidad_contra_el_reloj_de_ahora() {
+        let ahora = chrono::Utc::now().timestamp();
+
+        let vigente = from_portrait(ExternalStore::Epic, Some((None, ahora + 3_600, None)));
+        assert!(vigente.signed_in);
+        assert!(!vigente.needs_refresh);
+
+        let a_punto = from_portrait(ExternalStore::Epic, Some((None, ahora + 30, None)));
+        assert!(a_punto.needs_refresh, "dentro del margen ya toca renovar");
+
+        let caducado = from_portrait(
+            ExternalStore::Epic,
+            Some((Some("Fulanita".to_string()), ahora - 10, Some(ahora - 5))),
+        );
+        assert!(caducado.needs_refresh);
+        assert!(caducado.refresh_expired);
+        assert_eq!(caducado.account_name.as_deref(), Some("Fulanita"));
+
+        // Y recordar «aquí no había sesión» sigue siendo no tener sesión.
+        let sin_nada = from_portrait(ExternalStore::Gog, None);
+        assert!(!sin_nada.signed_in);
+        assert!(!sin_nada.unreadable);
     }
 
     #[test]

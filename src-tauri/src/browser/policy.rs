@@ -222,6 +222,13 @@ pub fn evaluate(store: &'static StoreProfile, url: &Url) -> NavigationVerdict {
         return NavigationVerdict::Auxiliary;
     }
 
+    // El tráiler de la ficha vive en un marco de YouTube. Es contenido de la
+    // página que se pidió, no un destino: se deja cargar sin que llegue a ser
+    // la página de la ventana.
+    if stores::is_embedded_media(url) {
+        return NavigationVerdict::Auxiliary;
+    }
+
     NavigationVerdict::Rejected(RejectionReason::HostNotAllowed)
 }
 
@@ -396,6 +403,43 @@ mod tests {
         assert_eq!(
             evaluate(epic, &url("https://www.epicgames.com/id/login")),
             NavigationVerdict::Allowed(epic)
+        );
+    }
+
+    /// El tráiler de una ficha de GOG.
+    ///
+    /// Antes salía un aviso —«ese destino está fuera de las tiendas
+    /// permitidas; ábrelo en tu navegador habitual»— encima de una página que
+    /// la persona sí había pedido, sobre un marco que no había pulsado.
+    #[test]
+    fn el_trailer_incrustado_carga_sin_avisar_de_nada() {
+        let gog = store_by_id("gog").expect("perfil de GOG");
+        for raw in [
+            "https://www.youtube-nocookie.com/embed/1Ux2nDqNJ7s?rel=0",
+            "https://youtube-nocookie.com/embed/abc",
+        ] {
+            let verdict = evaluate(gog, &url(raw));
+            assert_eq!(verdict, NavigationVerdict::Auxiliary, "{raw}");
+            assert!(verdict.should_continue());
+        }
+
+        // Y sólo ese dominio: el de siempre, con cookies, sigue fuera.
+        for raw in [
+            "https://www.youtube.com/embed/abc",
+            "https://youtube-nocookie.com.attacker.tld/embed/abc",
+            "https://eviltube-nocookie.com/embed/abc",
+        ] {
+            assert_eq!(
+                evaluate(gog, &url(raw)),
+                NavigationVerdict::Rejected(RejectionReason::HostNotAllowed),
+                "{raw} no debería poder cargar"
+            );
+        }
+
+        // Y sin HTTPS tampoco, como todo lo demás.
+        assert_eq!(
+            evaluate(gog, &url("http://www.youtube-nocookie.com/embed/abc")),
+            NavigationVerdict::Rejected(RejectionReason::InsecureTransport)
         );
     }
 

@@ -52,6 +52,7 @@ interface StoreSessionFixture {
   keychainAccount: string;
   accountSessionsUrl: string | null;
   supportsInAppLogin: boolean;
+  unreadable: boolean;
 }
 
 function session(overrides: Partial<StoreSessionFixture> = {}): StoreSessionFixture {
@@ -67,6 +68,7 @@ function session(overrides: Partial<StoreSessionFixture> = {}): StoreSessionFixt
     keychainAccount: "epic-store-session",
     accountSessionsUrl: "https://www.epicgames.com/account/personal",
     supportsInAppLogin: true,
+    unreadable: false,
     ...overrides,
   };
 }
@@ -698,5 +700,47 @@ describe("panel de tiendas externas", () => {
     renderPanel();
     await user.click(await screen.findByRole("button", { name: /Jugar/ }));
     expect(mockedApi.launchExternalGame).toHaveBeenCalledWith("epic", "Instalado");
+  });
+});
+
+/**
+ * El llavero que no deja leer.
+ *
+ * Con el permiso denegado, la tarjeta decía «sin sesión iniciada» y proponía
+ * volver a entrar. La sesión estaba guardada: lo que faltaba era el permiso, y
+ * volver a entrar no arregla un permiso.
+ */
+describe("una sesión que no se pudo leer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedApi.detectExternalStores.mockResolvedValue(NOTHING_DETECTED);
+    mockedApi.listExternalStoreAccounts.mockResolvedValue([]);
+    mockedApi.listExternalGames.mockResolvedValue({ items: [], total: 0, limit: 60, offset: 0 });
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 8, offset: 0 });
+    invoke.mockReset();
+  });
+
+  it("no se hace pasar por una sesión que no existe", async () => {
+    routeInvoke([
+      session({ unreadable: true }),
+      session({
+        store: "gog",
+        displayName: "GOG",
+        keychainAccount: "gog-store-session",
+        accountSessionsUrl: "https://www.gog.com/account/settings/security",
+      }),
+    ]);
+
+    renderPanel();
+    const epicCard = await screen.findByRole("article", { name: "Epic Games Store" });
+    expect(within(epicCard).getByText("No se pudo leer la sesión guardada")).toBeVisible();
+    // El consejo lleva al llavero, que es donde está el problema, y nombra la
+    // entrada exacta para poder comprobarlo.
+    expect(within(epicCard).getByText(/Acceso a Llaveros/)).toBeVisible();
+    expect(within(epicCard).getAllByText(/epic-store-session/).length).toBeGreaterThan(0);
+
+    // Y la otra tienda no hereda el problema: cada tarjeta cuenta lo suyo.
+    const gogCard = await screen.findByRole("article", { name: "GOG" });
+    expect(within(gogCard).getAllByText("Sin sesión iniciada").length).toBeGreaterThan(0);
   });
 });
