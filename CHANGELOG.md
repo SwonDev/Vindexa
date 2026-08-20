@@ -62,6 +62,10 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   la página que se pidió, no un destino: ahora carga como el marco de la verificación humana,
   sin tocar la barra de direcciones ni el historial, y sólo desde el dominio sin cookies de
   YouTube.
+- **«Steam · al día» lo decía aunque la última sincronización fuera de hace cuatro días.** Que una
+  llamada terminara bien no dice nada de lo que ha pasado en tu biblioteca desde entonces, y menos
+  con la sincronización periódica en «sólo manual». Pasado un día, el distintivo dice **cuándo**
+  fue; sin fecha guardada no afirma ninguna de las dos cosas.
 - **⌘5 no hacía nada y Ajustes lo enseñaba «sin asignar».** Deseados tenía dos dueños: el campo
   que Rust guarda desde siempre y una acción local duplicada, sostenida por un comentario que
   había dejado de ser verdad. La combinación quedaba ocupada por un enlace que nadie escuchaba.

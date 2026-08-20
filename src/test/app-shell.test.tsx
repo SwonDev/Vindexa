@@ -77,6 +77,7 @@ const emptyBootstrap: AppBootstrap = {
 function bootstrapWithSteamSync(
   status?: "success" | "failed",
   lastSyncErrorMessage?: string,
+  lastSyncAt?: string,
 ): AppBootstrap {
   return {
     ...emptyBootstrap,
@@ -88,6 +89,7 @@ function bootstrapWithSteamSync(
         personaName: "Vindexa QA",
         ...(status ? { lastSyncStatus: status } : {}),
         ...(lastSyncErrorMessage ? { lastSyncErrorMessage } : {}),
+        ...(lastSyncAt ? { lastSyncAt } : {}),
       },
     },
   };
@@ -622,5 +624,59 @@ describe("ciclo de carga de la aplicación", () => {
       consoleError.mockRestore();
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * «Al día» es una afirmación, no el resultado de la última llamada.
+ *
+ * El distintivo decía «Steam · al día» en cuanto la última sincronización había
+ * ido bien, aunque fuera de hace cuatro días y la periódica estuviera en «sólo
+ * manual». Que una llamada terminara bien no dice nada de lo que ha pasado en
+ * tu biblioteca desde entonces.
+ */
+describe("el distintivo de Steam", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    mockedApi.syncSteamLibrary.mockResolvedValue(undefined);
+    mockedApi.libraryFilterOptions.mockResolvedValue({
+      genres: [],
+      categories: [],
+      tags: [],
+      totalGames: 0,
+      metadataGames: 0,
+      achievementGames: 0,
+      steamDeckGames: 0,
+    });
+  });
+
+  it("dice «al día» sólo cuando la sincronización es de hoy", async () => {
+    const hace10min = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    mockedApi.bootstrap.mockResolvedValueOnce(
+      bootstrapWithSteamSync("success", undefined, hace10min),
+    );
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    expect(await screen.findByText("Steam · al día")).toBeVisible();
+  });
+
+  it("con una sincronización vieja dice cuándo fue, no que estés al día", async () => {
+    const haceCuatroDias = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+    mockedApi.bootstrap.mockResolvedValueOnce(
+      bootstrapWithSteamSync("success", undefined, haceCuatroDias),
+    );
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    expect(await screen.findByText(/^Steam · hace/)).toBeVisible();
+    expect(screen.queryByText("Steam · al día")).toBeNull();
+  });
+
+  it("sin fecha de sincronización tampoco la afirma", async () => {
+    mockedApi.bootstrap.mockResolvedValueOnce(bootstrapWithSteamSync("success"));
+    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+    renderAppShell();
+    expect(await screen.findByText("Steam · sincronizada")).toBeVisible();
+    expect(screen.queryByText("Steam · al día")).toBeNull();
   });
 });

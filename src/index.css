@@ -462,6 +462,11 @@
   background: var(--v-lime);
   box-shadow: 0 0 6px rgb(164 208 7 / 52%);
 }
+/* Sincronizada, pero hace días: ni verde de «al día» ni rojo de fallo. */
+.presence-dot[data-state="aging"] {
+  background: var(--v-warning);
+  box-shadow: 0 0 6px rgb(214 166 75 / 45%);
+}
 .presence-dot[data-state="failed"] {
   background: var(--destructive);
   box-shadow: 0 0 6px rgb(216 92 92 / 52%);

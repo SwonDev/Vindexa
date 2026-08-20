@@ -42,6 +42,7 @@ import {
   isEmptyChromeTarget,
   toggleFitWindow,
 } from "@/features/shell/window-chrome";
+import { formatRelativeDate } from "@/lib/format";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppSection } from "@/lib/types";
@@ -466,6 +467,23 @@ export function AppShell() {
   }, [openPalette, paletteOpen, runSteamSync, section, settingsOpen, shortcuts]);
 
   const steamAccount = bootstrap?.steam.account;
+  /**
+   * «Al día» es una afirmación, no un estado de la última llamada.
+   *
+   * El distintivo decía «Steam · al día» en cuanto la última sincronización
+   * había ido bien, aunque fuera de hace cuatro días y aunque la periódica
+   * estuviera en «sólo manual». Que una llamada terminara bien no dice nada
+   * sobre lo que ha pasado en tu biblioteca desde entonces, así que pasado un
+   * día el distintivo dice **cuándo** fue en vez de afirmar que estás al día.
+   */
+  const SYNC_FRESH_MS = 24 * 60 * 60 * 1000;
+  const syncedRecently = (() => {
+    const raw = steamAccount?.lastSyncAt;
+    if (!raw) return false;
+    const cuando = Date.parse(raw);
+    if (Number.isNaN(cuando)) return false;
+    return Date.now() - cuando < SYNC_FRESH_MS;
+  })();
   const steamHealth = steamAccount
     ? steamAccount.lastSyncStatus === "failed"
       ? {
@@ -475,12 +493,30 @@ export function AppShell() {
           footer: "Steam · sincronización fallida",
         }
       : steamAccount.lastSyncStatus === "success"
-        ? {
-            state: "success",
-            label: "Cuenta vinculada · sincronizada",
-            compactLabel: "Steam · al día",
-            footer: "Steam · sincronización correcta",
-          }
+        ? syncedRecently
+          ? {
+              state: "success",
+              label: "Cuenta vinculada · sincronizada hoy",
+              compactLabel: "Steam · al día",
+              footer: "Steam · sincronización correcta",
+            }
+          : steamAccount.lastSyncAt
+            ? {
+                state: "aging",
+                label: `Cuenta vinculada · sincronizada ${formatRelativeDate(
+                  steamAccount.lastSyncAt,
+                )}`,
+                compactLabel: `Steam · ${formatRelativeDate(steamAccount.lastSyncAt)}`,
+                footer: `Steam · sincronizada ${formatRelativeDate(steamAccount.lastSyncAt)}`,
+              }
+            : {
+                // Sin fecha no se sabe cuándo fue, y no saberlo tampoco es
+                // estar al día: se dice lo único que consta.
+                state: "success",
+                label: "Cuenta vinculada · sincronizada",
+                compactLabel: "Steam · sincronizada",
+                footer: "Steam · sincronización correcta",
+              }
         : {
             state: "never",
             label: "Cuenta vinculada · sin sincronizar",
