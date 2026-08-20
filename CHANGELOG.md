@@ -31,6 +31,9 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
 - **La lista de ofertas dice cuándo se miró.** Una rebaja que terminó ayer sigue guardada hasta
   la siguiente tanda; pasadas doce horas la línea cambia de tono y avisa de que algunas pueden
   haber terminado.
+- **Los regalos de Epic también tienen vista rápida.** Guardaban su imagen desde el principio y
+  no se pintaba en ninguna parte: ahora, al pasar el ratón, se enseña con lo que Vindexa sabe
+  —si ya lo tienes, cuánto queda y de qué va—.
 - **La pantalla de Privacidad dice también qué sale del equipo.** Enumeraba cuatro garantías
   sobre lo que se queda y ninguna sobre lo que viaja. Ahora están las dos direcciones: qué se
   pregunta, a dónde, y qué no sale nunca.
@@ -71,6 +74,11 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   mientras corre la aplicación —antes cada refresco abría dos diálogos de contraseña— y la
   tarjeta ofrece «Volver a intentarlo» para no obligar a reiniciar. itch.io dice ahora lo mismo
   en vez de pedir que generes otra clave cuando la que había seguía guardada.
+- **La carátula de una oferta de GOG se guardaba y no se pintaba.** GOG sirve las de su catálogo
+  desde `gog-statics.com`, que no estaba declarado en la política de contenido de la ventana: la
+  imagen se pedía y el navegador la bloqueaba en silencio, dejando el hueco con las iniciales
+  —que es justo lo que se enseña cuando **no hay** carátula—. Ahora se declara, y una dirección
+  de un anfitrión que la ventana no va a pintar ya no se guarda.
 - «Sin coincidencia medida» aparecía sobre ofertas que **sí** se habían medido y daban cero; ya
   dice lo que ocurre, que es que no hay señales en común.
 - La vista rápida ya no corta la razón de la coincidencia a media palabra, la lista larga de

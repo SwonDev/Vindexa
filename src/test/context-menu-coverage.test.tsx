@@ -83,6 +83,7 @@ const CON_VISTA_RAPIDA: Record<string, string> = {
   "features/discovery/DiscoveryScreen.tsx": "cada juego del radar",
   "features/discovery/UpcomingReleasesBlock.tsx": "cada lanzamiento previsto",
   "features/discovery/StoreDealsBlock.tsx": "cada oferta de la tienda",
+  "features/discovery/EpicFreeBlock.tsx": "cada regalo de la semana",
 };
 
 describe("la vista rápida llega a todas las listas donde se decide algo", () => {

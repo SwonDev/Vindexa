@@ -1,6 +1,8 @@
 import { IconExternalLink, IconGift, IconLoader2, IconX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Artwork } from "@/components/common/Artwork";
+import { GamePreviewCard } from "@/components/common/GamePreviewCard";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -127,21 +129,42 @@ function EpicFreeRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <li className="epic-free__item" data-state={offer.state} data-owned={offer.owned}>
-          <div className="epic-free__body">
-            <p className="epic-free__title">{offer.title}</p>
-            <p className="epic-free__meta">
-              {offer.owned ? (
-                <span className="epic-free__owned">Ya lo tienes</span>
-              ) : (
-                describeWindow(offer)
-              )}
-              {offer.originalPriceCents != null && offer.currency && (
-                <span className="epic-free__was">
-                  {formatAmount(offer.originalPriceCents, offer.currency)}
-                </span>
-              )}
-            </p>
-          </div>
+          {/* La misma vista rápida que en las ofertas. Epic no da AppID de
+              Steam, así que no hay capturas que pedir: se enseña su propia
+              imagen, que es lo que hay, y los datos que Vindexa sí sabe. */}
+          <GamePreviewCard
+            side="bottom"
+            appId={null}
+            title={offer.title}
+            fallback={
+              <Artwork src={offer.imageUrl ?? undefined} title={offer.title} kind="header" />
+            }
+            headline={
+              <>
+                <b>Gratis</b>
+                {offer.originalPriceCents != null && offer.currency && (
+                  <s>{formatAmount(offer.originalPriceCents, offer.currency)}</s>
+                )}
+              </>
+            }
+            facts={previewFacts(offer)}
+          >
+            <div className="epic-free__body">
+              <p className="epic-free__title">{offer.title}</p>
+              <p className="epic-free__meta">
+                {offer.owned ? (
+                  <span className="epic-free__owned">Ya lo tienes</span>
+                ) : (
+                  describeWindow(offer)
+                )}
+                {offer.originalPriceCents != null && offer.currency && (
+                  <span className="epic-free__was">
+                    {formatAmount(offer.originalPriceCents, offer.currency)}
+                  </span>
+                )}
+              </p>
+            </div>
+          </GamePreviewCard>
           {/* Quien ya lo tiene no necesita el botón; el menú contextual sigue
               ofreciendo abrir la ficha por si quiere mirarla. */}
           {vigente && !offer.owned && (
@@ -165,6 +188,17 @@ function EpicFreeRow({
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+/** Sólo lo que se sabe. Lo que Epic no publica no ocupa una fila diciéndolo. */
+function previewFacts(offer: EpicFreeOffer): { label: string; value: string }[] {
+  const salida: { label: string; value: string }[] = [];
+  salida.push({ label: "Estado", value: offer.owned ? "Ya lo tienes" : describeWindow(offer) });
+  if (offer.description.trim()) {
+    salida.push({ label: "Qué es", value: offer.description.trim() });
+  }
+  salida.push({ label: "Tienda", value: "Epic Games Store" });
+  return salida;
 }
 
 /**
