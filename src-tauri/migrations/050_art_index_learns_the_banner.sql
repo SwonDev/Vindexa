@@ -1,0 +1,19 @@
+-- El índice de arte ya sabe traer el banner: hay que volver a preguntárselo.
+--
+-- # Por qué
+--
+-- `steam::store_assets` contrasta la biblioteca con el índice oficial de
+-- recursos de la tienda —`IStoreBrowseService/GetItems`, público y sin clave— y
+-- guarda la carátula, la cabecera y la cápsula reales. Hasta ahora no miraba el
+-- banner de biblioteca, así que ese campo se quedaba fuera de la corrección.
+--
+-- El banner es justo el que **no se puede adivinar**: los juegos publicados en
+-- los últimos años guardan cada archivo bajo su propio hash, y el del banner no
+-- es el de la cabecera. La ficha de DragonSword : Awakening enseñaba el fondo
+-- oscuro de la página de tienda mientras su `library_hero` existía, publicado,
+-- bajo un hash que ninguna convención alcanza.
+--
+-- La pasada sólo corre si han pasado doce horas desde la última completa, y la
+-- última corrió sin saber nada de banners. Borrar la marca la hace correr en el
+-- siguiente arranque: unas veinte peticiones para toda la biblioteca.
+DELETE FROM app_settings WHERE key = 'art_index_refreshed_at';

@@ -73,11 +73,19 @@ pub struct GameArt {
     pub cover_url: Option<String>,
     pub header_url: Option<String>,
     pub capsule_url: Option<String>,
+    /// El arte apaisado de biblioteca —1920×620 y a todo color—, que es el
+    /// banner de la ficha. No confundir con `games.hero_url`, que guarda el
+    /// fondo de la página de tienda: un degradado oscuro pensado para llevar
+    /// texto encima.
+    pub library_hero_url: Option<String>,
 }
 
 impl GameArt {
     fn is_empty(&self) -> bool {
-        self.cover_url.is_none() && self.header_url.is_none() && self.capsule_url.is_none()
+        self.cover_url.is_none()
+            && self.header_url.is_none()
+            && self.capsule_url.is_none()
+            && self.library_hero_url.is_none()
     }
 }
 
@@ -134,6 +142,10 @@ struct AssetsPayload {
     header: Option<String>,
     #[serde(default)]
     main_capsule: Option<String>,
+    #[serde(default)]
+    library_hero: Option<String>,
+    #[serde(default)]
+    library_hero_2x: Option<String>,
 }
 
 /// Pregunta al índice por un lote de AppID y devuelve el arte real de cada uno.
@@ -278,6 +290,13 @@ fn parse_assets(bytes: &[u8]) -> AppResult<Vec<(u32, GameArt)>> {
                     .main_capsule
                     .as_deref()
                     .and_then(|file| asset_url(format, file, app_id)),
+                // El banner de la ficha. El `_2x` cuando lo hay: el hueco mide
+                // más de mil píxeles y la versión sencilla llega ampliada.
+                library_hero_url: assets
+                    .library_hero_2x
+                    .as_deref()
+                    .or(assets.library_hero.as_deref())
+                    .and_then(|file| asset_url(format, file, app_id)),
             };
             (!art.is_empty()).then_some((app_id, art))
         })
@@ -331,15 +350,24 @@ fn persist(database: &Database, art: &[(u32, GameArt)]) -> AppResult<usize> {
     let mut updated = 0;
     {
         let mut statement = transaction.prepare(
+            // El banner es la excepción a la regla de `COALESCE`: se escribe
+            // **tal cual**, incluido el vacío. El índice acaba de decir qué arte
+            // publica este juego, así que si no trae banner es que no lo hay, y
+            // dejar puesta una URL derivada por convención sería conservar una
+            // dirección que devuelve 404. Con las demás no se hace porque su
+            // valor anterior puede venir de la ficha de la tienda, que también
+            // es una fuente buena.
             "UPDATE games
                 SET cover_url = COALESCE(?2, cover_url),
                     header_url = COALESCE(?3, header_url),
                     capsule_url = COALESCE(?4, capsule_url),
+                    library_hero_url = ?5,
                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
               WHERE app_id = ?1
                 AND (COALESCE(?2, cover_url) IS NOT cover_url
                   OR COALESCE(?3, header_url) IS NOT header_url
-                  OR COALESCE(?4, capsule_url) IS NOT capsule_url)",
+                  OR COALESCE(?4, capsule_url) IS NOT capsule_url
+                  OR ?5 IS NOT library_hero_url)",
         )?;
         for (app_id, art) in art {
             updated += statement.execute(params![
@@ -347,6 +375,7 @@ fn persist(database: &Database, art: &[(u32, GameArt)]) -> AppResult<usize> {
                 art.cover_url,
                 art.header_url,
                 art.capsule_url,
+                art.library_hero_url,
             ])?;
         }
     }
@@ -410,6 +439,8 @@ mod tests {
             "header":"3c96b19255b69aa9b2e131dda3e19d622b0d6562/header.jpg",
             "library_capsule":"c45a0dcc4361206e34be411af44de7cf0cd2cd5b/library_capsule.jpg",
             "library_capsule_2x":"c45a0dcc4361206e34be411af44de7cf0cd2cd5b/library_capsule_2x.jpg",
+            "library_hero":"a38bcd252faf83c70e24dd9f17731bfd0c0aaa6f/library_hero.jpg",
+            "library_hero_2x":"a38bcd252faf83c70e24dd9f17731bfd0c0aaa6f/library_hero_2x.jpg",
             "community_icon":"f38cd000ec6342a00c744f6d8ca7c877bde4b9f9"}},
         {"item_type":0,"id":927380,"success":1,"visible":true,
          "name":"Yakuza Kiwami 2 (Legacy)","appid":927380,
@@ -418,7 +449,8 @@ mod tests {
             "main_capsule":"capsule_616x353.jpg",
             "header":"header.jpg",
             "library_capsule":"library_600x900.jpg",
-            "library_capsule_2x":"library_600x900_2x.jpg"}},
+            "library_capsule_2x":"library_600x900_2x.jpg",
+            "library_hero":"library_hero.jpg"}},
         {"item_type":0,"id":397080,"success":15,"visible":false,"name":"","appid":397080},
         {"item_type":0,"id":2700,"success":1,"visible":true,"name":"Half-Life: Source","appid":2700,
          "assets":{
@@ -468,6 +500,41 @@ mod tests {
         assert_ne!(art.cover_url, art.header_url);
         // El `?t=` de la plantilla no viaja a la columna.
         assert!(!art.cover_url.as_deref().unwrap_or_default().contains('?'));
+    }
+
+    /// El banner de la ficha sale del índice, no de una convención.
+    ///
+    /// Es la respuesta al fallo que se veía en la aplicación: la ficha enseñaba
+    /// el fondo de la página de tienda —un degradado oscuro— porque el arte de
+    /// biblioteca vive bajo un hash que no se puede adivinar desde el AppID. El
+    /// índice publica el nombre real, incluido el `_2x`, que es el que cabe en
+    /// un hueco de mil píxeles.
+    #[test]
+    fn el_banner_de_biblioteca_sale_del_indice_con_su_hash() {
+        let resolved = parse_assets(INDEX_OK.as_bytes()).expect("leer índice");
+
+        let moderno = art_of(&resolved, 3_483_510).expect("juego moderno resuelto");
+        assert_eq!(
+            moderno.library_hero_url.as_deref(),
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/3483510/a38bcd252faf83c70e24dd9f17731bfd0c0aaa6f/library_hero_2x.jpg"
+            ),
+            "con `_2x` publicado, el banner grande"
+        );
+
+        let antiguo = art_of(&resolved, 927_380).expect("juego antiguo resuelto");
+        assert_eq!(
+            antiguo.library_hero_url.as_deref(),
+            Some(
+                "https://shared.steamstatic.com/store_item_assets/steam/apps/927380/library_hero.jpg"
+            ),
+            "sin `_2x`, el sencillo, que es el mejor que existe"
+        );
+
+        // Y un juego que no publica banner se queda sin banner: escribir la URL
+        // por convención sería guardar una dirección que devuelve 404.
+        let sin_banner = art_of(&resolved, 2700).expect("juego sin banner resuelto");
+        assert_eq!(sin_banner.library_hero_url, None);
     }
 
     #[test]

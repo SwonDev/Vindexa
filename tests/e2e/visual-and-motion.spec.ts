@@ -27,7 +27,9 @@ test("la vista ultracompacta mantiene varias filas legibles a 960x700", async ({
   await app.waitForShell();
   const compactView = page.getByRole("radio", { name: "Vista ultracompacta" });
   await compactView.click();
-  await expect(compactView).toHaveAttribute("aria-pressed", "true");
+  // El conmutador es un grupo de radios nativo: el estado se marca con
+  // `aria-checked`, no con `aria-pressed`, que es de los botones de dos estados.
+  await expect(compactView).toBeChecked();
   await expect(page.locator(".game-browser--compact")).toBeVisible();
   await expect(page.locator(".game-row")).toHaveCount(3);
   await app.expectNoHorizontalOverflow();
@@ -40,10 +42,10 @@ test("Steam Family conserva controles y filas densas a 960x700", async ({ app, p
   await app.waitForShell();
   await page.getByRole("button", { name: /Steam Family/ }).click();
 
-  await expect(
-    page.getByRole("button", { name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam" }),
-  ).toBeVisible();
-  await expect(page.getByText("Biblioteca · 3 juegos · 2 instalados")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Cuenta vinculada · / })).toBeVisible();
+  // El recuento vive en la barra lateral desde que la de estado dejó de repetir
+  // lo que ya se ve en otro sitio.
+  await expect(page.getByRole("button", { name: /^Todos los juegos/ })).toContainText("3");
   await expect(page.getByRole("combobox", { name: "Filtrar catálogo familiar" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Ordenar catálogo familiar" })).toBeVisible();
   await expect(page.locator(".family-catalog-browser--grid")).toBeVisible();

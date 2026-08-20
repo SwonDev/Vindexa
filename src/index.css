@@ -454,6 +454,10 @@
   overflow: visible;
   text-overflow: clip;
 }
+/* Dos estados y ninguno más: la cuenta está puesta o no lo está. Cuándo fue la
+   última sincronización lo dice Ajustes y un fallo lo dice la barra de estado;
+   aquí un tercer color sería una luz encendida para algo que este punto no
+   responde. */
 .presence-dot {
   flex: 0 0 6px;
   width: 6px;
@@ -462,19 +466,9 @@
   background: var(--v-lime);
   box-shadow: 0 0 6px rgb(164 208 7 / 52%);
 }
-/* Sincronizada, pero hace días: ni verde de «al día» ni rojo de fallo. */
-.presence-dot[data-state="aging"] {
-  background: var(--v-warning);
-  box-shadow: 0 0 6px rgb(214 166 75 / 45%);
-}
-.presence-dot[data-state="failed"] {
+.presence-dot[data-state="unlinked"] {
   background: var(--destructive);
   box-shadow: 0 0 6px rgb(216 92 92 / 52%);
-}
-.presence-dot[data-state="never"] {
-  border: 1px solid #81909c;
-  background: transparent;
-  box-shadow: none;
 }
 .sync-status {
   display: flex;
@@ -484,12 +478,7 @@
   color: var(--v-muted);
   font-size: 11px;
 }
-.sync-status i {
-  width: 6px;
-  height: 6px;
-  border: 1px solid #81909c;
-  border-radius: 1px;
-}
+
 .app-content {
   min-width: 0;
   min-height: 0;

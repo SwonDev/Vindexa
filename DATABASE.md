@@ -1,7 +1,7 @@
 # Esquema y persistencia de Vindexa
 
 SQLite es la fuente de verdad de Vindexa. Este documento describe el esquema vigente de la
-migración **49** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
+migración **50** y sus invariantes; los archivos SQL de `src-tauri/migrations/` son la fuente
 normativa ejecutable.
 
 ## Índice
@@ -201,6 +201,7 @@ actual. Todas las ordenaciones añaden título/AppID como desempate determinista
 | 47 | `price_checks` | «Sin precio consultado» y «sin precio publicado» no son lo mismo. |
 | 48 | `drm_evidence_in_words` | La evidencia del DRM decía el nombre interno de dos campos de la API. |
 | 49 | `library_hero_for_everyone` | El banner de la ficha se veía apagado en casi toda la biblioteca. |
+| 50 | `art_index_learns_the_banner` | El índice de arte ya sabe traer el banner: hay que volver a preguntárselo. |
 
 > [!WARNING]
 > Una migración ya publicada o aplicada es inmutable: no se edita su SQL. Una corrección se

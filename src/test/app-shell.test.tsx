@@ -261,10 +261,11 @@ describe("ciclo de carga de la aplicación", () => {
     renderAppShell();
 
     const steamAction = await screen.findByRole("button", {
-      name: "Cuenta vinculada · sincronización fallida. Abrir ajustes de Steam",
+      name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
     });
-    expect(steamAction).toHaveAttribute("data-sync-state", "failed");
-    expect(steamAction).toHaveTextContent("Steam · sync fallida");
+    // El distintivo dice que la cuenta está puesta, que es lo que responde. El
+    // fallo se cuenta abajo, con el resto de los problemas.
+    expect(steamAction).toHaveAttribute("data-sync-state", "linked");
     expect(screen.getByText("Steam · sincronización fallida")).toBeVisible();
 
     await user.click(steamAction);
@@ -279,9 +280,9 @@ describe("ciclo de carga de la aplicación", () => {
     const firstRender = renderAppShell();
     expect(
       await screen.findByRole("button", {
-        name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam",
+        name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
       }),
-    ).toHaveAttribute("data-sync-state", "success");
+    ).toHaveAttribute("data-sync-state", "linked");
     // Una sincronización correcta no se anuncia dos veces: lo dice la ficha de
     // la cabecera y la barra de estado se queda callada.
     expect(screen.queryByText("Steam · sincronización correcta")).toBeNull();
@@ -291,9 +292,9 @@ describe("ciclo de carga de la aplicación", () => {
     renderAppShell();
     expect(
       await screen.findByRole("button", {
-        name: "Cuenta vinculada · sin sincronizar. Abrir ajustes de Steam",
+        name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
       }),
-    ).toHaveAttribute("data-sync-state", "never");
+    ).toHaveAttribute("data-sync-state", "linked");
     expect(screen.queryByText("Steam · pendiente de sincronizar")).toBeNull();
   });
 
@@ -418,7 +419,7 @@ describe("ciclo de carga de la aplicación", () => {
     const { queryClient } = renderAppShell();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     await screen.findByRole("button", {
-      name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam",
+      name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
     });
 
     fireEvent.keyDown(window, { key: "s", metaKey: true, shiftKey: true });
@@ -434,7 +435,7 @@ describe("ciclo de carga de la aplicación", () => {
     mockedApi.syncSteamLibrary.mockReturnValue(new Promise(() => undefined));
     renderAppShell();
     await screen.findByRole("button", {
-      name: "Cuenta vinculada · sincronizada. Abrir ajustes de Steam",
+      name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
     });
 
     fireEvent.keyDown(window, { key: "s", metaKey: true, shiftKey: true });
@@ -673,12 +674,13 @@ describe("ciclo de carga de la aplicación", () => {
 });
 
 /**
- * «Al día» es una afirmación, no el resultado de la última llamada.
+ * El distintivo responde una pregunta, y sólo una: ¿está puesta la cuenta?
  *
- * El distintivo decía «Steam · al día» en cuanto la última sincronización había
- * ido bien, aunque fuera de hace cuatro días y la periódica estuviera en «sólo
- * manual». Que una llamada terminara bien no dice nada de lo que ha pasado en
- * tu biblioteca desde entonces.
+ * Llegó a contar la vida de la última sincronización —«al día», «hace cuatro
+ * días», «sin sincronizar»— con el punto en verde, naranja o gris. Nada de eso
+ * es lo que se mira ahí. Cuándo fue la última sincronización lo dice Ajustes,
+ * que es donde se sincroniza; un fallo lo dice la barra de estado, que es donde
+ * se cuentan los problemas.
  */
 describe("el distintivo de Steam", () => {
   beforeEach(() => {
@@ -695,34 +697,43 @@ describe("el distintivo de Steam", () => {
       steamDeckGames: 0,
       drmGames: 0,
     });
-  });
-
-  it("dice «al día» sólo cuando la sincronización es de hoy", async () => {
-    const hace10min = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    mockedApi.bootstrap.mockResolvedValueOnce(
-      bootstrapWithSteamSync("success", undefined, hace10min),
-    );
     mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
-    renderAppShell();
-    expect(await screen.findByText("Steam · al día")).toBeVisible();
   });
 
-  it("con una sincronización vieja dice cuándo fue, no que estés al día", async () => {
+  it("dice sólo «Steam», sin contar cuándo fue la última sincronización", async () => {
     const haceCuatroDias = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
     mockedApi.bootstrap.mockResolvedValueOnce(
       bootstrapWithSteamSync("success", undefined, haceCuatroDias),
     );
-    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
     renderAppShell();
-    expect(await screen.findByText(/^Steam · hace/)).toBeVisible();
-    expect(screen.queryByText("Steam · al día")).toBeNull();
+
+    const chip = await screen.findByRole("button", {
+      name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
+    });
+    expect(chip).toHaveTextContent("Steam");
+    expect(chip).not.toHaveTextContent(/hace|al día|sincroniz/i);
   });
 
-  it("sin fecha de sincronización tampoco la afirma", async () => {
-    mockedApi.bootstrap.mockResolvedValueOnce(bootstrapWithSteamSync("success"));
-    mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 240, offset: 0 });
+  it("con la cuenta puesta el punto está en verde, aunque la última sincronización fallara", async () => {
+    mockedApi.bootstrap.mockResolvedValueOnce(
+      bootstrapWithSteamSync("failed", "Steam no permite leer esta biblioteca privada."),
+    );
     renderAppShell();
-    expect(await screen.findByText("Steam · sincronizada")).toBeVisible();
-    expect(screen.queryByText("Steam · al día")).toBeNull();
+
+    const chip = await screen.findByRole("button", {
+      name: "Cuenta de Steam vinculada. Abrir ajustes de Steam",
+    });
+    expect(chip).toHaveAttribute("data-sync-state", "linked");
+    // Y el fallo no se pierde: se cuenta donde se cuentan los problemas.
+    expect(screen.getByText("Steam · sincronización fallida")).toBeVisible();
+  });
+
+  it("sin cuenta el punto está en rojo", async () => {
+    mockedApi.bootstrap.mockResolvedValueOnce(emptyBootstrap);
+    renderAppShell();
+
+    await screen.findByText("Solo local");
+    const punto = document.querySelector(".sync-status .presence-dot");
+    expect(punto).toHaveAttribute("data-state", "unlinked");
   });
 });

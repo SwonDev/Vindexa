@@ -43,7 +43,6 @@ import {
   isEmptyChromeTarget,
   toggleFitWindow,
 } from "@/features/shell/window-chrome";
-import { formatRelativeDate } from "@/lib/format";
 import { invalidateSteamDerivedQueries } from "@/lib/steam-data-invalidation";
 import { api, getErrorMessage } from "@/lib/tauri";
 import type { AppSection } from "@/lib/types";
@@ -476,62 +475,30 @@ export function AppShell() {
 
   const steamAccount = bootstrap?.steam.account;
   /**
-   * «Al día» es una afirmación, no un estado de la última llamada.
+   * Conectada o no conectada. No hay tercer estado.
    *
-   * El distintivo decía «Steam · al día» en cuanto la última sincronización
-   * había ido bien, aunque fuera de hace cuatro días y aunque la periódica
-   * estuviera en «sólo manual». Que una llamada terminara bien no dice nada
-   * sobre lo que ha pasado en tu biblioteca desde entonces, así que pasado un
-   * día el distintivo dice **cuándo** fue en vez de afirmar que estás al día.
+   * El distintivo llegó a contar la vida de la última sincronización: «al día»,
+   * «hace cuatro días», «sin sincronizar», con el punto en verde, naranja o
+   * gris. Nada de eso es lo que se mira ahí: lo que se mira ahí es si la cuenta
+   * está puesta. Cuándo fue la última sincronización lo dice Ajustes, que es
+   * donde se sincroniza, y un fallo lo dice la barra de estado, que es donde se
+   * cuentan los problemas.
    */
-  const SYNC_FRESH_MS = 24 * 60 * 60 * 1000;
-  const syncedRecently = (() => {
-    const raw = steamAccount?.lastSyncAt;
-    if (!raw) return false;
-    const cuando = Date.parse(raw);
-    if (Number.isNaN(cuando)) return false;
-    return Date.now() - cuando < SYNC_FRESH_MS;
-  })();
   const steamHealth = steamAccount
-    ? steamAccount.lastSyncStatus === "failed"
-      ? {
-          state: "failed",
-          label: "Cuenta vinculada · sincronización fallida",
-          compactLabel: "Steam · sync fallida",
-          footer: "Steam · sincronización fallida",
-        }
-      : steamAccount.lastSyncStatus === "success"
-        ? syncedRecently
-          ? {
-              state: "success",
-              label: "Cuenta vinculada · sincronizada hoy",
-              compactLabel: "Steam · al día",
-              footer: "Steam · sincronización correcta",
-            }
-          : steamAccount.lastSyncAt
-            ? {
-                state: "aging",
-                label: `Cuenta vinculada · sincronizada ${formatRelativeDate(
-                  steamAccount.lastSyncAt,
-                )}`,
-                compactLabel: `Steam · ${formatRelativeDate(steamAccount.lastSyncAt)}`,
-                footer: `Steam · sincronizada ${formatRelativeDate(steamAccount.lastSyncAt)}`,
-              }
-            : {
-                // Sin fecha no se sabe cuándo fue, y no saberlo tampoco es
-                // estar al día: se dice lo único que consta.
-                state: "success",
-                label: "Cuenta vinculada · sincronizada",
-                compactLabel: "Steam · sincronizada",
-                footer: "Steam · sincronización correcta",
-              }
-        : {
-            state: "never",
-            label: "Cuenta vinculada · sin sincronizar",
-            compactLabel: "Steam · sin sincronizar",
-            footer: "Steam · pendiente de sincronizar",
-          }
+    ? {
+        state: "linked" as const,
+        label: "Cuenta de Steam vinculada",
+        compactLabel: "Steam",
+      }
     : undefined;
+  /**
+   * Que la última sincronización fallara sigue contándose, pero abajo.
+   *
+   * Es un problema, y los problemas van a la barra de estado. En el distintivo
+   * sería una tercera luz para algo que no cambia lo único que ese punto
+   * responde: la cuenta sigue vinculada.
+   */
+  const syncFailed = steamAccount?.lastSyncStatus === "failed";
   useEffect(() => {
     const minutes = bootstrap?.preferences.periodicSyncMinutes ?? 0;
     if (
@@ -626,12 +593,13 @@ export function AppShell() {
         text: `${metadata.failed.toLocaleString("es-ES")} fichas no se han podido leer`,
       });
     }
-    // El punto de color de la cabecera dice que algo va mal; aquí cabe el qué.
-    if (steamHealth?.state === "failed") {
-      notices.push({ id: "steam", kind: "warning", text: steamHealth.footer });
+    // El distintivo sólo dice si la cuenta está puesta; que la última
+    // sincronización fallara es un problema, y los problemas se cuentan aquí.
+    if (syncFailed) {
+      notices.push({ id: "steam", kind: "warning", text: "Steam · sincronización fallida" });
     }
     return notices;
-  }, [metadata, steamHealth]);
+  }, [metadata, syncFailed]);
 
   const platform = /Macintosh|Mac OS X/.test(navigator.userAgent) ? "macos" : "other";
   const density = bootstrap?.preferences.density ?? "compact";
@@ -739,15 +707,19 @@ export function AppShell() {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {steamHealth.state === "failed" && steamAccount.lastSyncErrorMessage
+                    {/* El motivo del fallo sí cabe aquí: se pide, no se impone. */}
+                    {syncFailed && steamAccount.lastSyncErrorMessage
                       ? steamAccount.lastSyncErrorMessage
                       : `${steamHealth.label}.`}{" "}
                     Abrir ajustes
                   </TooltipContent>
                 </Tooltip>
               ) : (
+                /* Sin cuenta: el mismo punto, en rojo. Es la otra mitad de la
+                   única pregunta que responde. */
                 <span className="sync-status">
-                  <i /> Solo local
+                  <span className="presence-dot" data-state="unlinked" aria-hidden="true" />
+                  Solo local
                 </span>
               )}
               <NotificationsPopover />

@@ -106,7 +106,6 @@ const SUPERFICIES = [
 const TEXTOS = [
   "#526c83",
   "#597080",
-  "#81909c",
   "#8fb9cc",
   "#91a0a8",
   "#93a1a8",
