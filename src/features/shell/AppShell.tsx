@@ -722,7 +722,15 @@ export function AppShell() {
                   Solo local
                 </span>
               )}
-              <NotificationsPopover />
+              {/* Un aviso que habla de un juego lleva a su ficha. La bandeja
+                  vive aquí arriba y la ficha se abre dentro de la biblioteca,
+                  así que hay que pasar por la sección antes de pedirla. */}
+              <NotificationsPopover
+                onOpenGame={(appId) => {
+                  if (section !== "library") setSection("library");
+                  dispatchLibraryCommand({ kind: "openDetail", appId });
+                }}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

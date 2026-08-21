@@ -19,6 +19,8 @@ vi.mock("@/lib/tauri", () => ({
     saveNotificationRule: vi.fn(),
     deleteNotificationRule: vi.fn(),
     listGames: vi.fn(),
+    epicFreeGames: vi.fn(),
+    openEpicFreeGame: vi.fn(),
   },
   getErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : "No se pudo completar la operación.",
@@ -61,14 +63,14 @@ function inbox(items: NotificationEvent[]): NotificationInbox {
   };
 }
 
-function renderTray() {
+function renderTray(onOpenGame?: (appId: number) => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <NotificationsPopover />
+        <NotificationsPopover {...(onOpenGame ? { onOpenGame } : {})} />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -78,6 +80,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockedApi.listNotificationRules.mockResolvedValue([]);
   mockedApi.listGames.mockResolvedValue({ items: [], total: 0, limit: 8, offset: 0 });
+  mockedApi.epicFreeGames.mockResolvedValue([]);
+  mockedApi.openEpicFreeGame.mockResolvedValue(undefined);
 });
 
 /**
@@ -110,6 +114,91 @@ describe("bandeja de avisos", () => {
 
     await user.click(screen.getByRole("button", { name: "Leer menos" }));
     expect(screen.getByText(ANUNCIO_LARGO)).toHaveAttribute("data-clamped", "true");
+  });
+
+  /**
+   * Un aviso cuenta algo que está en otra parte, y pulsarlo tiene que llevar
+   * ahí. El de un regalo de Epic lleva a su ficha en la tienda, que es donde
+   * se reclama.
+   */
+  it("un regalo de Epic lleva a su ficha en el navegador integrado", async () => {
+    const user = userEvent.setup();
+    mockedApi.notificationInbox.mockResolvedValue(
+      inbox([
+        event({
+          id: "22222222-2222-4222-8222-222222222222",
+          kind: "epic_free_game",
+          title: "Edición estándar de Cardpocalypse",
+          body: "Gratis en Epic hasta que acabe la promoción.",
+          dedupeKey: "epic_free:of-1",
+        }),
+      ]),
+    );
+    mockedApi.epicFreeGames.mockResolvedValue([
+      {
+        offerId: "of-1",
+        title: "Edición estándar de Cardpocalypse",
+        description: "",
+        storeUrl: "https://store.epicgames.com/es-ES/p/cardpocalypse",
+        imageUrl: null,
+        state: "current",
+        startsAt: null,
+        endsAt: null,
+        originalPriceCents: 2399,
+        currency: "EUR",
+        owned: false,
+        hoursLeft: 30,
+        dismissed: false,
+      },
+    ]);
+    renderTray();
+
+    await user.click(screen.getByRole("button", { name: /Avisos/ }));
+    const enlace = await screen.findByRole("button", {
+      name: /Edición estándar de Cardpocalypse/,
+    });
+    await user.click(enlace);
+
+    expect(mockedApi.openEpicFreeGame).toHaveBeenCalledWith(
+      "https://store.epicgames.com/es-ES/p/cardpocalypse",
+    );
+    // Y se da por leído: se acaba de mirar.
+    expect(mockedApi.markNotificationRead).toHaveBeenCalled();
+  });
+
+  it("un aviso sobre un juego lleva a su ficha", async () => {
+    const user = userEvent.setup();
+    const abrir = vi.fn();
+    mockedApi.notificationInbox.mockResolvedValue(
+      inbox([
+        event({
+          id: "33333333-3333-4333-8333-333333333333",
+          appId: 620,
+          gameTitle: "Portal 2",
+          title: "Actualización publicada",
+          body: "Hay novedades.",
+        }),
+      ]),
+    );
+    renderTray(abrir);
+
+    await user.click(screen.getByRole("button", { name: /Avisos/ }));
+    await user.click(await screen.findByRole("button", { name: /Actualización publicada/ }));
+
+    expect(abrir).toHaveBeenCalledWith(620);
+  });
+
+  it("un aviso que no lleva a ninguna parte no finge que sí", async () => {
+    mockedApi.notificationInbox.mockResolvedValue(
+      inbox([event({ title: "Sin destino", body: "Nada que abrir." })]),
+    );
+    const user = userEvent.setup();
+    renderTray();
+
+    await user.click(screen.getByRole("button", { name: /Avisos/ }));
+    expect(await screen.findByText("Sin destino")).toBeVisible();
+    // El título es un párrafo, no un botón: no hay nada que pulsar.
+    expect(screen.queryByRole("button", { name: /Sin destino/ })).toBeNull();
   });
 
   it("un aviso corto no ofrece desplegar lo que ya se ve entero", async () => {

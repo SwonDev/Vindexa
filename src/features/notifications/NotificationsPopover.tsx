@@ -2,6 +2,7 @@ import {
   IconAlarm,
   IconAlertTriangle,
   IconArchive,
+  IconArrowUpRight,
   IconBell,
   IconBellPlus,
   IconCheck,
@@ -61,7 +62,17 @@ const SEVERITY_LABEL: Record<NotificationSeverity, string> = {
  * de señales oficiales que Vindexa ya observa. Nada aquí se inventa: cada
  * entrada procede de un hecho verificable guardado en la base local.
  */
-export function NotificationsPopover() {
+export function NotificationsPopover({
+  onOpenGame,
+}: {
+  /**
+   * A dónde lleva un aviso que habla de un juego.
+   *
+   * Lo pone el armazón, que es quien sabe navegar entre secciones: la bandeja
+   * vive en la barra superior y la ficha se abre dentro de la biblioteca.
+   */
+  onOpenGame?: ((appId: number) => void) | undefined;
+} = {}) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<NotificationInboxScope>("pending");
@@ -113,6 +124,49 @@ export function NotificationsPopover() {
     .map((rule) => rule.nextOccurrence)
     .filter((value): value is string => Boolean(value))
     .sort()[0];
+
+  /**
+   * Los regalos de Epic llevan a su ficha, y la ficha vive en Epic.
+   *
+   * El aviso guarda de qué oferta habla en su clave (`epic_free:<id>`); la
+   * dirección está en lo que Epic ya contestó y está guardado, así que no hace
+   * falta preguntar otra vez. Sólo se consulta si hay algún aviso de esos.
+   */
+  const hayRegalos = events.some((event) => event.kind === "epic_free_game");
+  const regalos = useQuery({
+    queryKey: ["epic-free"],
+    queryFn: () => api.epicFreeGames(false),
+    enabled: open && hayRegalos,
+    retry: false,
+  });
+  const abrirRegalo = useMutation({
+    mutationFn: (storeUrl: string) => api.openEpicFreeGame(storeUrl),
+  });
+
+  /**
+   * A dónde lleva este aviso, si es que lleva a alguna parte.
+   *
+   * Un aviso que no puede llevar a ningún sitio no se enseña como pulsable:
+   * prometer un destino que no existe es peor que no ofrecerlo.
+   */
+  const destinoDe = (event: NotificationEvent): (() => void) | undefined => {
+    if (event.kind === "epic_free_game") {
+      const offerId = event.dedupeKey?.startsWith("epic_free:")
+        ? event.dedupeKey.slice("epic_free:".length)
+        : undefined;
+      const oferta = regalos.data?.find((candidata) => candidata.offerId === offerId);
+      if (!oferta) return undefined;
+      return () => abrirRegalo.mutate(oferta.storeUrl);
+    }
+    if (event.appId != null && onOpenGame) {
+      const appId = event.appId;
+      return () => {
+        setOpen(false);
+        onOpenGame(appId);
+      };
+    }
+    return undefined;
+  };
 
   const pendingCount = unread?.total ?? 0;
   // Descartar vacía los que siguen en la vista, estén leídos o no; marcar como
@@ -240,6 +294,7 @@ export function NotificationsPopover() {
                 event={event}
                 onRead={() => markRead.mutate(event.id)}
                 onDismiss={() => dismiss.mutate(event.id)}
+                onOpenReference={destinoDe(event)}
               />
             ))}
           </ul>
@@ -286,10 +341,13 @@ function NotificationRow({
   event,
   onRead,
   onDismiss,
+  onOpenReference,
 }: {
   event: NotificationEvent;
   onRead: () => void;
   onDismiss: () => void;
+  /** Lleva a lo que el aviso está contando. Ausente si no lleva a ninguna parte. */
+  onOpenReference?: (() => void) | undefined;
 }) {
   const SeverityIcon = SEVERITY_ICON[event.severity] ?? IconInfoCircle;
   const unread = !event.readAt;
@@ -310,7 +368,26 @@ function NotificationRow({
             stroke={1.9}
           />
           <div className="notification-row__body">
-            <p className="notification-row__title">{event.title}</p>
+            {/* El título es el enlace, no la fila entera: dentro hay botones
+                —«Leer más», marcar leído, descartar— y un botón dentro de otro
+                no es válido ni se puede usar con el teclado.
+
+                Al ir a la referencia se da por leído: se acaba de mirar. */}
+            {onOpenReference ? (
+              <button
+                type="button"
+                className="notification-row__title notification-row__title--link"
+                onClick={() => {
+                  if (unread) onRead();
+                  onOpenReference();
+                }}
+              >
+                {event.title}
+                <IconArrowUpRight aria-hidden="true" size={13} />
+              </button>
+            ) : (
+              <p className="notification-row__title">{event.title}</p>
+            )}
             {event.body && (
               <p className="notification-row__text" data-clamped={largo && !expanded}>
                 {event.body}

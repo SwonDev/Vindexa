@@ -372,3 +372,41 @@ test.describe("nada se sale por el lado", () => {
     });
   }
 });
+
+/**
+ * El clic derecho llega a la barra lateral.
+ *
+ * # El fallo
+ *
+ * Los menús estaban escritos y montados —tiendas, estados, colecciones— y no
+ * abría ninguno. `SidebarItem` no reenviaba al `<button>` ni el `ref` ni las
+ * props que no reconocía, y `ContextMenuTrigger asChild` clona a su hijo
+ * pasándole justo eso: el `onContextMenu` se quedaba en las props del
+ * componente y no llegaba nunca al DOM.
+ *
+ * Es el mismo fallo que dejó a media aplicación sin menú contextual, un piso
+ * más abajo: allí lo cancelaba una guarda global, aquí un componente que se
+ * comía las props. Y como antes, no fallaba ni una prueba: las de unidad montan
+ * el menú con un hijo cualquiera, no con el de verdad.
+ */
+test.describe("el clic derecho en la barra lateral", () => {
+  test("un estado abre su menú", async ({ app, page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await app.goto();
+    await app.waitForShell();
+
+    const estado = page.locator("button.sidebar-item").filter({ hasText: "Jugando" }).first();
+    await estado.click({ button: "right" });
+    await expect(page.getByRole("menu")).toBeVisible();
+  });
+
+  test("y una colección también", async ({ app, page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await app.goto();
+    await app.waitForShell();
+
+    const coleccion = page.locator("button.sidebar-item").filter({ hasText: "Favoritos" }).first();
+    await coleccion.click({ button: "right" });
+    await expect(page.getByRole("menu")).toBeVisible();
+  });
+});

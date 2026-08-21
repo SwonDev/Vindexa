@@ -12,7 +12,7 @@ import {
   IconSquareFilled,
   IconUsersGroup,
 } from "@tabler/icons-react";
-import { useCallback, useState } from "react";
+import { type ComponentPropsWithoutRef, forwardRef, useCallback, useState } from "react";
 import { AnimatedNumber, PressableSurface, StaggerList } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -298,27 +298,49 @@ export function LibrarySidebar({
   );
 }
 
-function SidebarItem({
-  active,
-  icon: ItemIcon,
-  iconColor,
-  label,
-  count,
-  onClick,
-  dropId,
-  dropDisabled = false,
-  draggingGames = false,
-}: {
-  active: boolean;
-  icon: typeof IconBook2;
-  iconColor?: string | undefined;
-  label: string;
-  count?: number | undefined;
-  onClick: () => void;
-  dropId?: string | undefined;
-  dropDisabled?: boolean | undefined;
-  draggingGames?: boolean | undefined;
-}) {
+/**
+ * Una entrada de la barra lateral.
+ *
+ * Reenvía al `<button>` el `ref` y **todo lo que no reconoce**, y eso no es un
+ * detalle de estilo: `ContextMenuTrigger asChild` clona a su hijo pasándole
+ * `onContextMenu` y un `ref`. Sin reenviarlos, el manejador se quedaba en las
+ * props de este componente y no llegaba nunca al elemento del DOM: el clic
+ * derecho no abría nada en las tiendas, ni en los estados, ni en las
+ * colecciones de la barra lateral, y no fallaba ni una prueba porque el menú
+ * estaba escrito y montado.
+ *
+ * Es el mismo fallo que dejó a media aplicación sin menú contextual, sólo que
+ * un piso más abajo: allí lo cancelaba una guarda global; aquí, un componente
+ * que se comía las props.
+ */
+const SidebarItem = forwardRef<
+  HTMLButtonElement,
+  {
+    active: boolean;
+    icon: typeof IconBook2;
+    iconColor?: string | undefined;
+    label: string;
+    count?: number | undefined;
+    onClick: () => void;
+    dropId?: string | undefined;
+    dropDisabled?: boolean | undefined;
+    draggingGames?: boolean | undefined;
+  } & Omit<ComponentPropsWithoutRef<"button">, "onClick" | "className" | "type">
+>(function SidebarItem(
+  {
+    active,
+    icon: ItemIcon,
+    iconColor,
+    label,
+    count,
+    onClick,
+    dropId,
+    dropDisabled = false,
+    draggingGames = false,
+    ...rest
+  },
+  ref,
+) {
   const { setNodeRef, isOver } = useDroppable({
     id: dropId ?? `navigation:${label}`,
     disabled: !dropId,
@@ -329,7 +351,14 @@ function SidebarItem({
       <TooltipTrigger asChild>
         <PressableSurface asChild>
           <button
-            ref={setNodeRef}
+            // Dos dueños del mismo nodo: dnd-kit lo necesita para saber dónde
+            // se suelta, y quien envuelva esto —el menú contextual— para saber
+            // sobre qué se ha pulsado.
+            ref={(node) => {
+              setNodeRef(node);
+              if (typeof ref === "function") ref(node);
+              else if (ref) ref.current = node;
+            }}
             type="button"
             className="sidebar-item"
             data-active={active}
@@ -339,6 +368,7 @@ function SidebarItem({
             data-drop-disabled={Boolean(dropId && dropDisabled && draggingGames)}
             aria-label={label}
             aria-describedby={draggingGames ? restrictionId : undefined}
+            {...rest}
             onClick={onClick}
           >
             <ItemIcon aria-hidden="true" size={15} style={{ color: iconColor }} />
@@ -361,21 +391,29 @@ function SidebarItem({
       )}
     </Tooltip>
   );
-}
+});
 
-function CollectionSidebarItem({
-  active,
-  collection,
-  draggingGames,
-  reorderEnabled,
-  onClick,
-}: {
-  active: boolean;
-  collection: NonNullable<AppBootstrap["collections"]>[number];
-  draggingGames: boolean;
-  reorderEnabled: boolean;
-  onClick: () => void;
-}) {
+/**
+ * Una colección en la barra lateral.
+ *
+ * Como [`SidebarItem`], reenvía el `ref` y lo que no reconoce: el envoltorio es
+ * el menú contextual, y sin esto su `onContextMenu` no llegaba al DOM. Aquí el
+ * destino es el contenedor entero —no sólo el botón— para que el clic derecho
+ * responda también sobre el asa de arrastre.
+ */
+const CollectionSidebarItem = forwardRef<
+  HTMLDivElement,
+  {
+    active: boolean;
+    collection: NonNullable<AppBootstrap["collections"]>[number];
+    draggingGames: boolean;
+    reorderEnabled: boolean;
+    onClick: () => void;
+  } & Omit<ComponentPropsWithoutRef<"div">, "onClick" | "className" | "style">
+>(function CollectionSidebarItem(
+  { active, collection, draggingGames, reorderEnabled, onClick, ...rest },
+  ref,
+) {
   const dropDisabled = collection.kind === "smart";
   const dropId = collectionDropId(collection.id);
   const restrictionId = `drop-restriction-${dropId}`;
@@ -401,7 +439,10 @@ function CollectionSidebarItem({
       ref={(node) => {
         setDropNodeRef(node);
         setSortNodeRef(node);
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
       }}
+      {...rest}
       className="sidebar-collection"
       data-drop-target={Boolean(!dropDisabled && draggingGames)}
       data-drop-over={isOver && !dropDisabled}
@@ -452,4 +493,4 @@ function CollectionSidebarItem({
       )}
     </div>
   );
-}
+});

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreDealsBlock } from "@/features/discovery/StoreDealsBlock";
 import { api } from "@/lib/tauri";
 import type { DealCandidate, StoreDealsView } from "@/lib/types";
@@ -82,6 +82,10 @@ function renderBlock() {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -309,6 +313,12 @@ describe("ofertas para ti", () => {
   it("dice cuándo se miró, para que la lista no mienta por omisión", async () => {
     // Una rebaja que terminó ayer sigue guardada hasta la siguiente tanda: sin
     // la fecha, quien la mira no puede saber si ve lo de ahora o lo de anoche.
+    //
+    // El reloj se fija: lo que cuenta aquí es una consulta **reciente**, y con
+    // el reloj real esta prueba se rompía sola pasadas doce horas de la fecha
+    // escrita —que es cuando el aviso cambia a «pueden haber terminado»—.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-20T03:00:00Z"));
     mockedApi.storeDeals.mockResolvedValue(
       vista([deal({ appId: 10, title: "Kingdom Come" })], "2026-08-20T01:00:00Z"),
     );

@@ -1136,7 +1136,14 @@ export type NotificationEventKind =
   | NotificationKind
   | "release_date_changed"
   | "reminder_due"
-  | "price_drop";
+  | "price_drop"
+  /**
+   * Un regalo de Epic vigente. Lo escribe `db::epic_free::sync` y faltaba aquí:
+   * la bandeja los enseñaba —los avisos llegan con su `kind` de la base— pero
+   * el tipo no lo conocía, así que no se podía distinguir para llevarlos a
+   * ninguna parte.
+   */
+  | "epic_free_game";
 
 export interface NotificationRule {
   id: string;

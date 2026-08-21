@@ -160,6 +160,29 @@
   line-height: 1.35;
 }
 
+/* Cuando el aviso lleva a algún sitio, su título es el enlace: hereda la
+   tipografía del título para que no cante como un botón suelto, y la flecha
+   avisa de que al pulsarlo se va a otra parte. */
+.notification-row__title--link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.notification-row__title--link:hover,
+.notification-row__title--link:focus-visible {
+  color: var(--v-accent, var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .notification-row__text {
   margin: 3px 0 0;
   color: var(--v-muted);
