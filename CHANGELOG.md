@@ -4,7 +4,17 @@ Este archivo sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y
 proyecto usa [versionado semántico](https://semver.org/lang/es/). Una sección describe el
 estado del código, no una publicación, mientras figure como **Sin publicar**.
 
-## [Sin publicar]
+## [0.1.8] · 2026-08-20
+
+### Añadido
+
+- **Un aviso lleva a lo que está contando.** Pulsar el título de un regalo de Epic abre su ficha en
+  el navegador integrado, que es donde se reclama; el de un juego abre su ficha en la biblioteca,
+  navegando antes si hacía falta. Lo que no lleva a ninguna parte no se enseña como pulsable:
+  prometer un destino que no existe es peor que no ofrecerlo. Al ir a la referencia el aviso se da
+  por leído, porque se acaba de mirar.
+  - De paso, `epic_free_game` faltaba en el tipo de clases de aviso de la interfaz aunque Rust lo
+    escribe desde que existen los regalos: la bandeja los enseñaba pero no se podían distinguir.
 
 ### Corregido
 
@@ -28,11 +38,6 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   silencio, ni eso: la pasada del arranque lo veía vigente y no lo tocaba. Ajustes → Agentes tiene
   ahora un botón **«Volver a conectar»** por agente, que olvida lo apuntado y rehace el alta desde
   cero. Y si la reconexión falla, el enlace deja de figurar como bueno en vez de fingir que sigue.
-
-## [Sin publicar]
-
-### Corregido
-
 - **El clic derecho no abría nada en la barra lateral.** Los menús estaban escritos y montados
   —tiendas, estados, colecciones—, incluida la opción de abrir cada tienda en el navegador
   integrado, y no salía ninguno. `SidebarItem` y `CollectionSidebarItem` no reenviaban al elemento
@@ -42,16 +47,6 @@ estado del código, no una publicación, mientras figure como **Sin publicar**.
   abajo: allí lo cancelaba una guarda global, aquí un componente que se comía las props. Dos
   pruebas de extremo a extremo lo cubren, porque las de unidad montan el menú con un hijo
   cualquiera y nunca ven este caso.
-
-### Añadido
-
-- **Un aviso lleva a lo que está contando.** Pulsar el título de un regalo de Epic abre su ficha en
-  el navegador integrado, que es donde se reclama; el de un juego abre su ficha en la biblioteca,
-  navegando antes si hacía falta. Lo que no lleva a ninguna parte no se enseña como pulsable:
-  prometer un destino que no existe es peor que no ofrecerlo. Al ir a la referencia el aviso se da
-  por leído, porque se acaba de mirar.
-  - De paso, `epic_free_game` faltaba en el tipo de clases de aviso de la interfaz aunque Rust lo
-    escribe desde que existen los regalos: la bandeja los enseñaba pero no se podían distinguir.
 
 ## [0.1.7] · 2026-08-20
 
