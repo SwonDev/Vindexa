@@ -291,9 +291,13 @@ pub fn from_hex(text: &str) -> Option<Vec<u8>> {
     }
     let raw = text.as_bytes();
     let mut output = Vec::with_capacity(raw.len() / 2);
-    for pair in raw.chunks_exact(2) {
-        let high = (pair[0] as char).to_digit(16)?;
-        let low = (pair[1] as char).to_digit(16)?;
+    // `as_chunks` entrega parejas ya formadas —`[u8; 2]`—, así que no hay que
+    // indexar dentro de cada una. El resto sobra siempre: la longitud se
+    // comprobó múltiplo de dos ahí arriba.
+    let (parejas, _resto) = raw.as_chunks::<2>();
+    for [alto, bajo] in parejas {
+        let high = (*alto as char).to_digit(16)?;
+        let low = (*bajo as char).to_digit(16)?;
         output.push(((high << 4) | low) as u8);
     }
     Some(output)
